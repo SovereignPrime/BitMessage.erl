@@ -1,5 +1,10 @@
 -module(base58).
--compile([export_all]).
+-export([
+        encode/2,
+        encode/1,
+        decode/2,
+        decode/1
+                ]).
 
 encode(0, Alpa) ->
     lists:nth(0, Alpa);
