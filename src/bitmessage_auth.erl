@@ -16,10 +16,10 @@ encode_address(Version, Stream, <<0, 0,  Ripe>>) when Version >=2, size(Ripe) ==
 encode_address(Version, Stream, <<0, Ripe>>) when Version >=2, size(Ripe) == 20 ->
     encode_address(Version, Stream, Ripe);
 encode_address(Version, Stream, Ripe) when Version >=2, size(Ripe) == 20 ->
-    Data = <<(encode_varint(Version)), (encode_varint(Stream)), Ripe>>,
+    Data = <<(encode_varint(Version))/bitstring, (encode_varint(Stream))/bitstring, Ripe/bitstring>>,
     Check = dual_sha(Data),
-    OData = crypto:bytes_to_integer(<<Data, Check>>),
-    <<"BM-", (base58:encode(OData))>>;
+    OData = crypto:bytes_to_integer(<<Data/bitstring, Check:32/bitstring>>),
+    <<"BM-", (list_to_binary(base58:encode(OData)))/bytes>>;
 encode_address(_, _, _) ->
     <<"">>.
 
