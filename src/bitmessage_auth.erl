@@ -37,6 +37,16 @@ encode_varint(Num) when Num =< 16#ffffffff ->
 encode_varint(Num) ->
     <<16#ff,Num:64>>.
 
+decode_varint(<<Len:8/integer>>) when Len <16#fd ->
+    Len;
+decode_varint(<<16#fd, Num:16/integer>>) ->
+    Num;
+decode_varint(<<16#fe, Num:32/integer>>) ->
+    Num;
+decode_varint(<<16#ff, Num:64/integer>>) ->
+    Num.
+
+
 %% Test cases
 
 dual_sha_test_() ->
@@ -52,6 +62,16 @@ encode_varint_test_() ->
         ?_assert(encode_varint(65536) == <<16#fe, 00, 01, 00, 00>>),
         ?_assert(encode_varint(4294967295) == <<16#fe, 16#ff, 16#ff, 16#ff, 16#ff>>),
         ?_assert(encode_varint(4294967296) == <<16#ff, 00, 00, 00, 01, 00, 00, 00, 00>>)
+        ].
+decode_encode_varint_test_() ->
+    [
+        ?_assert(decode_varint(encode_varint(10))== 10),
+        ?_assert(decode_varint(encode_varint(253))== 253),
+        ?_assert(decode_varint(encode_varint(252))== 252),
+        ?_assert(decode_varint(encode_varint(65535))== 65535),
+        ?_assert(decode_varint(encode_varint(65536))== 65536),
+        ?_assert(decode_varint(encode_varint(4294967295))==4294967295),
+        ?_assert(decode_varint(encode_varint(4294967296))== 4294967296)
         ].
 
 encode_address_test_() ->
