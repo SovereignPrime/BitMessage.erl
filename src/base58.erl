@@ -28,15 +28,36 @@ decode(Num) ->
 decode([C | Rest] = String, Alpha) ->
     Base = length(Alpha),
     Power = length(String) - 1,
-    trunc((string:str(Alpha, [C]) - 1) * math:pow(Base, Power) + decode(Rest, Alpha));
+    (string:str(Alpha, [C]) - 1) * pow(Base, Power) + decode(Rest, Alpha);
 decode([], _) ->
     0.
 
+%%%
+%% Helpers
+%%%
+pow(Num, 0) when Num >= 0 ->
+    1;
+pow(Num, Pow) when Num >= 0 ->
+    Num * pow(Num, Pow - 1).
+
+%%%
 %% Test cases for eunit
 encode_decode_test_() ->
     [?_assert(1234567890 =:= decode(encode(1234567890))),
+     %?_assert("123456789" =:= encode(decode("123456789"))),
+     ?_assert("a123456789" =:= encode(decode("a123456789"))),
      ?_assert(1 =:= decode(encode(1))),
+     ?_assert(0 =:= decode(encode(0))),
      ?_assert("1" =:= encode(0)),
+     ?_assert(0 =:= decode("1")),
+
      ?_assert(254 =:= decode("5P")),
+     ?_assert("4ZVsZN4foCh82rehBbDkHvRWdtEJyvNMBce" =:= encode(decode("4ZVsZN4foCh82rehBbDkHvRWdtEJyvNMBce"))),
+     ?_assert("4ZVnFV7q49aFtUBMSXun2bgGxMhLYHEAHaC" =:= encode(decode("4ZVnFV7q49aFtUBMSXun2bgGxMhLYHEAHaC"))),
+     ?_assert("4ZVnFV7q" =:= encode(decode("4ZVnFV7q"))),
+     ?_assert(132595939334988 =:= decode("1234567891")),
+     ?_assert(2286136885086 =:= decode("123456789")),
+     ?_assert(7690564481429305 =:= decode("12345678912")),
+     ?_assert(7690564481429860 =:= decode("123456789Ab")),
      ?_assert("5P" =:= encode(254))
     ].
