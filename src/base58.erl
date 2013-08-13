@@ -35,6 +35,7 @@ decode([], _) ->
 %%%
 %% Helpers
 %%%
+
 pow(Num, 0) when Num >= 0 ->
     1;
 pow(Num, Pow) when Num >= 0 ->
@@ -42,6 +43,8 @@ pow(Num, Pow) when Num >= 0 ->
 
 %%%
 %% Test cases for eunit
+%%%
+
 encode_decode_test_() ->
     [?_assert(1234567890 =:= decode(encode(1234567890))),
      %?_assert("123456789" =:= encode(decode("123456789"))),

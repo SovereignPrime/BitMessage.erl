@@ -1,16 +1,7 @@
--module(bitmessage_auth).
+-module(bm_auth).
 -include_lib("eunit/include/eunit.hrl").
 -compile([export_all]).
 -record(address, {version, stream, ripe}).
-
-%addresstostream(<<"BM-",Address/binary>>) ->
-%    DAddress = b58:decode(Address),
-%    PDAddress = if length(DAddress) rem 2 /= 0 ->
-%            "0" ++ DAddress;
-%        true ->
-%            DAddress
-%    end,
-%    double_sha(DAddress).
 
 %%%
 %% Address encoding and decoding routines
