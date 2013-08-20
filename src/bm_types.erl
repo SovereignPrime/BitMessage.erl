@@ -1,5 +1,6 @@
 -module(bm_types).
 -compile([export_all]).
+-include("../include/bm.hrl").
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -26,7 +27,7 @@ decode_varint(<<16#ff, Num:64/big-integer, Rest/bits>>) ->
     {Num, Rest}.
 
 %%%
-%% String packing and unpacking to VariantInt
+%% String packing and unpacking to VariantStr
 %%%
 
 encode_varstr(Str) ->
@@ -39,7 +40,7 @@ decode_varstr(VStr) ->
     {binary_to_list(Str), Rest}.
 
 %%%
-%% List of int packing and unpacking to VariantInt
+%% List of int packing and unpacking to VariantIntList
 %%%
 
 encode_intlist(Lst) ->
@@ -55,6 +56,16 @@ decode_intlist(B, 0, A) ->
 decode_intlist(B, C, A) ->
     {I, R} = decode_varint(B),
      decode_intlist(R, C - 1, A ++ [I]).
+
+%%%
+%% Network address packing and unpacking to NetworkAddressStruct
+%%%
+
+encode_network(#network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, services=1, port=Port}) ->
+    <<Time:64/big-integer, Stream:32/big-integer,1:64/big-integer, 0:12/unit:8-integer, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>.
+
+decode_network(<<Time:64/big-integer, Stream:32/big-integer, 1:64/big-integer, 0:12/unit:8-integer, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>) ->
+    #network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, port=Port, services=1}.
 
 %%%
 %% Helpers
@@ -121,13 +132,13 @@ decode_encode_intlist_test_() ->
                 ].
 
 encode_network_test_() ->
+    {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
     [
-        ?_assert(encode_network([1,2,3,4,5,6,7,8,9,0]) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
-        ?_assert(encode_network([1,255,3,4,5,65536,7,8,9,0]) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>)
+        ?_assert(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1} ) == <<333:64/big-integer, 1:32/big-integer, 1:64/big-integer, 0,0,0,0,0,0,0,0,0,0,0,0, 127,0,0,1, 8080:16/big-integer>>)
                 ].
 
 decode_encode_network_test_() ->
+    {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
     [
-        ?_assert(decode_network(encode_network([1,2,3,4,5,6,7,8,9,0])) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
-        ?_assert(decode_network(encode_network([1,255,3,4,5,65536,7,8,9,0])) == {[1,255,3,4,5,65536,7,8,9,0], <<>>})
+        ?_assert(decode_network(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1})) == #network_address{time=333, stream=1, ip=IP, port=8080, services=1})
                 ].
