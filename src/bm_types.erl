@@ -62,9 +62,9 @@ decode_intlist(B, C, A) ->
 %%%
 
 encode_network(#network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, services=1, port=Port}) ->
-    <<Time:64/big-integer, Stream:32/big-integer,1:64/big-integer, 0:12/unit:8-integer, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>.
+    <<Time:64/big-integer, Stream:32/big-integer,1:64/big-integer, 0:10/unit:8-integer,255,255, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>.
 
-decode_network(<<Time:64/big-integer, Stream:32/big-integer, 1:64/big-integer, 0:12/unit:8-integer, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>) ->
+decode_network(<<Time:64/big-integer, Stream:32/big-integer, 1:64/big-integer, 0:10/unit:8-integer,255,255, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>) ->
     #network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, port=Port, services=1}.
 
 %%%
@@ -134,7 +134,7 @@ decode_encode_intlist_test_() ->
 encode_network_test_() ->
     {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
     [
-        ?_assert(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1} ) == <<333:64/big-integer, 1:32/big-integer, 1:64/big-integer, 0,0,0,0,0,0,0,0,0,0,0,0, 127,0,0,1, 8080:16/big-integer>>)
+        ?_assert(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1} ) == <<333:64/big-integer, 1:32/big-integer, 1:64/big-integer, 0,0,0,0,0,0,0,0,0,0,255,255, 127,0,0,1, 8080:16/big-integer>>)
                 ].
 
 decode_encode_network_test_() ->
