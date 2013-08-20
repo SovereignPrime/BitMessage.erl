@@ -39,6 +39,24 @@ decode_varstr(VStr) ->
     {binary_to_list(Str), Rest}.
 
 %%%
+%% List of int packing and unpacking to VariantInt
+%%%
+
+encode_intlist(Lst) ->
+    Len = length(Lst),
+    BLst = << <<(encode_varint(I))/bytes>> || I <- Lst>>,
+    <<(encode_varint(Len))/bytes, BLst/bytes>>.
+
+decode_intlist(VLst) ->
+    {Len, S} = decode_varint(VLst),
+    decode_intlist(S, Len, []).
+decode_intlist(B, 0, A) ->
+    {A, B};
+decode_intlist(B, C, A) ->
+    {I, R} = decode_varint(B),
+     decode_intlist(R, C - 1, A ++ [I]).
+
+%%%
 %% Helpers
 %%%
 
@@ -88,4 +106,28 @@ encode_varstr_test_() ->
 decode_encode_varstr_test_() ->
     [
         ?_assert(decode_varstr(encode_varstr("TEST")) == {"TEST", <<>>})
+                ].
+
+encode_intlist_test_() ->
+    [
+        ?_assert(encode_intlist([1,2,3,4,5,6,7,8,9,0]) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
+        ?_assert(encode_intlist([1,255,3,4,5,65536,7,8,9,0]) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>)
+                ].
+
+decode_encode_intlist_test_() ->
+    [
+        ?_assert(decode_intlist(encode_intlist([1,2,3,4,5,6,7,8,9,0])) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
+        ?_assert(decode_intlist(encode_intlist([1,255,3,4,5,65536,7,8,9,0])) == {[1,255,3,4,5,65536,7,8,9,0], <<>>})
+                ].
+
+encode_network_test_() ->
+    [
+        ?_assert(encode_network([1,2,3,4,5,6,7,8,9,0]) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
+        ?_assert(encode_network([1,255,3,4,5,65536,7,8,9,0]) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>)
+                ].
+
+decode_encode_network_test_() ->
+    [
+        ?_assert(decode_network(encode_network([1,2,3,4,5,6,7,8,9,0])) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
+        ?_assert(decode_network(encode_network([1,255,3,4,5,65536,7,8,9,0])) == {[1,255,3,4,5,65536,7,8,9,0], <<>>})
                 ].

@@ -1,7 +1,7 @@
 -module(bm_auth).
 -include_lib("eunit/include/eunit.hrl").
 -compile([export_all]).
--record(address, {version, stream, ripe}).
+-include("../include/bm.hrl").
 
 %%%
 %% Address encoding and decoding routines
