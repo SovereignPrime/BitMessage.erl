@@ -40,22 +40,22 @@ decode_varstr(VStr) ->
     {binary_to_list(Str), Rest}.
 
 %%%
-%% List of int packing and unpacking to VariantIntList
+%% List of any packing and unpacking to VariantIntList
 %%%
 
-encode_intlist(Lst) ->
+encode_list(Lst, Fun) ->
     Len = length(Lst),
-    BLst = << <<(encode_varint(I))/bytes>> || I <- Lst>>,
+    BLst = << <<(Fun(I))/bytes>> || I <- Lst>>,
     <<(encode_varint(Len))/bytes, BLst/bytes>>.
 
-decode_intlist(VLst) ->
+decode_list(VLst, Fun) ->
     {Len, S} = decode_varint(VLst),
-    decode_intlist(S, Len, []).
-decode_intlist(B, 0, A) ->
+    decode_list(S, Len, [], Fun).
+decode_list(B, 0, A, _Fun) ->
     {A, B};
-decode_intlist(B, C, A) ->
-    {I, R} = decode_varint(B),
-     decode_intlist(R, C - 1, A ++ [I]).
+decode_list(B, C, A, Fun) ->
+    {I, R} = Fun(B),
+     decode_list(R, C - 1, A ++ [I], Fun).
 
 %%%
 %% Network address packing and unpacking to NetworkAddressStruct
@@ -64,8 +64,8 @@ decode_intlist(B, C, A) ->
 encode_network(#network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, services=1, port=Port}) ->
     <<Time:64/big-integer, Stream:32/big-integer,1:64/big-integer, 0:10/unit:8-integer,255,255, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>.
 
-decode_network(<<Time:64/big-integer, Stream:32/big-integer, 1:64/big-integer, 0:10/unit:8-integer,255,255, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer>>) ->
-    #network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, port=Port, services=1}.
+decode_network(<<Time:64/big-integer, Stream:32/big-integer, 1:64/big-integer, 0:10/unit:8-integer,255,255, Ip1, Ip2, Ip3, Ip4, Port:16/big-integer, R/bytes>>) ->
+    {#network_address{time=Time, stream=Stream, ip={Ip1,Ip2,Ip3,Ip4}, port=Port, services=1}, R}.
 
 %%%
 %% Helpers
@@ -119,16 +119,18 @@ decode_encode_varstr_test_() ->
         ?_assert(decode_varstr(encode_varstr("TEST")) == {"TEST", <<>>})
                 ].
 
-encode_intlist_test_() ->
+encode_list_test_() ->
     [
-        ?_assert(encode_intlist([1,2,3,4,5,6,7,8,9,0]) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
-        ?_assert(encode_intlist([1,255,3,4,5,65536,7,8,9,0]) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>)
+        ?_assert(encode_list([1,2,3,4,5,6,7,8,9,0], fun encode_varint/1) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
+        ?_assert(encode_list([1,255,3,4,5,65536,7,8,9,0], fun encode_varint/1) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>),
+        ?_assert(encode_list(["a", "b"], fun([O]) -> <<O>> end) == <<2, "a", "b">>)
                 ].
 
-decode_encode_intlist_test_() ->
+decode_encode_list_test_() ->
     [
-        ?_assert(decode_intlist(encode_intlist([1,2,3,4,5,6,7,8,9,0])) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
-        ?_assert(decode_intlist(encode_intlist([1,255,3,4,5,65536,7,8,9,0])) == {[1,255,3,4,5,65536,7,8,9,0], <<>>})
+        ?_assert(decode_list(encode_list([1,2,3,4,5,6,7,8,9,0], fun encode_varint/1), fun decode_varint/1) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
+        ?_assert(decode_list(encode_list([1,255,3,4,5,65536,7,8,9,0], fun encode_varint/1), fun decode_varint/1) == {[1,255,3,4,5,65536,7,8,9,0], <<>>}),
+        ?_assert(decode_list(encode_list(["a", "b"], fun([O]) -> <<O>> end), fun(<<O:8/integer, R/bytes>>)-> {[O], R}  end) == {["a", "b"], <<>>})
                 ].
 
 encode_network_test_() ->

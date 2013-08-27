@@ -39,6 +39,8 @@ decode_address(<<"BM-",Data/bytes>>) ->
             #address{version=Version, stream=Stream, ripe= <<0, 0, Ripe/bits>>}
       end.
 
+generate_ripe(Str) ->
+    crypto:hash(ripemd160, crypto:hash(sha512, Str)).
 
 
 
@@ -55,6 +57,11 @@ dual_sha(Data) ->
 dual_sha_test_() ->
     [
         ?_assert("0592a10584ffabf96539f3d780d776828c67da1ab5b169e9e8aed838aaecc9ed36d49ff1423c55f019e050c66c6324f53588be88894fef4dcffdb74b98e2b200" == bm_types:binary_to_hexstring(dual_sha("hello")))
+        ].
+
+generate_ripe_test_() ->
+    [
+        ?_assert("79a324faeebcbf9849f310545ed531556882487e" == bm_types:binary_to_hexstring(generate_ripe("hello")))
         ].
 
 encode_address_test_() ->
