@@ -142,5 +142,5 @@ encode_network_test_() ->
 decode_encode_network_test_() ->
     {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
     [
-        ?_assert(decode_network(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1})) == #network_address{time=333, stream=1, ip=IP, port=8080, services=1})
+        ?_assert(decode_network(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1})) == {#network_address{time=333, stream=1, ip=IP, port=8080, services=1}, <<>>})
                 ].
