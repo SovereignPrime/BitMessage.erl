@@ -13,7 +13,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, {privkey}).
+-record(state, {type, key}).
 
 %%%===================================================================
 %%% API
@@ -26,8 +26,17 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Type, Key) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Type, Key], []).
+
+decrypt_message(Data) ->
+    gen_server:cast(?MODULE, {decrypt, message, Data}).
+
+decrypt_broadcast(Data) ->
+    gen_server:cast(?MODULE, {decrypt, broadcast, Data}).
+
+encrypt_broadcast(Data) ->
+    gen_server:cast(?MODULE, {encrypt, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -44,8 +53,8 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, #state{}}.
+init([Type, Key]) ->
+    {ok, #state{type=Type, key=Key}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -75,7 +84,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, <<IV:16/bytes, _:16/integer, XLength:16/big-integer, X:XLength/bytes, YLength:16/big-integer, Y:YLength/bytes, Data/bytes>> = Payload}, PrivKey) ->
+handle_cast({decrypt, Type, <<IV:16/bytes, _:16/integer, XLength:16/big-integer, X:XLength/bytes, YLength:16/big-integer, Y:YLength/bytes, Data/bytes>> = Payload}, #state{type=decryptor, key=PrivKey}=State) ->
     MLength = byte_size(Payload),
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     R = <<X/bytes, Y/bytes>>,
@@ -85,11 +94,32 @@ handle_cast({decrypt, <<IV:16/bytes, _:16/integer, XLength:16/big-integer, X:XLe
         HMAC ->
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            {my, DMessage};
+            case Type of 
+                message ->
+                    bm_dispetcher:message_arrived(DMessage);
+                broadcast ->
+                    bm_dispetcher:broadcast_arrived(DMessage)
+            end;
         _ ->
             not_for_me
     end,
-    {noreply, PrivKey};
+    {noreply, State};
+
+handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->
+    MLength = byte_size(Payload),
+    IV = crypto:rand_bytes(16),
+    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
+    XP = crypto:compute_key(ecdh, PubKey, Keyr, secp256k1),
+    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
+    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
+    HMAC = crypto:hmac(sha256, M, EMessage),
+    case Type of 
+        message ->
+            bm_dispetcher:message_send(EMessage);
+        broadcast ->
+            bm_dispetcher:broadcast_send(EMessage)
+    end,
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
