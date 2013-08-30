@@ -2,8 +2,10 @@
 
 -behaviour(gen_server).
 
+-include("../include/bm.hrl").
+
 %% API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -29,10 +31,10 @@
 start_link(Type, Key) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Type, Key], []).
 
-decrypt_message(Data) ->
+decrypt_message(Data, Hash) ->
     gen_server:cast(?MODULE, {decrypt, message, Data}).
 
-decrypt_broadcast(Data) ->
+decrypt_broadcast(Data, Hash) ->
     gen_server:cast(?MODULE, {decrypt, broadcast, Data}).
 
 encrypt_broadcast(Data) ->
@@ -84,7 +86,12 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, Type, <<IV:16/bytes, _:16/integer, XLength:16/big-integer, X:XLength/bytes, YLength:16/big-integer, Y:YLength/bytes, Data/bytes>> = Payload}, #state{type=decryptor, key=PrivKey}=State) ->
+handle_cast({decrypt, Type, Hash, <<IV:16/bytes, 
+                              _:16/integer,  %Curve type
+                              XLength:16/big-integer, X:XLength/bytes, 
+                              YLength:16/big-integer, Y:YLength/bytes, 
+                              Data/bytes>> = Payload}, 
+            #state{type=decryptor, key=#privkey{address=Address, hash=RIPE, pek=PrivKey}}=State) ->
     MLength = byte_size(Payload),
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     R = <<X/bytes, Y/bytes>>,
@@ -96,9 +103,9 @@ handle_cast({decrypt, Type, <<IV:16/bytes, _:16/integer, XLength:16/big-integer,
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
                 message ->
-                    bm_dispetcher:message_arrived(DMessage);
+                    bm_dispetcher:message_arrived(DMessage, Hash, Address);
                 broadcast ->
-                    bm_dispetcher:broadcast_arrived(DMessage)
+                    bm_dispetcher:broadcast_arrived(DMessage, Hash, Address)
             end;
         _ ->
             not_for_me
@@ -115,9 +122,9 @@ handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) 
     HMAC = crypto:hmac(sha256, M, EMessage),
     case Type of 
         message ->
-            bm_dispetcher:message_send(EMessage);
+            bm_dispetcher:message_sent(EMessage);
         broadcast ->
-            bm_dispetcher:broadcast_send(EMessage)
+            bm_dispetcher:broadcast_sent(EMessage)
     end,
     {noreply, State};
 handle_cast(_Msg, State) ->

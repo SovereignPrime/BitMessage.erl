@@ -39,6 +39,11 @@ decode_varstr(VStr) ->
     <<Str:Len/bytes, Rest/bytes>> = S,
     {binary_to_list(Str), Rest}.
 
+decode_varbin(VStr) ->
+    {Len, S} = decode_varint(VStr),
+    <<Str:Len/bytes, Rest/bytes>> = S,
+    {Str, Rest}.
+
 %%%
 %% List of any packing and unpacking to VariantIntList
 %%%

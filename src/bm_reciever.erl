@@ -81,7 +81,7 @@ analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
 analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
     error_logger:info_msg("Addr packet recieved.~n Addrs: ~p~n", [length(Addrs)]),
-    ets:insert(addr, Addrs),
+    dets:insert(addr, Addrs),
     State;
 analyse_packet(<<"inv",_/bytes>>, Length, Packet, 
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
@@ -111,9 +111,9 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                              Packet/bytes>>=Payload,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when  AVer == 2->
-    Fun = fun() ->
+    Fun = fun(_) ->
         {_, Ripe} = bm_types:decode_varint(Packet),
-        case ets:lookup(pubkeys, Ripe) of
+        case dets:lookup(pubkeys, Ripe) of
             [_] ->
                 %TODO: 
                 %send_my_pubke(),
@@ -130,11 +130,11 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                           Packet/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when AVer == 2 ->
-    Fun = fun() ->
+    Fun = fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
             <<BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes>> = Data,
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            ets:insert(pubkeys, #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK}),
+            dets:insert(pubkeys, #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK}),
             %TODO
             %advertise_pubkey(),
             State 
@@ -142,29 +142,28 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
     error_logger:info_msg("PubKey packet recieved.~n Payload: ~p~n", [Payload]),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 
-analyse_packet(<<"msg", _/bytes>>, Length, Payload,
+analyse_packet(<<"msg", _/bytes>>, Length, <<_:17/bytes, EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     error_logger:info_msg("Msg packet recieved.~n Payload: ~p~n", [Payload]),
-    Fun = fun() ->
+    Fun = fun(Hash) ->
             % TODO:
-            % check_version(Payload),
-            % DPayload = decrypt_payload(Payload),
-            % check_reciever(DPayload),
-            % check_signature(DPayload),
-            % save_incoming(DPayload),
+            % check_ackdata(Payload),
+            bm_message_decryptor:decrypt_message(EMessage, Hash),
             State
     end, 
     process_object(<<"msg">>, Payload, State, Fun);
-analyse_packet(<<"broadcast", _/bytes>>, Length, Payload,
+analyse_packet(<<"broadcast", _/bytes>>, Length, <<_:17/bytes, BVer/big-integer, EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     error_logger:info_msg("Broadcast packet recieved.~n Payload: ~p~n", [Payload]),
-    Fun = fun() ->
-            % TODO:
-            % check_version(Payload),
-            % DPayload = decrypt_payload(Payload),
-            % check_reciever(DPayload),
-            % check_signature(DPayload),
-            % save_incoming(DPayload),
+    Fun = fun(Hash) ->
+            case BVer of
+                1 ->
+                    bm_dispatcher:broadcast_arrived(EMessage, Hash, broadcast);
+                2 ->
+                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash);
+                _ ->
+                    ok
+            end,
             State
     end, 
     process_object(<<"broadast">>, Payload, State, Fun);
@@ -220,7 +219,7 @@ conection_fully_established(State) ->
 %%%
     
 invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
-    case ets:lookup(inventory, Inv) of
+    case dets:lookup(inventory, Inv) of
         [] ->
             {Inv , Rest};
         _ ->
@@ -237,13 +236,13 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Data/bytes>> = Paylo
             State;
         Stream == OStream ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-            case ets:lookup(objects, Hash) of
+            case dets:lookup(objects, Hash) of
                 [_] ->
                     State;
                 [] ->
-                    ets:insert(inventory, #object{hash=Hash, payload=Payload, type=Type, time=Time}),
+                    dets:insert(inventory, #object{hash=Hash, payload=Payload, type=Type, time=Time}),
                     %broadcast_inv(Hash), % TODO
-                    Fun()
+                    Fun(Hash)
             end;
         true ->
             State
@@ -253,5 +252,5 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     {ok, {Ip, Port}} = inet:peername(Socket),
-    ets:insert(addr, #network_address{time=Time, ip=Ip, port=Port, stream=Stream}).
+    dets:insert(addr, #network_address{time=Time, ip=Ip, port=Port, stream=Stream}).
 
