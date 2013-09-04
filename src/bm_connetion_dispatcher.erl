@@ -1,11 +1,11 @@
--module(bm_message_decryptor).
+-module(bm_connetion_dispatcher).
 
 -behaviour(gen_server).
 
 -include("../include/bm.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -14,8 +14,9 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([get_socket/1]).
 
--record(state, {type, key}).
+-record(state, {addr}).
 
 %%%===================================================================
 %%% API
@@ -28,17 +29,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Init) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Init], []).
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-decrypt_message(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, message, Data}).
-
-decrypt_broadcast(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, broadcast, Data}).
-
-encrypt_broadcast(Data) ->
-    gen_server:cast(?MODULE, {encrypt, Data}).
+get_socket(Pid) ->
+    gen_server:call(?MODULE, register, infinity).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -55,9 +50,22 @@ encrypt_broadcast(Data) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Init]) ->
-    ok=bm_dispetcher:register_cryptor(self()),
-    {ok, Init}.
+init([]) ->
+    NAddr = case bm_db:first(addr) of
+        '$end_of_table' ->
+            {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
+            error_logger:info_msg("Recieved addrs ~p~n", [Ips]),
+            Addrs = lists:map(fun(Ip) ->
+                            {_MSec, Sec, MiSec} = now(),
+                            Time = trunc( Sec*1.0e6 + MiSec),
+                            #network_address{time=Time, stream=1, ip=Ip, port=8444}
+                    end, Ips),
+            lists:foreach(fun(Addr) -> bm_db:insert(addr, Addr) end, Addrs),
+            bm_db:first(addr);
+        Addr ->
+            Addr
+    end,
+    {ok, #state{addr=NAddr}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -73,6 +81,14 @@ init([Init]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(register, _From, #state{addr=Addr}=State) ->
+    case connect_peer(Addr) of
+        {ok, Socket, NAddr} ->
+            %gen_tcp:controlling_process(Socket, From),
+            {reply, {gen_tcp, Socket}, State#state{addr=NAddr}};
+         E -> 
+            {stop, E, State}
+    end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -87,47 +103,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, Type, Hash, <<IV:16/bytes, 
-                              _:16/integer,  %Curve type
-                              XLength:16/big-integer, X:XLength/bytes, 
-                              YLength:16/big-integer, Y:YLength/bytes, 
-                              Data/bytes>> = Payload}, 
-            #privkey{address=Address, pek=PrivKey}=State) ->
-    MLength = byte_size(Payload),
-    <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
-    R = <<X/bytes, Y/bytes>>,
-    XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    case crypto:hmac(sha256, M, EMessage) of
-        HMAC ->
-            DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
-            error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            case Type of 
-                message ->
-                    bm_dispetcher:message_arrived(DMessage, Hash, Address);
-                broadcast ->
-                    bm_dispetcher:broadcast_arrived(DMessage, Hash, Address)
-            end;
-        _ ->
-            not_for_me
-    end,
-    {noreply, State};
-
-handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->
-    MLength = byte_size(Payload),
-    IV = crypto:rand_bytes(16),
-    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
-    XP = crypto:compute_key(ecdh, PubKey, Keyr, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
-    HMAC = crypto:hmac(sha256, M, EMessage),
-    case Type of 
-        message ->
-            bm_dispetcher:message_sent(EMessage);
-        broadcast ->
-            bm_dispetcher:broadcast_sent(EMessage)
-    end,
-    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -172,3 +147,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+connect_peer('$end_of_table') ->
+    error_logger:info_msg("Connecton list ended~n"),
+    connect_peer(bm_db:first(addr));
+connect_peer(Addr) ->
+    case bm_db:lookup(addr, Addr) of
+        [#network_address{ip=Ip, port=Port, stream=Stream, time=Time}]  ->
+            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}], 10000) of
+                {ok, Socket} ->
+                    error_logger:info_msg("Connected to peer: ~p on port ~p~n", [Ip, Port]),
+                    {ok, Socket, bm_db:next(addr, Addr)};
+                {error, Reason} ->
+                    error_logger:info_msg("Error connectiong to peer: ~p on port ~p with reason ~p~n", [Ip, Port, Reason]),
+                    connect_peer(bm_db:next(addr, Addr))
+            end;
+        [] ->
+            timeout
+    end.

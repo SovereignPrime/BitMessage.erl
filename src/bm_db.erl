@@ -1,11 +1,10 @@
--module(bm_message_decryptor).
+-module(bm_db).
 
 -behaviour(gen_server).
-
 -include("../include/bm.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -14,8 +13,13 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([
+    insert/2,
+    first/1,
+    next/2
+    ]).
 
--record(state, {type, key}).
+-record(state, {addr}).
 
 %%%===================================================================
 %%% API
@@ -28,18 +32,23 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Init) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Init], []).
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-decrypt_message(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, message, Data}).
+insert(Type, Data) ->
+    gen_server:cast(?MODULE, {insert, Type, Data}).
 
-decrypt_broadcast(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, broadcast, Data}).
+first(Type)->
+    gen_server:call(?MODULE, {first, Type}).
 
-encrypt_broadcast(Data) ->
-    gen_server:cast(?MODULE, {encrypt, Data}).
+next(Type, Prev)->
+    gen_server:call(?MODULE, {next, Type, Prev}).
 
+lookup(Type, Prev)->
+    gen_server:call(?MODULE, {get, Type, Prev}).
+
+foldr(Fun, Acc, Type)->
+    gen_server:call(?MODULE, {foldr, Fun, Type, Prev}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -55,9 +64,21 @@ encrypt_broadcast(Data) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Init]) ->
-    ok=bm_dispetcher:register_cryptor(self()),
-    {ok, Init}.
+init([]) ->
+    case mnesia:table_info(inventory, disc_copies) of
+        {aborted, {no_exists, _, _}} ->
+            mnesia:stop(),
+            mnesia:create_schema([node()]),
+            mnesia:start(),
+            {atomic, ok} = mnesia:create_table(inventory, [{disc_copies, node()}, {attributes, record_info(fields, object)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(pubkey, [{disc_copies, node()}, {attributes, record_info(fields, pubkey)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, node()}, {attributes, record_info(fields, privkey)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(addr, [{disc_copies, node()}, {attributes, record_info(fields, network_address)}, {type, set}]),
+            mnesia:info();
+        _ ->
+            ok
+    end,
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -73,6 +94,26 @@ init([Init]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({first, Type}, _From, State) ->
+    {atomic, Data} = mnesia:transaction(fun() ->
+                    mnesia:first(Type)
+            end),
+    {reply, Data, State};
+handle_call({next, Type, Prev}, _From, State) ->
+    {atomic, Data} = mnesia:transaction(fun() ->
+                    mnesia:next(Type, Prev)
+            end),
+    {reply, Data, State};
+handle_call({get, Type, Key}, _From, State) ->
+    {atomic, [Data]} = mnesia:transaction(fun() ->
+                    mnesia:read(Type, Key)
+            end),
+    {reply, Data, State};
+handle_call({foldr, Fun,  Type, Acc}, _From, State) ->
+    {atomic, [Data]} = mnesia:transaction(fun() ->
+                    mnesia:foldr(Fun, Acc, Type)
+            end),
+    {reply, Data, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -87,46 +128,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, Type, Hash, <<IV:16/bytes, 
-                              _:16/integer,  %Curve type
-                              XLength:16/big-integer, X:XLength/bytes, 
-                              YLength:16/big-integer, Y:YLength/bytes, 
-                              Data/bytes>> = Payload}, 
-            #privkey{address=Address, pek=PrivKey}=State) ->
-    MLength = byte_size(Payload),
-    <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
-    R = <<X/bytes, Y/bytes>>,
-    XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    case crypto:hmac(sha256, M, EMessage) of
-        HMAC ->
-            DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
-            error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            case Type of 
-                message ->
-                    bm_dispetcher:message_arrived(DMessage, Hash, Address);
-                broadcast ->
-                    bm_dispetcher:broadcast_arrived(DMessage, Hash, Address)
-            end;
-        _ ->
-            not_for_me
-    end,
-    {noreply, State};
-
-handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->
-    MLength = byte_size(Payload),
-    IV = crypto:rand_bytes(16),
-    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
-    XP = crypto:compute_key(ecdh, PubKey, Keyr, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
-    HMAC = crypto:hmac(sha256, M, EMessage),
-    case Type of 
-        message ->
-            bm_dispetcher:message_sent(EMessage);
-        broadcast ->
-            bm_dispetcher:broadcast_sent(EMessage)
-    end,
+handle_cast({insert, Type, Data}, State) ->
+     mnesia:transaction(fun() ->
+                insert_obj(Type, Data)
+        end),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -172,3 +177,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+insert_obj(_, []) ->
+    ok;
+insert_obj(Type, [I|R]) ->
+    mnesia:write(Type, I, write),
+    insert_obj(Type, R).

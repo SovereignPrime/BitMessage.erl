@@ -1,4 +1,7 @@
--module(bm_address_generator).  -behaviour(gen_server).  %% UintTest macro
+-module(bm_address_generator).  
+-behaviour(gen_server).  
+
+%% UintTest macro
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
@@ -127,36 +130,36 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-generate_keys(DeterministicPassword, Nonce, EighteenthByteRipe) when size(DeterministicPassword) /= 0 ->
-    PotentialPrivSign = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce))/bytes>>),
-    PotentialPrivKey = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce + 1))/bytes>>),
-    PotentialPubKey = point_mult(PotentialPrivKey),
-    PotentialPubSign = point_mult(PotentialPrivSign),
-    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
-        {<<0, 0, R>>, true} ->
-            R;
-        {<<0, R>>, false} ->
-            R;
-        _ ->
-            generate_keys(DeterministicPassword, Nonce + 2, EighteenthByteRipe)
-    end,
-    bm_auth:encode_address(3, Stream, Ripe).
-                          
-generate_keys(EighteenthByteRipe) ->
-    PotentialPrivSign = crypto:rand_bytes(32),
-    PotentialPrivKey = crypto:rand_bytes(32),
-    PotentialPubKey = point_mult(PotentialPrivKey),
-    PotentialPubSign = point_mult(PotentialPrivSign),
-    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
-        {<<0, 0, R>>, true} ->
-            R;
-        {<<0, R>>, false} ->
-            R;
-        _ ->
-            generate_keys(EighteenthByteRipe)
-    end,
-    bm_auth:encode_address(3, Stream, Ripe).
-    
-point_mult(Priv) ->
-    {Public, Priv} = crypto:generate_key(ecdh, secp256k1, Priv),
-    Public.
+%generate_keys(DeterministicPassword, Nonce, EighteenthByteRipe) when size(DeterministicPassword) /= 0 ->
+%    PotentialPrivSign = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce))/bytes>>),
+%    PotentialPrivKey = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce + 1))/bytes>>),
+%    PotentialPubKey = point_mult(PotentialPrivKey),
+%    PotentialPubSign = point_mult(PotentialPrivSign),
+%    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
+%        {<<0, 0, R>>, true} ->
+%            R;
+%        {<<0, R>>, false} ->
+%            R;
+%        _ ->
+%            generate_keys(DeterministicPassword, Nonce + 2, EighteenthByteRipe)
+%    end,
+%    bm_auth:encode_address(3, Stream, Ripe).
+%                          
+%generate_keys(EighteenthByteRipe) ->
+%    PotentialPrivSign = crypto:rand_bytes(32),
+%    PotentialPrivKey = crypto:rand_bytes(32),
+%    PotentialPubKey = point_mult(PotentialPrivKey),
+%    PotentialPubSign = point_mult(PotentialPrivSign),
+%    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
+%        {<<0, 0, R>>, true} ->
+%            R;
+%        {<<0, R>>, false} ->
+%            R;
+%        _ ->
+%            generate_keys(EighteenthByteRipe)
+%    end,
+%    bm_auth:encode_address(3, Stream, Ripe).
+%    
+%point_mult(Priv) ->
+%    {Public, Priv} = crypto:generate_key(ecdh, secp256k1, Priv),
+%    Public.

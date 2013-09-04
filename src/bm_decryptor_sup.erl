@@ -43,6 +43,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    {ok, privkey} = dets:open_file(privkey, [{file, "data/privkey.dets"}, {keypos, 2}]),
     Children = dets:foldr(fun(O, A) ->
                 [?CHILD({cryptor, length(A) + 1}, bm_message_decryptor, worker, [O]) | A]
             end, [], privkey),

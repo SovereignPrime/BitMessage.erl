@@ -11,6 +11,7 @@
 
 start(_StartType, _StartArgs) ->
     application:start(crypto),
+    application:start(ranch),
     bitmessage_sup:start_link().
 
 stop(_State) ->

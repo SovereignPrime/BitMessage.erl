@@ -84,6 +84,10 @@ integer_to_bytes(Num) ->
 binary_to_hexstring(Data) ->
     lists:flatten([io_lib:format("~2.16.0b", [B]) || <<B>> <= Data]).
 
+timestamp() ->
+    {MSec, Sec, _} = now(),
+    trunc(MSec * 1.0e6 + Sec).
+
 %%
 %% Test cases
 %%

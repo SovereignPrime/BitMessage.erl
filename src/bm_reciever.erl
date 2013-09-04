@@ -7,18 +7,36 @@
 
 start_link(Ref, Socket, Transport, Opts) ->
     Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
-
+    
     {ok, Pid}.
+
+start_link() ->
+    %error_logger:info_msg("Starting reciever: ~p~n", [self()]),
+    proc_lib:start_link(?MODULE, init, [self()]).
+
 init(Ref, Socket, Transport, _Opts) ->
-    %ok = ranch:accept_ack(Ref),
+    %error_logger:info_msg("Started reciever: ~p~n", [self()]),
+    ok = ranch:accept_ack(Ref),
+    loop(#state{socket=Socket, transport=Transport}).
+
+init(Parent) ->
+    ok = proc_lib:init_ack(Parent, {ok, self()}),
+    timer:sleep(1000),
+    {Transport, Socket} =  bm_connetion_dispatcher:get_socket(self()),
+    error_logger:info_msg("Started reciever: ~p~n", [self()]),
+    send_version(#state{socket=Socket, transport=Transport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
     loop(#state{socket=Socket, transport=Transport}).
 
 loop(#state{socket = Socket, transport = Transport}=IState) ->
-    case Transport:recv(Socket,0, 5000) of
+    case Transport:recv(Socket,0, 50000) of
         {ok, Packet} ->
             %error_logger:info_msg("Packet recv: ~p~n", [Packet]),
             State = check_packet(Packet, IState),
             loop(State);
+        {error, close} ->
+            error_logger:info_msg("Socket closed: ~p~n", [self()]),
+            {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(self()),
+            loop(IState#state{socket=NSocket, transport=NTransport});
         _ ->
             loop(IState)
     end.
@@ -80,7 +98,7 @@ analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
 
 analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
-    error_logger:info_msg("Addr packet recieved.~n Addrs: ~p~n", [length(Addrs)]),
+    error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
     dets:insert(addr, Addrs),
     State;
 analyse_packet(<<"inv",_/bytes>>, Length, Packet, 
@@ -113,7 +131,7 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
         when  AVer == 2->
     Fun = fun(_) ->
         {_, Ripe} = bm_types:decode_varint(Packet),
-        case dets:lookup(pubkeys, Ripe) of
+        case dets:lookup(pubkey, Ripe) of
             [_] ->
                 %TODO: 
                 %send_my_pubke(),
@@ -134,7 +152,7 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
             {_, Data} = bm_types:decode_varint(Packet),
             <<BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes>> = Data,
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            dets:insert(pubkeys, #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK}),
+            dets:insert(pubkey, #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK}),
             %TODO
             %advertise_pubkey(),
             State 
@@ -236,7 +254,7 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Data/bytes>> = Paylo
             State;
         Stream == OStream ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-            case dets:lookup(objects, Hash) of
+            case dets:lookup(inventory, Hash) of
                 [_] ->
                     State;
                 [] ->

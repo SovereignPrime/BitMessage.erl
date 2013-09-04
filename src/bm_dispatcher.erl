@@ -10,6 +10,7 @@
          message_sent/1,
          broadcast_arrived/3,
          broadcast_sent/1,
+
          register_peer/1,
          register_cryptor/1]).
 
@@ -22,7 +23,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, {reciever}).
+-record(state, {addr, reciever}).
 
 %%%===================================================================
 %%% API
@@ -55,6 +56,7 @@ register_peer(Data) ->
 
 register_cryptor(Data) ->
     gen_server:call(?MODULE, {register, crypto, Data}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -71,6 +73,8 @@ register_cryptor(Data) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    {ok, inventory} = dets:open_file(inventory, [{file, "data/inventory.dets"}, {keypos, 2}, {ram_file, true}]),
+    {ok, pubkey} = dets:open_file(pubkey, [{file, "data/pubkey.dets"}, {keypos, 2}, {ram_file, true}]),
     {ok, #state{reciever=self()}}.
 
 %%--------------------------------------------------------------------
@@ -182,6 +186,9 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
+    dets:close(pubkey),
+    dets:close(inventory),
+    dets:close(addr),
     ok.
 
 %%--------------------------------------------------------------------
