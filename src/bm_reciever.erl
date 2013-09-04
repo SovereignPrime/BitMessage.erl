@@ -22,7 +22,7 @@ init(Ref, Socket, Transport, _Opts) ->
 init(Parent) ->
     ok = proc_lib:init_ack(Parent, {ok, self()}),
     timer:sleep(1000),
-    {Transport, Socket} =  bm_connetion_dispatcher:get_socket(self()),
+    {Transport, Socket} =  bm_connetion_dispatcher:get_socket(),
     error_logger:info_msg("Started reciever: ~p~n", [self()]),
     send_version(#state{socket=Socket, transport=Transport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
     loop(#state{socket=Socket, transport=Transport}).
@@ -97,18 +97,21 @@ analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
     State#state{init_stage=State#state.init_stage#init_stage{verack_recv=true}};
 
 analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+    error_logger:info_msg("Addr packet recieved.~n"),
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
     error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
-    dets:insert(addr, Addrs),
+    bm_db:insert(addr, Addrs),
     State;
 analyse_packet(<<"inv",_/bytes>>, Length, Packet, 
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+    error_logger:info_msg("Inv packet recieved.~n"),
     {ObjsToGet, _} = bm_types:decode_list(Packet, fun invs_to_list/1),
     error_logger:info_msg("Inv packet recieved.~n Invs: ~p~n", [length(ObjsToGet)]),
     send_getdata(ObjsToGet, State),
     State;
 analyse_packet(<<"getdata", _/bytes>>, Length, Packet,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+    error_logger:info_msg("GetData packet recieved.~n"),
     {ObjToSend, _} = bm_types:decode_list(Packet, fun(<<I:32/bytes, R/bytes>>) -> {I, R} end),
     MsgToSeend = lists:map(fun bm_message_creator:create_inv/1, ObjToSend),
     error_logger:info_msg("GetData packet recieved.~n ObjToSen: ~p~n", [length(ObjToSend)]),
@@ -129,9 +132,10 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                              Packet/bytes>>=Payload,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when  AVer == 2->
+    error_logger:info_msg("GetPubKey packet recieved.~n"),
     Fun = fun(_) ->
         {_, Ripe} = bm_types:decode_varint(Packet),
-        case dets:lookup(pubkey, Ripe) of
+        case bm_db:lookup(pubkey, Ripe) of
             [_] ->
                 %TODO: 
                 %send_my_pubke(),
@@ -148,11 +152,12 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                           Packet/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when AVer == 2 ->
+    error_logger:info_msg("PubKey packet recieved.~n"),
     Fun = fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
-            <<BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes>> = Data,
+            <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes>> = Data,
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            dets:insert(pubkey, #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK}),
+            bm_db:insert(pubkey, [ #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK} ]),
             %TODO
             %advertise_pubkey(),
             State 
@@ -160,7 +165,7 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
     error_logger:info_msg("PubKey packet recieved.~n Payload: ~p~n", [Payload]),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 
-analyse_packet(<<"msg", _/bytes>>, Length, <<_:17/bytes, EMessage/bytes>> = Payload,
+analyse_packet(<<"msg", _/bytes>>, _Length, <<_:17/bytes, EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     error_logger:info_msg("Msg packet recieved.~n Payload: ~p~n", [Payload]),
     Fun = fun(Hash) ->
@@ -170,7 +175,7 @@ analyse_packet(<<"msg", _/bytes>>, Length, <<_:17/bytes, EMessage/bytes>> = Payl
             State
     end, 
     process_object(<<"msg">>, Payload, State, Fun);
-analyse_packet(<<"broadcast", _/bytes>>, Length, <<_:17/bytes, BVer/big-integer, EMessage/bytes>> = Payload,
+analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_:17/bytes, BVer/big-integer, EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     error_logger:info_msg("Broadcast packet recieved.~n Payload: ~p~n", [Payload]),
     Fun = fun(Hash) ->
@@ -237,7 +242,7 @@ conection_fully_established(State) ->
 %%%
     
 invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
-    case dets:lookup(inventory, Inv) of
+    case bm_db:lookup(inventory, Inv) of
         [] ->
             {Inv , Rest};
         _ ->
@@ -254,11 +259,11 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Data/bytes>> = Paylo
             State;
         Stream == OStream ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-            case dets:lookup(inventory, Hash) of
+            case bm_db:lookup(inventory, Hash) of
                 [_] ->
                     State;
                 [] ->
-                    dets:insert(inventory, #object{hash=Hash, payload=Payload, type=Type, time=Time}),
+                    bm_db:insert(inventory, [ #inventory{hash=Hash, payload=Payload, type=Type, time=Time} ]),
                     %broadcast_inv(Hash), % TODO
                     Fun(Hash)
             end;
@@ -270,5 +275,5 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     {ok, {Ip, Port}} = inet:peername(Socket),
-    dets:insert(addr, #network_address{time=Time, ip=Ip, port=Port, stream=Stream}).
+    bm_db:insert(addr, [#network_address{time=Time, ip=Ip, port=Port, stream=Stream}]).
 

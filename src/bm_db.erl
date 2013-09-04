@@ -16,7 +16,10 @@
 -export([
     insert/2,
     first/1,
-    next/2
+    next/2,
+    lookup/2,
+    foldr/3, 
+    wait_db/0
     ]).
 
 -record(state, {addr}).
@@ -36,7 +39,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 insert(Type, Data) ->
-    gen_server:cast(?MODULE, {insert, Type, Data}).
+    gen_server:call(?MODULE, {insert, Type, Data}).
 
 first(Type)->
     gen_server:call(?MODULE, {first, Type}).
@@ -48,7 +51,14 @@ lookup(Type, Prev)->
     gen_server:call(?MODULE, {get, Type, Prev}).
 
 foldr(Fun, Acc, Type)->
-    gen_server:call(?MODULE, {foldr, Fun, Type, Prev}).
+    gen_server:call(?MODULE, {foldr, Fun, Type, Acc}).
+
+select(Type, MatchSpec, N)->
+    gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
+
+wait_db() ->
+    mnesia:wait_for_tables([privkey, addr, inventory], 10000).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -65,18 +75,20 @@ foldr(Fun, Acc, Type)->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    case mnesia:table_info(inventory, disc_copies) of
-        {aborted, {no_exists, _, _}} ->
+    case mnesia:wait_for_tables([inventory, privkey, addr], 5000) of
+        {timeout, [inventory, privkey, addr]}  ->
             mnesia:stop(),
             mnesia:create_schema([node()]),
             mnesia:start(),
-            {atomic, ok} = mnesia:create_table(inventory, [{disc_copies, node()}, {attributes, record_info(fields, object)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(pubkey, [{disc_copies, node()}, {attributes, record_info(fields, pubkey)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, node()}, {attributes, record_info(fields, privkey)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(addr, [{disc_copies, node()}, {attributes, record_info(fields, network_address)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(inventory, [{disc_copies, [node()]}, {attributes, record_info(fields, inventory)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(pubkey, [{disc_copies, [node()]}, {attributes, record_info(fields, pubkey)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, [node()]}, {attributes, record_info(fields, privkey)}, {type, set}]),
+            {atomic, ok} = mnesia:create_table(addr, [{disc_copies, [node()]}, {attributes, record_info(fields, network_address)}, {type, set}, {record_name, network_address}]),
             mnesia:info();
-        _ ->
-            ok
+         ok ->
+            ok;
+        {error, R} ->
+            exit(R)
     end,
     {ok, #state{}}.
 
@@ -105,15 +117,25 @@ handle_call({next, Type, Prev}, _From, State) ->
             end),
     {reply, Data, State};
 handle_call({get, Type, Key}, _From, State) ->
-    {atomic, [Data]} = mnesia:transaction(fun() ->
+    {atomic, Data} = mnesia:transaction(fun() ->
                     mnesia:read(Type, Key)
             end),
     {reply, Data, State};
 handle_call({foldr, Fun,  Type, Acc}, _From, State) ->
-    {atomic, [Data]} = mnesia:transaction(fun() ->
+    {atomic, Data} = mnesia:transaction(fun() ->
                     mnesia:foldr(Fun, Acc, Type)
             end),
     {reply, Data, State};
+handle_call({select, Type, MatchSpec, N}, _From, State) ->
+    {atomic, Data} = mnesia:transaction(fun() ->
+                    mnesia:select(Type, MatchSpec, N, read)
+            end),
+    {reply, Data, State};
+handle_call({insert, Type, Data}, _From, State) ->
+     R = mnesia:transaction(fun() ->
+                insert_obj(Type, Data)
+        end),
+    {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.

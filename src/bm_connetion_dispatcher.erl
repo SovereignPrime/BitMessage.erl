@@ -14,7 +14,8 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
--export([get_socket/1]).
+
+-export([get_socket/0]).
 
 -record(state, {addr}).
 
@@ -32,7 +33,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get_socket(Pid) ->
+get_socket() ->
+    bm_db:wait_db(),
     gen_server:call(?MODULE, register, infinity).
 
 %%%===================================================================
@@ -51,16 +53,20 @@ get_socket(Pid) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    bm_db:wait_db(),
     NAddr = case bm_db:first(addr) of
         '$end_of_table' ->
             {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
             error_logger:info_msg("Recieved addrs ~p~n", [Ips]),
-            Addrs = lists:map(fun(Ip) ->
+            Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),
                             Time = trunc( Sec*1.0e6 + MiSec),
-                            #network_address{time=Time, stream=1, ip=Ip, port=8444}
+                            %<<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, <<Ip1, Ip2, Ip3, Ip4>>),
+                            #network_address{
+                                %hash=Hash, 
+                                time=Time, stream=1, ip=Ip, port=8444}
                     end, Ips),
-            lists:foreach(fun(Addr) -> bm_db:insert(addr, Addr) end, Addrs),
+            bm_db:insert(addr, Addrs),
             bm_db:first(addr);
         Addr ->
             Addr
@@ -149,10 +155,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 connect_peer('$end_of_table') ->
     error_logger:info_msg("Connecton list ended~n"),
+    timer:sleep(500000),
     connect_peer(bm_db:first(addr));
 connect_peer(Addr) ->
     case bm_db:lookup(addr, Addr) of
-        [#network_address{ip=Ip, port=Port, stream=Stream, time=Time}]  ->
+        [ #network_address{ip=Ip, port=Port, stream=Stream, time=Time} ]  ->
             case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}], 10000) of
                 {ok, Socket} ->
                     error_logger:info_msg("Connected to peer: ~p on port ~p~n", [Ip, Port]),
@@ -160,7 +167,5 @@ connect_peer(Addr) ->
                 {error, Reason} ->
                     error_logger:info_msg("Error connectiong to peer: ~p on port ~p with reason ~p~n", [Ip, Port, Reason]),
                     connect_peer(bm_db:next(addr, Addr))
-            end;
-        [] ->
-            timeout
+            end
     end.

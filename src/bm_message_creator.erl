@@ -12,7 +12,7 @@ create_message(Command, Payload) ->
     <<?MAGIC, C:12/bytes, Length:32/big-integer, Check:4/bytes, Payload/bytes>>.
 
 create_inv(Hash) ->
-    [#object{type=Type, payload=Payload}] = ets:lookup(Hash),
+    [#inventory{type=Type, payload=Payload}] = bm_db:lookup(Hash),
     create_message(Type, Payload).
 
 create_big_inv(Stream, Exclude) ->
@@ -22,9 +22,9 @@ create_big_inv(Stream, Exclude) ->
     Time = trunc(MSec * 1.0e6 + Sec),
     PubOld = Time - PubKeyAge,
     Old = Time - InvAge,
-    case ets:select(objects, [
-                {#object{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>}, [{'>', '$2', PubOld}], ['$1']},
-                {#object{stream=Stream, hash='$1', time = '$2', type='$3'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
+    case bm_db:select(inventory, [
+                {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>}, [{'>', '$2', PubOld}], ['$1']},
+                {#inventory{stream=Stream, hash='$1', time = '$2', type='$3'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
                 ], 5000) of
         '$end_of_table' ->
             empty;
@@ -38,7 +38,7 @@ create_addr(Stream) ->
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     Old = Time - NodeAge,
-    case ets:select(addr, [
+    case bm_db:select(addr, [
                 {#network_address{stream=Stream, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
                 {#network_address{stream=Stream * 2, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
                 {#network_address{stream=Stream * 2 + 1, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']}

@@ -12,7 +12,11 @@
 start(_StartType, _StartArgs) ->
     application:start(crypto),
     application:start(ranch),
+    application:start(mnesia),
     bitmessage_sup:start_link().
 
 stop(_State) ->
+    application:stop(crypto),
+    application:stop(ranch),
+    application:stop(mnesia),
     ok.
