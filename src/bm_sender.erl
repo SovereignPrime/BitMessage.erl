@@ -12,6 +12,11 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([
+    register_peer/1,
+    unregister_peer/1,
+    send_broadcast/1
+    ]).
 
 -record(state, {transport=gen_tcp, sockets=[]}).
 
@@ -49,6 +54,9 @@ send_broadcast(Message) ->
 register_peer(Socket) ->
     gen_server:cast(?MODULE, {register, Socket}).
 
+unregister_peer(Socket) ->
+    gen_server:cast(?MODULE, {unregister, Socket}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -65,6 +73,7 @@ register_peer(Socket) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    {ok, _} = ets:new(peers, [named_table, public]),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -99,7 +108,13 @@ handle_cast({send, Message}, #state{sockets=Sockets, transport=Transport}=State)
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
+   {ok, Ip, Port} = inet:peername(Socket),
+    Time = bm_types:timetrap(),
+    ets:insert(peers, {Socket, Ip, Port, Time}), 
     {noreply, State#state{sockets=[Socket|Sockets]}};
+handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->
+    ets:delete(peers, Socket), 
+    {noreply, State#state{sockets=lists:delete( Socket, Sockets )}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

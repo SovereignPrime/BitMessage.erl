@@ -159,13 +159,13 @@ connect_peer('$end_of_table') ->
     connect_peer(bm_db:first(addr));
 connect_peer(Addr) ->
     case bm_db:lookup(addr, Addr) of
-        [ #network_address{ip=Ip, port=Port, stream=Stream, time=Time} ]  ->
-            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}], 10000) of
+        [ #network_address{ip=Ip, port=Port, stream=_Stream, time=_Time} ]  ->
+            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of
                 {ok, Socket} ->
                     error_logger:info_msg("Connected to peer: ~p on port ~p~n", [Ip, Port]),
                     {ok, Socket, bm_db:next(addr, Addr)};
-                {error, Reason} ->
-                    error_logger:info_msg("Error connectiong to peer: ~p on port ~p with reason ~p~n", [Ip, Port, Reason]),
+                {error, _Reason} ->
+                    %error_logger:info_msg("Error connectiong to peer: ~p on port ~p with reason ~p~n", [Ip, Port, Reason]),
                     connect_peer(bm_db:next(addr, Addr))
             end
     end.

@@ -55,7 +55,7 @@ register_peer(Data) ->
     gen_server:call(?MODULE, {register, peer, Data}).
 
 register_cryptor(Data) ->
-    gen_server:call(?MODULE, {register, crypto, Data}).
+    gen_server:cast(?MODULE, {register, cryptor, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -73,8 +73,7 @@ register_cryptor(Data) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, inventory} = dets:open_file(inventory, [{file, "data/inventory.dets"}, {keypos, 2}, {ram_file, true}]),
-    {ok, pubkey} = dets:open_file(pubkey, [{file, "data/pubkey.dets"}, {keypos, 2}, {ram_file, true}]),
+    ets:new(cryptors, [named_table, public]),
     {ok, #state{reciever=self()}}.
 
 %%--------------------------------------------------------------------
@@ -158,6 +157,9 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
         true ->
             {noreply, State}
     end;
+handle_cast({register, cryptor, Pid}, State) ->
+    ets:insert(cryptors, {Pid}),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -186,9 +188,6 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    dets:close(pubkey),
-    dets:close(inventory),
-    dets:close(addr),
     ok.
 
 %%--------------------------------------------------------------------

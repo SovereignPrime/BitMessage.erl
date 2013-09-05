@@ -16,8 +16,8 @@ create_inv(Hash) ->
     create_message(Type, Payload).
 
 create_big_inv(Stream, Exclude) ->
-    {ok, PubKeyAge} = application:get_env('max_age_of_public_key'),
-    {ok, InvAge} = application:get_env('max_age_of_inventory'),
+    PubKeyAge = application:get_env(bitmessage, 'max_age_of_public_key', 2 * 24 * 3600),
+    InvAge = application:get_env(bitmessage, 'max_age_of_inventory', 2 * 24 * 3600),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     PubOld = Time - PubKeyAge,
@@ -25,7 +25,7 @@ create_big_inv(Stream, Exclude) ->
     case bm_db:select(inventory, [
                 {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>}, [{'>', '$2', PubOld}], ['$1']},
                 {#inventory{stream=Stream, hash='$1', time = '$2', type='$3'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
-                ], 5000) of
+                ], 3000) of
         '$end_of_table' ->
             empty;
         {Hashes, Cont} ->
@@ -33,8 +33,8 @@ create_big_inv(Stream, Exclude) ->
             {ok, create_message(<<"inv">>, Payload), Cont}
     end.
 
-create_addr(Stream) ->
-    {ok, NodeAge} = application:get_env('max_age_of_node'),
+create_addrs_for_stream(Stream) ->
+    NodeAge = application:get_env(bitmessage, 'max_age_of_node', 2 * 24 * 3600),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     Old = Time - NodeAge,
@@ -47,7 +47,8 @@ create_addr(Stream) ->
             empty;
         {Hashes, Cont} ->
             Payload = bm_types:encode_list(Hashes, fun bm_types:encode_network/1),
-            {ok, create_message(<<"addr">>, Payload), Cont}
+            {ok, create_message(<<"addr">>, Payload), Cont};
+        R ->
+            error_logger:info_msg("Geting addrs for stream: ~p~n", [R])
     end.
-
 

@@ -1,5 +1,6 @@
 -module(bm_address_generator).  
 -behaviour(gen_server).  
+-include("../include/bm.hrl").
 
 %% UintTest macro
 -include_lib("eunit/include/eunit.hrl").
@@ -14,17 +15,9 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
-
--record(command, {command,
-                  addressVersionNumber = 3,
-                  streamNumber = 1,
-                  label,
-                  numberOfAddressesToMake = 1,
-                  deterministicPassphrase,
-                  eighteenByteRipe = true,
-                  nonceTrialsPerByte = 0,
-                  payloadLengthExtraBytes = 0,
-                  chanAddress}).
+-export([
+    generate_random_address/3
+    ]).
 
 %%%===================================================================
 %%% API
@@ -39,6 +32,9 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+generate_random_address(Label, Stream, EighteenthByteRipe) ->
+    gen_server:cast(?MODULE, {generate, random, Label, Stream, EighteenthByteRipe}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -56,6 +52,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    bm_db:wait_db(),
     {ok, []}.
 
 %%--------------------------------------------------------------------
@@ -86,6 +83,9 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({generate, random, Label, Stream, EighteenthByteRipe}, State) ->
+    bm_db:insert(privkey, [generate_keys(Label, Stream, EighteenthByteRipe)]),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -144,22 +144,25 @@ code_change(_OldVsn, State, _Extra) ->
 %            generate_keys(DeterministicPassword, Nonce + 2, EighteenthByteRipe)
 %    end,
 %    bm_auth:encode_address(3, Stream, Ripe).
-%                          
-%generate_keys(EighteenthByteRipe) ->
-%    PotentialPrivSign = crypto:rand_bytes(32),
-%    PotentialPrivKey = crypto:rand_bytes(32),
-%    PotentialPubKey = point_mult(PotentialPrivKey),
-%    PotentialPubSign = point_mult(PotentialPrivSign),
-%    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
-%        {<<0, 0, R>>, true} ->
-%            R;
-%        {<<0, R>>, false} ->
-%            R;
-%        _ ->
-%            generate_keys(EighteenthByteRipe)
-%    end,
-%    bm_auth:encode_address(3, Stream, Ripe).
-%    
-%point_mult(Priv) ->
-%    {Public, Priv} = crypto:generate_key(ecdh, secp256k1, Priv),
-%    Public.
+                          
+generate_keys(Label, Stream, EighteenthByteRipe) ->
+    {PotentialPubSign, PotentialPrivSign} = crypto:generate_key(ecdh, secp256k1),
+    {PotentialPubKey, PotentialPrivKey} = crypto:generate_key(ecdh, secp256k1),
+    case { bm_auth:generate_ripe(<<PotentialPubSign:32/bytes, PotentialPubKey:32/bytes>>), EighteenthByteRipe}  of
+        {<<0, 0, Ripe/bytes>>, true} ->
+            #privkey{hash=Ripe, 
+                     address=bm_auth:encode_address(3, Stream, Ripe),
+                     psk=PotentialPrivSign,
+                     pek=PotentialPrivKey,
+                     label=Label,
+                     time=bm_types:timestamp()};
+        {<<0, Ripe/bytes>>, false} ->
+            #privkey{hash=Ripe, 
+            address=bm_auth:encode_address(3, Stream, Ripe),
+            psk=PotentialPrivSign,
+            pek=PotentialPrivKey,
+            label=Label,
+            time=bm_types:timestamp()};
+        _ ->
+            generate_keys(Label, Stream, EighteenthByteRipe)
+    end.

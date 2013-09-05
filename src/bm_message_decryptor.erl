@@ -56,7 +56,7 @@ encrypt_broadcast(Data) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Init]) ->
-    ok=bm_dispetcher:register_cryptor(self()),
+    bm_dispatcher:register_cryptor(self()),
     {ok, Init}.
 
 %%--------------------------------------------------------------------

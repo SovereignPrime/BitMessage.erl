@@ -15,7 +15,7 @@ start_link() ->
     proc_lib:start_link(?MODULE, init, [self()]).
 
 init(Ref, Socket, Transport, _Opts) ->
-    %error_logger:info_msg("Started reciever: ~p~n", [self()]),
+    error_logger:info_msg("Started reciever for incoming connection: ~p~n", [self()]),
     ok = ranch:accept_ack(Ref),
     loop(#state{socket=Socket, transport=Transport}).
 
@@ -33,12 +33,19 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->
             %error_logger:info_msg("Packet recv: ~p~n", [Packet]),
             State = check_packet(Packet, IState),
             loop(State);
-        {error, close} ->
+        {error, closed} ->
             error_logger:info_msg("Socket closed: ~p~n", [self()]),
+            bm_sender:unregister_peer(Socket),
             {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(self()),
+            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
             loop(IState#state{socket=NSocket, transport=NTransport});
-        _ ->
-            loop(IState)
+        {error, R} ->
+            error_logger:info_msg("Socket error: ~p~p~n", [R, self()]),
+            bm_sender:unregister_peer(Socket),
+            Transport:close(Socket),
+            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
+            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
+            loop(IState#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
     end.
 
 check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>>, State) when size(Packet) > Length ->
@@ -74,7 +81,7 @@ analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
         when Length > 83, Version > 1 ->
     {_UA, StremsL} = bm_types:decode_varstr(Data),
     {Streams, _} = bm_types:decode_list(StremsL, fun bm_types:decode_varint/1),
-    error_logger:info_msg("Version packet recieved.~n Version: ~p~nAddrFrom: ~p~nStreams:~p~n", [Version, AddrFrom, Streams]),
+    %error_logger:info_msg("Version packet recieved.~n Version: ~p~nAddrFrom: ~p~nStreams:~p~n", [Version, AddrFrom, Streams]),
     #state{transport=Transport, socket=Socket} = State,
     % Sending verack
     Transport:send(Socket, bm_message_creator:create_message(<<"verack">>, <<>>)),
@@ -86,39 +93,41 @@ analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
     if Stage#init_stage.verack_recv == false ->
             send_version(OState);
         true ->
-            ok
+            conection_fully_established(OState)
             
     end,
     OState;
 
 analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
-    error_logger:info_msg("Verack recieved."),
-    conection_fully_established(State),
-    State#state{init_stage=State#state.init_stage#init_stage{verack_recv=true}};
+    error_logger:info_msg("Verack recieved.~p~n", [self()]),
+    OState = State#state{init_stage=State#state.init_stage#init_stage{verack_recv=true}},
+    conection_fully_established(OState),
+    OState;
 
 analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("Addr packet recieved.~n"),
+    error_logger:info_msg("Addr packet recieved.~p~n", [self()]),
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
     error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
     bm_db:insert(addr, Addrs),
+    %error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
     State;
 analyse_packet(<<"inv",_/bytes>>, Length, Packet, 
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("Inv packet recieved.~n"),
+    error_logger:info_msg("Inv packet recieved.~p~n", [self()]),
     {ObjsToGet, _} = bm_types:decode_list(Packet, fun invs_to_list/1),
-    error_logger:info_msg("Inv packet recieved.~n Invs: ~p~n", [length(ObjsToGet)]),
+    %error_logger:info_msg("Inv packet recieved.~n Invs: ~p~n", [ObjsToGet]),
     send_getdata(ObjsToGet, State),
     State;
 analyse_packet(<<"getdata", _/bytes>>, Length, Packet,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("GetData packet recieved.~n"),
+    error_logger:info_msg("GetData packet recieved.~p~n", [self()]),
     {ObjToSend, _} = bm_types:decode_list(Packet, fun(<<I:32/bytes, R/bytes>>) -> {I, R} end),
     MsgToSeend = lists:map(fun bm_message_creator:create_inv/1, ObjToSend),
-    error_logger:info_msg("GetData packet recieved.~n ObjToSen: ~p~n", [length(ObjToSend)]),
+    %error_logger:info_msg("GetData packet recieved.~n ObjToSen: ~p~n", [length(ObjToSend)]),
     lists:map(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend);
 analyse_packet(<<"ping", _>>, _Length, _Packet,
                  #state{transport=Transport, socket=Socket,init_stage=#init_stage{verack_recv=true, verack_sent=true}} = _State) ->
-    error_logger:info_msg("Ping recieved."),
+    error_logger:info_msg("Ping recieved.~p~n", [self()]),
     % Sending pong
     Transport:send(Socket, <<?MAGIC, "pong", 0:8/unit:8-integer, 0:32/integer, 16#cf83e135:32/big-integer>>);
 
@@ -144,7 +153,7 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                 State
         end
     end,
-    error_logger:info_msg("GetPubKey packet recieved.~n Payload: ~p~n", [Payload]),
+    %error_logger:info_msg("GetPubKey packet recieved.~n Payload: ~p~n", [Payload]),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                           Time:64/big-integer,
@@ -156,13 +165,13 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
     Fun = fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
             <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes>> = Data,
-            Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            bm_db:insert(pubkey, [ #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK} ]),
+            %Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
+            %bm_db:insert(pubkey, [ #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK} ]),
             %TODO
             %advertise_pubkey(),
             State 
     end,
-    error_logger:info_msg("PubKey packet recieved.~n Payload: ~p~n", [Payload]),
+    %error_logger:info_msg("PubKey packet recieved.~n Payload: ~p~n", [Payload]),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 
 analyse_packet(<<"msg", _/bytes>>, _Length, <<_:17/bytes, EMessage/bytes>> = Payload,
@@ -171,13 +180,13 @@ analyse_packet(<<"msg", _/bytes>>, _Length, <<_:17/bytes, EMessage/bytes>> = Pay
     Fun = fun(Hash) ->
             % TODO:
             % check_ackdata(Payload),
-            bm_message_decryptor:decrypt_message(EMessage, Hash),
+            %bm_message_decryptor:decrypt_message(EMessage, Hash),
             State
     end, 
     process_object(<<"msg">>, Payload, State, Fun);
 analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_:17/bytes, BVer/big-integer, EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("Broadcast packet recieved.~n Payload: ~p~n", [Payload]),
+    %error_logger:info_msg("Broadcast packet recieved.~n Payload: ~p~n", [Payload]),
     Fun = fun(Hash) ->
             case BVer of
                 1 ->
@@ -218,21 +227,27 @@ send_version(Transport, Socket, Stream, RAddr) ->
                 Nonce:8/bytes,
                 (bm_types:encode_varstr("/BitMessageErl:0.1/"))/bytes,
                 Streams/bytes>>,
-    error_logger:info_msg("Sending version message ~n~p~n", [bm_message_creator:create_message(<<"version">>,Message)]),
+    %error_logger:info_msg("Sending version message ~n~p~n", [bm_message_creator:create_message(<<"version">>,Message)]),
     Transport:send(Socket, bm_message_creator:create_message(<<"version">>, Message)).
 
 send_getdata(Objs, #state{socket=Socket, transport=Transport} = _State) ->
-    Payload = bm_types:encode_list(Objs, fun(O) -> <<O/bytes>> end),
-    error_logger:info_msg("Getdata packet sent.~n Payload: ~p~n", [Payload]),
+    error_logger:info_msg("Getdata packet sent.~n"),
+    Payload = bm_types:encode_list(lists:flatten(Objs), fun(O) -> <<O/bytes>> end),
     Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload)).
 
 
 
 conection_fully_established(#state{socket=Socket, transport=Transport, stream=Stream, init_stage=#init_stage{verack_sent=true, verack_recv=true}}=State) ->
-    %TODO:
-    %broadcast_addr(#network_address),
-    Transport:send(Socket, bm_message_creator:create_addr(Stream)),
-    Transport:send(Socket, bm_message_creator:create_big_inv(Stream, [])), %TODO: aware objects excluding
+    bm_sender:register_peer(Socket),
+    {ok, { Ip, Port }} = inet:peername(Socket),
+    Time = bm_types:timestamp(),
+    error_logger:info_msg("Connection to ~p fully established ~p~n", [Ip, self()]),
+    % Check after here
+    bm_sender:send_broadcast(bm_message_creator:create_message(<<"addr">>, bm_types:encode_network(#network_address{ip=Ip, port=Port, time=Time, stream=Stream}))),
+    {ok, Addrs, _} = bm_message_creator:create_addrs_for_stream(Stream),
+    Transport:send(Socket, Addrs),
+    {ok, Invs, _} = bm_message_creator:create_big_inv(Stream, []),
+    %Transport:send(Socket, Invs), %TODO: aware objects excluding
     State;
 conection_fully_established(State) ->
     State.

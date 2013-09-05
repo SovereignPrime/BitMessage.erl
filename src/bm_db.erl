@@ -19,6 +19,7 @@
     next/2,
     lookup/2,
     foldr/3, 
+    select/3,
     wait_db/0
     ]).
 
@@ -39,7 +40,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 insert(Type, Data) ->
-    gen_server:call(?MODULE, {insert, Type, Data}).
+    gen_server:cast(?MODULE, {insert, Type, Data}).
 
 first(Type)->
     gen_server:call(?MODULE, {first, Type}).
@@ -127,14 +128,20 @@ handle_call({foldr, Fun,  Type, Acc}, _From, State) ->
             end),
     {reply, Data, State};
 handle_call({select, Type, MatchSpec, N}, _From, State) ->
-    {atomic, Data} = mnesia:transaction(fun() ->
+     case mnesia:transaction(fun() ->
                     mnesia:select(Type, MatchSpec, N, read)
-            end),
-    {reply, Data, State};
+            end) of
+        {atomic, Data} ->
+            {reply, Data, State};
+        {atomic, '$end_of_table'} ->
+            {reply, '$end_of_table', State}
+    end;
 handle_call({insert, Type, Data}, _From, State) ->
+    error_logger:info_msg("Insert into DB data: ~p~n", [Data]),
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
+    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
