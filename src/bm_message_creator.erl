@@ -22,6 +22,7 @@ create_big_inv(Stream, Exclude) ->
     Time = trunc(MSec * 1.0e6 + Sec),
     PubOld = Time - PubKeyAge,
     Old = Time - InvAge,
+    error_logger:info_msg("Creating big inv: ~p~n", [Old]),
     case bm_db:select(inventory, [
                 {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>}, [{'>', '$2', PubOld}], ['$1']},
                 {#inventory{stream=Stream, hash='$1', time = '$2', type='$3'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}

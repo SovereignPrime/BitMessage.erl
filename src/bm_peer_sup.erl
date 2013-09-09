@@ -43,7 +43,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    ConNum = application:get_env(bitmessage, max_number_of_outgoing_connections, 2),
+    ConNum = application:get_env(bitmessage, max_number_of_outgoing_connections, 8),
     ChildSpec = [ ?CHILD({peer, C}, bm_reciever, worker, []) || C <- lists:seq(1, ConNum)],
     {ok, {{one_for_one, 5, 10}, [
                 ?CHILD(connection_dispatcher, bm_connetion_dispatcher, worker, []) | 

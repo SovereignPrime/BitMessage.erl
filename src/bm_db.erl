@@ -40,7 +40,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 insert(Type, Data) ->
-    gen_server:cast(?MODULE, {insert, Type, Data}).
+    gen_server:call(?MODULE, {insert, Type, Data}).
 
 first(Type)->
     gen_server:call(?MODULE, {first, Type}).
@@ -137,11 +137,11 @@ handle_call({select, Type, MatchSpec, N}, _From, State) ->
             {reply, '$end_of_table', State}
     end;
 handle_call({insert, Type, Data}, _From, State) ->
-    error_logger:info_msg("Insert into DB data: ~p~n", [Data]),
+    %error_logger:info_msg("Insert into DB data: ~p~n", [Data]),
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
-    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
+    %error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -158,9 +158,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({insert, Type, Data}, State) ->
-     mnesia:transaction(fun() ->
+     R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
+    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
