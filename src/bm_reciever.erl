@@ -264,6 +264,7 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
     end,
     case bm_message_creator:create_big_inv(Stream, []) of
         {ok, Invs, _} ->
+            io:format("Sending big inv~n"),
             Transport:send(Socket, Invs); %TODO: aware objects excluding
         empty ->
             ok
@@ -305,7 +306,7 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
                 [] ->
                     io:format("New ~p~n", [Hash]),
                     bm_db:insert(inventory, [ #inventory{hash=Hash, payload=Payload, type=Type, time=Time, stream=Stream} ]),
-                    %broadcast_inv(Hash), % TODO
+                    bm_sender:send_broadcast(bm_message_creator:create_inv([ Hash ])),
                     Fun(Hash)
             end;
         true ->
@@ -314,6 +315,7 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
     end.
 pubkey_fun_generator(Payload, Packet, Time, State) ->
     fun(_) ->
+            error_logger:info_msg("Pubkey fun called ~n"),
             {_, Data} = bm_types:decode_varint(Packet),
             <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes, _/bytes>> = Data,
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
@@ -340,10 +342,13 @@ get_pubkey_fun_generator(Packet, State) ->
 msg_fun_generator(EMessage, State) ->
     fun(Hash) ->
             error_logger:info_msg("Msg fun called ~n"),
-            % TODO:
-            % check_ackdata(Payload),
-            %bm_message_decryptor:decrypt_message(EMessage, Hash),
-            State
+            case check_ackdata(EMessage) of
+                true ->
+                    State;
+                false ->
+                    bm_message_decryptor:decrypt_message(EMessage, Hash),
+                    State
+            end
     end. 
 broadcast_fun_generator(BVer, EMessage, State) ->
     fun(Hash) ->
@@ -358,9 +363,24 @@ broadcast_fun_generator(BVer, EMessage, State) ->
             State
     end.
 
+%%%
+%% Helpers
+%%%
+
 update_peer_time(#state{socket=Socket, stream=Stream}) ->
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     {ok, {Ip, Port}} = inet:peername(Socket),
     bm_db:insert(addr, [#network_address{time=Time, ip=Ip, port=Port, stream=Stream}]).
 
+check_ackdata(Payload) ->
+    io:format("Test~n"),
+    case bm_db:match(sent, #message{ackdata=Payload, status=ackwait, _='_'}) of
+        [] ->
+            io:format("No~n"),
+            false;
+        [Message] ->
+            io:format("Yes~n"),
+            bm_db:insert(sent, Message#message{status=ok}),
+            true
+    end.

@@ -20,6 +20,7 @@
     lookup/2,
     foldr/3, 
     select/3,
+    match/2,
     wait_db/0
     ]).
 
@@ -56,6 +57,9 @@ foldr(Fun, Acc, Type)->
 
 select(Type, MatchSpec, N)->
     gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
+
+match(Type, MatchSpec)->
+    gen_server:call(?MODULE, {select, Type, MatchSpec}).
 
 wait_db() ->
     mnesia:wait_for_tables([privkey, addr, inventory], 10000).
@@ -138,6 +142,11 @@ handle_call({select, Type, MatchSpec, N}, _From, State) ->
         {atomic, '$end_of_table'} ->
             {reply, '$end_of_table', State}
     end;
+handle_call({match, Type, MatchSpec}, _From, State) ->
+     {atomic, Data} = mnesia:transaction(fun() ->
+                    mnesia:match_object(Type, MatchSpec, read)
+            end),
+    {reply, Data, State};
 handle_call({insert, Type, Data}, _From, State) ->
     %error_logger:info_msg("Insert into DB data: ~p~n", [Data]),
      R = mnesia:transaction(fun() ->

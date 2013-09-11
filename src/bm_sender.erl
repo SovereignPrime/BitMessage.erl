@@ -105,6 +105,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets, transport=Transport}=State) ->
+    error_logger:info_msg("Broadcasting to ~p~n", [Sockets]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
