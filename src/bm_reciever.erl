@@ -191,46 +191,26 @@ analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes,
     error_logger:info_msg("Msg packet recieved. ~p~n", [self()]),
     Fun = msg_fun_generator(EMessage, State),  
     process_object(<<"msg">>, Payload, State, Fun);
-%analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
-%                                                    Time:32/big-integer,
-%                                                    BVer:8/big-integer,
-%                                                    _Stream:8/integer, 
-%                                                    EMessage/bytes>> = Payload,
-%               #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-%        when Time /= 0, BVer =< 2 ->
-%    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
-%    Fun = fun(Hash) ->
-%            case BVer of
-%                1 ->
-%                    bm_dispatcher:broadcast_arrived(EMessage, Hash, broadcast);
-%                2 ->
-%                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash);
-%                _ ->
-%                    ok
-%            end,
-%            State
-%    end, 
-%    process_object(<<"broadcast">>, Payload, State, Fun);
-%analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
-%                                              Time:64/big-integer,
-%                                              BVer:8/big-integer, 
-%                                              _Stream:8/integer, 
-%                                              EMessage/bytes>> = Payload,
-%                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-%        when Time /= 0, BVer =< 2 ->
-%    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
-%    Fun = fun(Hash) ->
-%            case BVer of
-%                1 ->
-%                    bm_dispatcher:broadcast_arrived(EMessage, Hash, broadcast);
-%                2 ->
-%                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash);
-%                _ ->
-%                    ok
-%            end,
-%            State
-%    end, 
-%    process_object(<<"broadcast">>, Payload, State, Fun);
+analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
+                                                    Time:32/big-integer,
+                                                    BVer:8/big-integer,
+                                                    _Stream:8/integer, 
+                                                    EMessage/bytes>> = Payload,
+               #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
+        when Time /= 0, BVer =< 2 ->
+    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
+    Fun =  broadcast_fun_generator(BVer, EMessage, State), 
+    process_object(<<"broadcast">>, Payload, State, Fun);
+analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
+                                              Time:64/big-integer,
+                                              BVer:8/big-integer, 
+                                              _Stream:8/integer, 
+                                              EMessage/bytes>> = Payload,
+                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
+        when Time /= 0, BVer =< 2 ->
+    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
+    Fun =  broadcast_fun_generator(BVer, EMessage, State), 
+    process_object(<<"broadcast">>, Payload, State, Fun);
     
 analyse_packet(Command, _, Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
@@ -306,19 +286,17 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
     end.
 
 process_object(Type, <<POW:64/bits, Time:32/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun) when Time /= 0 -> %Fix for 4 bytes time
-    io:format("32 bit time ~p~n", [Type]),
     process_object(Type, <<POW:64/bits, Time:64/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun);
-process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Data/bytes>>, State, Fun) when Time /= 0 -> %Fix for Msg w/o Addr Version
+process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Data/bytes>>, State, Fun) when Time /= 0, Stream /= 0 -> %Fix for Msg w/o Addr Version
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
-process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
-    io:format("64 bit time ~p~n", [Type]),
+process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
     CTime = bm_types:timestamp(),
+    IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Time > CTime; Time =< CTime - 48 * 3600 ->
-            io:format("Error time ~p~n", [Time]),
+            error_logger:info_msg("Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
-        Stream == OStream ->
-            io:format("OK time ~p~n", [Time]),
+        Stream == OStream, IsPOW ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
             case bm_db:lookup(inventory, Hash) of
                 [_] ->
@@ -331,6 +309,7 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
                     Fun(Hash)
             end;
         true ->
+            error_logger:info_msg("Embded stream: ~p our: ~p POW: ~p~n", [Stream, OStream, IsPOW]),
             State
     end.
 pubkey_fun_generator(Payload, Packet, Time, State) ->
@@ -366,6 +345,18 @@ msg_fun_generator(EMessage, State) ->
             %bm_message_decryptor:decrypt_message(EMessage, Hash),
             State
     end. 
+broadcast_fun_generator(BVer, EMessage, State) ->
+    fun(Hash) ->
+            case BVer of
+                1 ->
+                    bm_dispatcher:broadcast_arrived(EMessage, Hash, broadcast);
+                2 ->
+                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash);
+                _ ->
+                    ok
+            end,
+            State
+    end.
 
 update_peer_time(#state{socket=Socket, stream=Stream}) ->
     {MSec, Sec, _} = now(),

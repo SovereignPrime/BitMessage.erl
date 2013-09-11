@@ -32,7 +32,10 @@
 %%%===================================================================
 
 all() ->
-    [test_process_object_new, test_process_object_msg, test_process_object_not_insert, test_analyse_packet_pubkey].
+    [test_process_object_new,
+     test_process_object_msg, 
+     test_process_object_not_insert, 
+     test_analyse_packet_pubkey].
 
 suite() ->
     [{timestamp, {seconds, 30}}].

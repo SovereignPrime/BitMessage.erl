@@ -14,6 +14,10 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+-export([
+    decrypt_message/2,
+    decrypt_broadcast/2
+    ]).
 
 -record(state, {type, key}).
 
@@ -29,13 +33,15 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Init) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Init], []).
+    gen_server:start_link(?MODULE, [Init], []).
 
 decrypt_message(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, message, Data}).
+    Pids = supervisor:which_children(bm_decryptor_sup),
+    send_all(Pids, {decrypt, message, Hash, Data}).
 
 decrypt_broadcast(Data, Hash) ->
-    gen_server:cast(?MODULE, {decrypt, broadcast, Data}).
+    Pids = supervisor:which_children(bm_decryptor_sup),
+    send_all(Pids, {decrypt, broadcast, Hash, Data}).
 
 encrypt_broadcast(Data) ->
     gen_server:cast(?MODULE, {encrypt, Data}).
@@ -93,13 +99,15 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
                               YLength:16/big-integer, Y:YLength/bytes, 
                               Data/bytes>> = Payload}, 
             #privkey{address=Address, pek=PrivKey}=State) ->
-    MLength = byte_size(Payload),
+    MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
-    R = <<X/bytes, Y/bytes>>,
+    R = <<4, X/bytes, Y/bytes>>,
     XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
+    error_logger:info_msg("XP: ~p~n", [XP]),
     <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
     case crypto:hmac(sha256, M, EMessage) of
         HMAC ->
+            error_logger:info_msg("Msg to me: ~p~n", [Type]),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
@@ -109,6 +117,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
                     bm_dispetcher:broadcast_arrived(DMessage, Hash, Address)
             end;
         _ ->
+            error_logger:info_msg("Msg not for me: ~p~n", [Type]),
             not_for_me
     end,
     {noreply, State};
@@ -172,3 +181,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+send_all([], _Msg) ->
+    ok;
+send_all([Pid|Rest], Msg) ->
+    {_, P, _, _} = Pid,
+    gen_server:cast(P, Msg),
+    send_all(Rest, Msg).
