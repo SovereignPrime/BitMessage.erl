@@ -11,9 +11,12 @@ create_message(Command, Payload) ->
     %error_logger:info_msg("Sending  message ~nCommand: ~p~nPayload: ~p~nLength: ~p~n, Check: ~p~n", [C, Payload, Length, Check]),
     <<?MAGIC, C:12/bytes, Length:32/big-integer, Check:4/bytes, Payload/bytes>>.
 
-create_inv(Hash) ->
+create_obj(Hash) ->
     [#inventory{type=Type, payload=Payload}] = bm_db:lookup(Hash),
     create_message(Type, Payload).
+
+create_inv(Hash) ->
+    create_message(<<"inv">>, bm_types:encode_list(Hash, fun(H) -> H end)).
 
 create_big_inv(Stream, Exclude) ->
     PubKeyAge = application:get_env(bitmessage, 'max_age_of_public_key', 2 * 24 * 3600),
@@ -52,4 +55,27 @@ create_addrs_for_stream(Stream) ->
         R ->
             error_logger:info_msg("Geting addrs for stream: ~p~n", [R])
     end.
+
+create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}= PrKey, Packet) ->
+    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
+    Payload = <<Time:64/big-integer,
+                AVer,
+                Stream,
+                1:32/big-integer,
+                Pub:128/bytes,
+                (bm_types:encode_varint(320)):2/bytes,
+                (bm_types:encode_varint(14000))/bytes>>,
+    Sig = crypto:sign(ecdsa, sha512, Payload, [PSK, secp256k1]),
+    NPayload = <<Payload/bytes, (bm_types:encode_varint(size(Sig)))/bytes, Sig/bytes>>,
+    POW = bm_pow:make_pow(NPayload),
+    PPayload = <<POW/bytes, NPayload/bytes>>,
+    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, PPayload),
+    bm_db:insert(inventory, #inventory{hash=Hash,
+                                       payload = PPayload,
+                                       type = <<"pubkey">>,
+                                       time=Time,
+                                       stream=Stream}),
+    create_inv(Hash).
+                                       
 

@@ -19,7 +19,9 @@
 
 %% Test cases
 -export([%test_process_object/0,
-    test_process_object/1,
+    test_process_object_new/1,
+    test_process_object_msg/1,
+    test_process_object_not_insert/1,
     test_analyse_packet_pubkey/1
     ]).
 
@@ -30,10 +32,10 @@
 %%%===================================================================
 
 all() ->
-    [test_process_object, test_analyse_packet_pubkey].
+    [test_process_object_new, test_process_object_msg, test_process_object_not_insert, test_analyse_packet_pubkey].
 
 suite() ->
-    [{timetrap, {seconds, 30}}].
+    [{timestamp, {seconds, 30}}].
 
 groups() ->
     [].
@@ -78,9 +80,9 @@ end_per_testcase(_TestCase, _Config) ->
 %    [].
 
 test_process_object_new(_Config) ->
-    OKCTime =  bm_types:timetrap() +bm_types:timetrap() +  crypto:rand_uniform(-300,0),
-    ErCTime = trunc(MSec * 1.0e6 + Sec + crypto:rand_uniform(0,300) + 30000),
-    ErCTime1 = trunc(MSec * 1.0e6 + Sec + crypto:rand_uniform(-300,300) - 3000 *48*36),
+    OKCTime =  bm_types:timestamp() +  crypto:rand_uniform(-300,0),
+    ErCTime =  bm_types:timestamp() + crypto:rand_uniform(0,300) + 30000,
+    ErCTime1 = bm_types:timestamp() + crypto:rand_uniform(-300,300) - 3000 *48*36,
     meck:expect(bm_db, lookup, fun(Tab, Key) -> [] end),
     meck:expect(bm_db, insert, fun(inventory, Key) -> ok end),
     ok = bm_reciever:process_object(<<"test">>, 
@@ -102,8 +104,9 @@ test_process_object_new(_Config) ->
     true=meck:called(bm_db, lookup,[inventory, '_']),
     true=meck:called(bm_db, insert,[inventory, '_']).
 
-test_process_object_has(_Config) ->
-    OKCTime =  bm_types:timetrap() +bm_types:timetrap() +  crypto:rand_uniform(-300,0),
+test_process_object_not_insert(_Config) ->
+    OKCTime =  bm_types:timestamp() +  crypto:rand_uniform(-300,0),
+    ErCTime =  bm_types:timestamp() + crypto:rand_uniform(0,300) + 30000,
     ok=meck:expect(bm_db, lookup, fun(Tab, Key) -> [Tab] end),
     ok=meck:expect(bm_db, insert, fun(Tab, Key) -> meck:exception(error, insertion_occured) end),
     #state{stream=1} = bm_reciever:process_object(<<"test">>, 
@@ -126,7 +129,21 @@ test_process_object_has(_Config) ->
                                       1,
                                       <<"testtesttest">>/bytes>>,
                                     #state{stream=2}, fun(Hash) -> ok end),
-    2 = meck:num_calls(bm_db, insert, [inventory, _]).
+    0 = meck:num_calls(bm_db, insert, [inventory, '_']).
+
+test_process_object_msg(_Config) ->
+    OKCTime =  bm_types:timestamp() +  crypto:rand_uniform(-300,0),
+    ErCTime =  bm_types:timestamp() + crypto:rand_uniform(0,300) + 30000,
+    ok=meck:expect(bm_db, lookup, fun(Tab, Key) -> [] end),
+    ok=meck:expect(bm_db, insert, fun(Tab, Key) -> ok end),
+    ok = bm_reciever:process_object(<<"msg">>, 
+                                    <<(crypto:rand_bytes(8)):64/bits,
+                                      0:32/big-integer, 
+                                      OKCTime:32/big-integer, 
+                                      1/integer, 
+                                      <<"testtesttest">>/bytes>>,
+                                    #state{stream=1}, fun(Hash) -> ok end),
+    true=meck:called(bm_db, lookup,[inventory, '_']).
 
 test_analyse_packet_pubkey(_Config) ->
     {MSec, Sec, _} = now(),

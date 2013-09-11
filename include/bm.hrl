@@ -3,7 +3,7 @@
 -record(network_address, {ip, port, time, stream, services=1}).
 -record(address, {version, stream, ripe}).
 -record(inventory, {hash, stream, payload, type, time}).
--record(pubkey, {hash, data, psk, pek, used, time}).
--record(privkey, {hash, enabled=true, label, address, psk, pek, time}).
+-record(pubkey, {hash, data, psk, pek, used=false, time}).
+-record(privkey, {hash, enabled=true, label, address, psk, pek, time, public}).
 -record(message, {hash, to, from, subject, enc, folder, read=false, text}).
 

@@ -146,23 +146,25 @@ code_change(_OldVsn, State, _Extra) ->
 %    bm_auth:encode_address(3, Stream, Ripe).
                           
 generate_keys(Label, Stream, EighteenthByteRipe) ->
-    {PotentialPubSign, PotentialPrivSign} = crypto:generate_key(ecdh, secp256k1),
-    {PotentialPubKey, PotentialPrivKey} = crypto:generate_key(ecdh, secp256k1),
-    case { bm_auth:generate_ripe(<<PotentialPubSign:32/bytes, PotentialPubKey:32/bytes>>), EighteenthByteRipe}  of
+    {<<4, PSK/bytes>> = PotentialPubSign, PotentialPrivSign} = crypto:generate_key(ecdh, secp256k1),
+    {<<4, PEK/bytes>> = PotentialPubKey, PotentialPrivKey} = crypto:generate_key(ecdh, secp256k1),
+    case { bm_auth:generate_ripe(<<PotentialPubSign/bytes, PotentialPubKey/bytes>>), EighteenthByteRipe}  of
         {<<0, 0, Ripe/bytes>>, true} ->
             #privkey{hash=Ripe, 
-                     address=bm_auth:encode_address(3, Stream, Ripe),
+                     address=bm_auth:encode_address(3, Stream, <<0, 0, Ripe/bytes>>),
                      psk=PotentialPrivSign,
                      pek=PotentialPrivKey,
+                     public = <<PSK:64/bytes, PEK:64/bytes>>,
                      label=Label,
                      time=bm_types:timestamp()};
         {<<0, Ripe/bytes>>, false} ->
-            #privkey{hash=Ripe, 
-            address=bm_auth:encode_address(3, Stream, Ripe),
-            psk=PotentialPrivSign,
-            pek=PotentialPrivKey,
-            label=Label,
-            time=bm_types:timestamp()};
+                     #privkey{hash=Ripe, 
+                     address=bm_auth:encode_address(3, Stream, <<0, 0, Ripe/bytes>>),
+                     psk=PotentialPrivSign,
+                     pek=PotentialPrivKey,
+                     public = <<PSK:64/bytes, PEK:64/bytes>>,
+                     label=Label,
+                     time=bm_types:timestamp()};
         _ ->
             generate_keys(Label, Stream, EighteenthByteRipe)
     end.
