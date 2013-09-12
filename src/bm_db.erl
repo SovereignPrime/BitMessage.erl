@@ -59,7 +59,7 @@ select(Type, MatchSpec, N)->
     gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
 
 match(Type, MatchSpec)->
-    gen_server:call(?MODULE, {select, Type, MatchSpec}).
+    gen_server:call(?MODULE, {match, Type, MatchSpec}).
 
 wait_db() ->
     mnesia:wait_for_tables([privkey, addr, inventory], 10000).
