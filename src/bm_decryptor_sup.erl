@@ -4,6 +4,7 @@
 
 %% API
 -export([start_link/0]).
+-export([add_decryptor/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -25,6 +26,10 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+add_decryptor(PrivKey) ->
+    %TODO
+    supervisor:start_child(?MODULE, ?CHILD({cryptor, supervisor:count_children(?MODULE) + 1}, 
+                                           bm_message_decryptor, worker, [PrivKey])).
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================

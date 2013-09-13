@@ -84,7 +84,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({generate, random, Label, Stream, EighteenthByteRipe}, State) ->
-    bm_db:insert(privkey, [generate_keys(Label, Stream, EighteenthByteRipe)]),
+    PK = generate_keys(Label, Stream, EighteenthByteRipe),
+    bm_db:insert(privkey, [PK]),
+    bm_decryptor_sup:add_decryptor(PK),
+    error_logger:info_msg("Address ~p ready~n",[PK]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
