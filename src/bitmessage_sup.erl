@@ -30,6 +30,7 @@ init([]) ->
                ?CHILD(bm_pow, worker),
                ?CHILD(bm_db, worker),
                ?CHILD(bm_decryptor_sup, supervisor),
+               ?CHILD(bm_encryptor_sup, supervisor),
                ?CHILD(bm_peer_sup, supervisor) 
                 ]} }.
 
