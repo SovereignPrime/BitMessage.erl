@@ -76,6 +76,6 @@ create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}= PrKey, Pac
                                        type = <<"pubkey">>,
                                        time=Time,
                                        stream=Stream}),
-    create_inv(Hash).
+    create_inv([ Hash ]).
                                        
 

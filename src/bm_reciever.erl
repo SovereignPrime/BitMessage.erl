@@ -11,7 +11,6 @@ start_link(Ref, Socket, Transport, Opts) ->
     {ok, Pid}.
 
 start_link() ->
-    %error_logger:info_msg("Starting reciever: ~p~n", [self()]),
     proc_lib:start_link(?MODULE, init, [self()]).
 
 init(Ref, Socket, Transport, _Opts) ->
@@ -107,7 +106,7 @@ analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
 analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
     error_logger:info_msg("Addr packet recieved.~p~n", [self()]),
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
-    error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
+    %error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
     bm_db:insert(addr, Addrs),
     %error_logger:info_msg("Addr packet recieved.~n Addrs: ~p Pid: ~p~n", [length(Addrs), self()]),
     State;
@@ -141,7 +140,7 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                              Packet/bytes>>=Payload,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0, AVer >= 2->
-    error_logger:info_msg("GetPubKey packet recieved.~p~n", [self()]),
+    %error_logger:info_msg("GetPubKey packet recieved.~p~n", [self()]),
     Fun = get_pubkey_fun_generator(Packet, State),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
@@ -150,7 +149,7 @@ analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                              Packet/bytes>>=Payload,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when  Time /= 0, AVer >= 2->
-    error_logger:info_msg("GetPubKey packet recieved.~p~n", [self()]),
+    %error_logger:info_msg("GetPubKey packet recieved.~p~n", [self()]),
     Fun = get_pubkey_fun_generator(Packet, State),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 
@@ -160,7 +159,7 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                           Packet/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0, AVer >= 2 ->
-    error_logger:info_msg("PubKey packet recieved.~p~n", [self()]),
+    %error_logger:info_msg("PubKey packet recieved.~p~n", [self()]),
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
 
@@ -170,7 +169,7 @@ analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
                                           Packet/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0, AVer >= 2 ->
-    error_logger:info_msg("PubKey packet recieved.~p~n", [self()]),
+    %error_logger:info_msg("PubKey packet recieved.~p~n", [self()]),
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
 analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes, 
@@ -179,7 +178,7 @@ analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes,
                                               EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0 ->
-    error_logger:info_msg("Msg packet recieved. ~p~n", [self()]),
+    %error_logger:info_msg("Msg packet recieved. ~p~n", [self()]),
     Fun = msg_fun_generator(EMessage, State),  
     process_object(<<"msg">>, Payload, State, Fun);
 analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes, 
@@ -188,7 +187,7 @@ analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes,
                                               EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State)
         when Time /= 0 ->
-    error_logger:info_msg("Msg packet recieved. ~p~n", [self()]),
+    %error_logger:info_msg("Msg packet recieved. ~p~n", [self()]),
     Fun = msg_fun_generator(EMessage, State),  
     process_object(<<"msg">>, Payload, State, Fun);
 analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
@@ -198,7 +197,7 @@ analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes,
                                                     EMessage/bytes>> = Payload,
                #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0, BVer =< 2 ->
-    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
+    %error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
     Fun =  broadcast_fun_generator(BVer, EMessage, State), 
     process_object(<<"broadcast">>, Payload, State, Fun);
 analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
@@ -208,13 +207,13 @@ analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes,
                                               EMessage/bytes>> = Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
         when Time /= 0, BVer =< 2 ->
-    error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
+    %error_logger:info_msg("Broadcast packet recieved.~n Pid: ~p~n", [self()]),
     Fun =  broadcast_fun_generator(BVer, EMessage, State), 
     process_object(<<"broadcast">>, Payload, State, Fun);
     
 analyse_packet(Command, _, Payload,
                  #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("Other packet recieved.~n Command: ~p~nPayload: ~p~n", [Command, Payload]),
+    error_logger:info_wraning("Other packet recieved.~n Command: ~p~nPayload: ~p~n", [Command, Payload]),
     State.
                
 %%%
@@ -264,7 +263,7 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
     end,
     case bm_message_creator:create_big_inv(Stream, []) of
         {ok, Invs, _} ->
-            io:format("Sending big inv~n"),
+            error_logger:info_msg("Sending big inv~n"),
             Transport:send(Socket, Invs); %TODO: aware objects excluding
         empty ->
             ok
@@ -292,25 +291,26 @@ process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Dat
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
 process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
     CTime = bm_types:timestamp(),
-    IsPOW = bm_pow:check_pow(Payload),
+    error_logger:info_msg("Obj ~p recieved~n", [Type]),
+    IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Time > CTime; Time =< CTime - 48 * 3600 ->
-            error_logger:info_msg("Embded time: ~p now: ~p~n", [Time, CTime]),
+            %error_logger:info_msg("Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
         Stream == OStream, IsPOW ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
             case bm_db:lookup(inventory, Hash) of
                 [_] ->
-                    io:format("Has ~p~n", [Hash]),
+                    %error_logger:info_msg("Has ~p~n", [Hash]),
                     State;
                 [] ->
-                    io:format("New ~p~n", [Hash]),
+                    %error_logger:info_msg("New ~p~n", [Hash]),
                     bm_db:insert(inventory, [ #inventory{hash=Hash, payload=Payload, type=Type, time=Time, stream=Stream} ]),
                     bm_sender:send_broadcast(bm_message_creator:create_inv([ Hash ])),
                     Fun(Hash)
             end;
         true ->
-            error_logger:info_msg("Embded stream: ~p our: ~p POW: ~p~n", [Stream, OStream, IsPOW]),
+            %error_logger:info_msg("Embded stream: ~p our: ~p POW: ~p~n", [Stream, OStream, IsPOW]),
             State
     end.
 pubkey_fun_generator(Payload, Packet, Time, State) ->
@@ -321,17 +321,16 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
             bm_db:insert(pubkey, [ #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK} ]),
             %TODO
-            %advertise_pubkey(),
+            %advertise_pubkey_to_encryptors(),
             State 
     end.
 get_pubkey_fun_generator(Packet, State) ->
     fun(_) ->
             {_, Ripe} = bm_types:decode_varint(Packet),
             case bm_db:lookup(privkey, Ripe) of
-                [#privkey{hash=Ripe, address=Addr, enabled=true}] ->
+                [#privkey{hash=Ripe, address=Addr, enabled=true}=PrKey] ->
                     #address{version=Version, stream=Stream, ripe=Ripe} = bm_auth:decode_address(Addr),
-                    %TODO
-                    % bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey, Packet)),
+                    bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey, Packet)),
 
                     State;
                 [] ->
@@ -374,13 +373,13 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
     bm_db:insert(addr, [#network_address{time=Time, ip=Ip, port=Port, stream=Stream}]).
 
 check_ackdata(Payload) ->
-    io:format("Test~n"),
+    error_logger:info_msg("Test~n"),
     case bm_db:match(sent, #message{ackdata=Payload, status=ackwait, _='_'}) of
         [] ->
-            io:format("No~n"),
+            error_logger:info_msg("No~n"),
             false;
         [Message] ->
-            io:format("Yes~n"),
+            error_logger:info_msg("Yes~n"),
             bm_db:insert(sent, Message#message{status=ok}),
             true
     end.
