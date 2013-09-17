@@ -22,11 +22,13 @@ encode_address(Version, Stream, Ripe) when Version >=2, size(Ripe) == 20 ->
 encode_address(_, _, _) ->
     <<"">>.
 
+decode_address(Data) when is_list(Data) ->
+    decode_address(list_to_binary(Data));
 decode_address(<<"BM-",Data/bytes>>) ->
     DData = bm_types:integer_to_bytes(base58:decode(binary_to_list(Data))),
     IData = binary:part(DData, 0, byte_size(DData) - 4),
     Check = binary:part(DData, byte_size(DData), -4 ),
-    io:format("~p~n~p~n", [IData, Check]),
+    %io:format("~p~n~p~n", [IData, Check]),
     Check = <<(dual_sha(IData)):32/bits>>,
     {Version, R} = bm_types:decode_varint(IData),
     {Stream, Ripe} = bm_types:decode_varint(R),

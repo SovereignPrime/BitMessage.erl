@@ -10,9 +10,8 @@
          message_sent/1,
          broadcast_arrived/3,
          broadcast_sent/1,
-
-         register_peer/1,
-         register_cryptor/1]).
+         send_message/1
+]).
 
 
 %% gen_server callbacks
@@ -51,11 +50,8 @@ broadcast_sent(Data) ->
 message_sent(Data) ->
     gen_server:cast(?MODULE, {sent, broadcast, Data}).
 
-register_peer(Data) ->
-    gen_server:call(?MODULE, {register, peer, Data}).
-
-register_cryptor(Data) ->
-    gen_server:cast(?MODULE, {register, cryptor, Data}).
+send_message(Message) ->
+    gen_server:cast(?MODULE, {send, message, Message}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -73,7 +69,6 @@ register_cryptor(Data) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    ets:new(cryptors, [named_table, public]),
     {ok, #state{reciever=self()}}.
 
 %%--------------------------------------------------------------------
@@ -146,7 +141,7 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
                     [<<"Subject: ">>, <<S/bytes>>, <<"Body: ">>, <<T/bytes>>] = re:split(Message, "[\n:]", [{return, binary}, trim]),
                     {S, T}
             end,
-            dets:insert(inbox, #message{hash=Hash, 
+            bm_db:insert(inbox, #message{hash=Hash, 
                                         enc=MsgEnc, 
                                         from=bm_auth:encode_address(AddrVer, Stream, RIPE), 
                                         to=Address, 
@@ -157,8 +152,9 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
         true ->
             {noreply, State}
     end;
-handle_cast({register, cryptor, Pid}, State) ->
-    ets:insert(cryptors, {Pid}),
+handle_cast({send, Type, Message}, State) ->
+    error_logger:info_msg("Sending message ~p~n", [Message]),
+    bm_encryptor_sup:add_encryptor(Message, Type),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

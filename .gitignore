@@ -6,4 +6,4 @@
 *.dump
 /data/*
 *.log
-
+.*

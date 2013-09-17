@@ -56,7 +56,7 @@ create_addrs_for_stream(Stream) ->
             error_logger:info_msg("Geting addrs for stream: ~p~n", [R])
     end.
 
-create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}= PrKey, Packet) ->
+create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
     Payload = <<Time:64/big-integer,
@@ -78,4 +78,10 @@ create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}= PrKey, Pac
                                        stream=Stream}),
     create_inv([ Hash ]).
                                        
-
+create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
+    UPayload = <<(bm_types:timestamp() + crypto:rand_uniform(-300, 300)):64/big-integer,
+                 (bm_types:encode_varint(Version))/bytes,
+                 (bm_types:encode_varint(Stream))/bytes,
+                 RIPE:20/bytes>>,
+    POW = bm_pow:make_pow(UPayload),
+    create_message(<<"getpubkey">>, <<POW:64/big-integer, UPayload/bytes>>).

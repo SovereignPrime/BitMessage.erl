@@ -4,7 +4,7 @@
 
 -include("../include/bm.hrl").
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -16,6 +16,7 @@
          handle_info/3,
          terminate/3,
          code_change/4]).
+-export([pubkey/1]).
 
 -record(state, {type, message, pek, psk, hash, payload}).
 
@@ -32,9 +33,12 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage) ->
-    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [DMessage], []).
+start_link(DMessage, Type) ->
+    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [DMessage, Type], []).
 
+pubkey(PubKey) ->
+    Pids = supervisor:which_children(bm_encryptor_sup),
+    send_all(Pids, {pubkey, PubKey}).
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -52,16 +56,94 @@ start_link(DMessage) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([#message{to=To}=Message, Type]) ->
+init([#message{to=To, from=From, subject=Subject, text=Text}=Message, message=Type]) ->
+    #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
     #address{ripe=Ripe} = bm_auth:decode_address(To),
+    error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
+    {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
+        [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
+            error_logger:info_msg("Keys ~p ~p ~n", [EK, SK]),
+            {EK, SK, Pub};
+        [] ->
+            error_logger:info_warning("No Keys ~n"),
+            {stop, {shudown, "Not my address"}}
+    end,
+
+    AckData = crypto:rand_bytes(32),
+    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
+    error_logger:info_msg("MSG ~p ~n", [MSG]),
+    UPayload = <<1, %MSG version
+                 3, %Address version
+                 1, %Stream number
+                 1:32/big-integer, %Bitfield
+                 PubKey:128/bytes,
+                 (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
+                 (bm_types:encode_varint(14000))/bytes, % ExtraBytes
+                 Ripe/bytes,
+                 (bm_types:encode_varint(byte_size(MSG)))/bytes,
+                 MSG/bytes,
+                 32, %AckData length
+                 AckData:32/bytes>>,
+    error_logger:info_msg("Message ~p ~n", [UPayload]),
+    Sig = crypto:sign(ecdsa, sha512, UPayload, [MyPSK, secp256k1]),
+    error_logger:info_msg("Sig ~p ~n", [Sig]),
+    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
+    error_logger:info_msg("Message ~p ~n", [Payload]),
+    <<Hash:32/bytes, _/bytes>>  = crypto:hash(sha512, Payload),
+
+
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
-            {ok, encrypt_message, #state{type=Type, message=Message, pek=PEK, psk=PSK}, 1};
+            error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
+            bm_db:insert(sent, [Message#message{hash=Hash,
+                                                ackdata=AckData,
+                                                status=encrypting,
+                                                folder=sent}]),
+            {ok, encrypt_message, #state{type=Type, message=Message, pek=PEK, psk=PSK, payload=Payload}, 1};
         [] ->
-            %TODO:
-            %bm_sender:send_broadcast(bm_message_creator:create_getpubkey(To),
-            {ok, wait_pybkey, #state{message=Message}}
+            error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
+            bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
+            bm_db:insert(sent, [Message#message{hash=Hash,
+                                                ackdata=AckData,
+                                                status=ackwait,
+                                                folder=sent}]),
+            {ok, wait_pybkey, #state{message=Message, payload=Payload}}
     end.
+%init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
+%    #address{ripe=MyRipe} = bm_auth:decode_address(From),
+%    #address{ripe=Ripe} = bm_auth:decode_address(To),
+%
+%    {MyPek, MyPSK} = case bm_db:lookup(privkey, MyRipe) of
+%        [#pubkey{pek=EK, psk=SK, hash=Ripe}] ->
+%            {EK, SK};
+%        [] ->
+%            {stop, {shudown, "Not my address"}}
+%    end,
+%
+%    AckData = crypto:rand_bytes(32),
+%    MSG = <<"Subject:", Subject, 13, "Body:", Text>>,
+%    UPayload = <<2, %Broadcast version
+%                3, %Address version
+%                1, %Stream number
+%                1:32/big-integer, %Bitfield
+%                MyPSK:64/bytes,
+%                MyPek:64/bytes,
+%                (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
+%                (bm_types:encode_varint(14000))/bytes, % ExtraBytes
+%                (bm_types:encode_varint(byte_size(MSG)))/bytes,
+%                 MSG/bytes,
+%                 32/big-integer, %AckData length
+%                 AckData:32/bytes>>,
+%    Sig = crypto:sign(ecda, sha512, UPayload, [MyPSK, secp256k1]),
+%    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
+%
+%    case bm_db:lookup(pubkey, Ripe) of
+%        [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
+%            {ok, encrypt_message, #state{type=Type, message=Message, pek=PEK, psk=PSK}, 1};
+%        [] ->
+%            bm_sender:send_broadcast(bm_message_creator:create_getpubkey(To)),
+%            {ok, wait_pybkey, #state{message=Message}}
+%    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -205,3 +287,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+send_all([], _Msg) ->
+    ok;
+send_all([Pid|Rest], Msg) ->
+    {_, P, _, _} = Pid,
+    gen_fsm:send_event(P, Msg),
+    send_all(Rest, Msg).
