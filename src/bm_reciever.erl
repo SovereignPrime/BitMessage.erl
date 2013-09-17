@@ -329,6 +329,7 @@ get_pubkey_fun_generator(Packet, State) ->
             {_, Ripe} = bm_types:decode_varint(Packet),
             case bm_db:lookup(privkey, Ripe) of
                 [#privkey{hash=Ripe, address=Addr, enabled=true}=PrKey] ->
+                    error_logger:info_msg("Sending my pubkey ~p~n", [Ripe]),
                     #address{version=Version, stream=Stream, ripe=Ripe} = bm_auth:decode_address(Addr),
                     bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
                     State;

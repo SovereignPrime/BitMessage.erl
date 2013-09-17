@@ -7,10 +7,9 @@
 %% API
 -export([start_link/0]).
 -export([message_arrived/3,
-         message_sent/1,
          broadcast_arrived/3,
-         broadcast_sent/1,
-         send_message/1
+         send_message/1,
+         send_broadcast/1
 ]).
 
 
@@ -44,15 +43,11 @@ message_arrived(Data, Hash, Address) ->
 broadcast_arrived(Data, Hash, Address) ->
     gen_server:cast(?MODULE, {arrived, broadcast,Hash, Address, Data}).
 
-broadcast_sent(Data) ->
-    gen_server:cast(?MODULE, {sent, message, Data}).
-
-message_sent(Data) ->
-    gen_server:cast(?MODULE, {sent, broadcast, Data}).
-
 send_message(Message) ->
-    gen_server:cast(?MODULE, {send, message, Message}).
+    gen_server:cast(?MODULE, {send, msg, Message}).
 
+send_broadcast(Message) ->
+    gen_server:cast(?MODULE, {send, broadcast, Message}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================

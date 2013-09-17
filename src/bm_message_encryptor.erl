@@ -10,6 +10,7 @@
 -export([init/1,
          wait_pubkey/2,
          encrypt_message/2,
+         make_inv/2,
          state_name/3,
          handle_event/3,
          handle_sync_event/4,
@@ -18,7 +19,7 @@
          code_change/4]).
 -export([pubkey/1]).
 
--record(state, {type, message, pek, psk, hash, payload}).
+-record(state, {type, message, pek, psk, hash}).
 
 %%%===================================================================
 %%% API
@@ -56,7 +57,26 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([#message{to=To, from=From, subject=Subject, text=Text}=Message, message=Type]) ->
+init([#message{to=To, from=From, subject=Subject, text=Text, status=Status}=Message, Type]) when Status == encrypt_message; Status == wait_pubkey ->
+    #address{ripe=Ripe} = bm_auth:decode_address(To),
+    case bm_db:lookup(pubkey, Ripe) of
+        [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
+            %error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
+            NMessage = Message#message{
+                        status=encrypt_message,
+                        folder=sent},
+            bm_db:insert(sent, [NMessage]),
+            {ok, encrypt_message, #state{type=Type, message=NMessage, pek=PEK, psk=PSK}, 1};
+        [] ->
+            %error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
+            bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
+            NMessage = Message#message{
+                    status=wait_pubkey,
+                    folder=sent},
+            bm_db:insert(sent, [NMessage]),
+            {ok, wait_pubkey, #state{type=Type, message=NMessage}}
+    end;
+init([#message{to=To, from=From, subject=Subject, text=Text, status=new} = Message, msg=Type]) ->
     #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
@@ -84,30 +104,34 @@ init([#message{to=To, from=From, subject=Subject, text=Text}=Message, message=Ty
                  MSG/bytes,
                  32, %AckData length
                  AckData:32/bytes>>,
-    error_logger:info_msg("Message ~p ~n", [UPayload]),
+    %error_logger:info_msg("Message ~p ~n", [UPayload]),
     Sig = crypto:sign(ecdsa, sha512, UPayload, [MyPSK, secp256k1]),
-    error_logger:info_msg("Sig ~p ~n", [Sig]),
+    %error_logger:info_msg("Sig ~p ~n", [Sig]),
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
-    error_logger:info_msg("Message ~p ~n", [Payload]),
+    %error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = crypto:hash(sha512, Payload),
 
 
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
-            error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
-            bm_db:insert(sent, [Message#message{hash=Hash,
-                                                ackdata=AckData,
-                                                status=encrypting,
-                                                folder=sent}]),
-            {ok, encrypt_message, #state{type=Type, message=Message, pek=PEK, psk=PSK, payload=Payload}, 1};
+            %error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
+                    NMessage = Message#message{hash=Hash,
+                                               ackdata=AckData,
+                                               payload=Payload,
+                                               status=encrypt_message,
+                                               folder=sent},
+                    bm_db:insert(sent, [NMessage]),
+            {ok, encrypt_message, #state{type=Type, message=NMessage, pek=PEK, psk=PSK}, 1};
         [] ->
-            error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
+            %error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
             bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
-            bm_db:insert(sent, [Message#message{hash=Hash,
+            NMessage = Message#message{hash=Hash,
                                                 ackdata=AckData,
-                                                status=ackwait,
-                                                folder=sent}]),
-            {ok, wait_pybkey, #state{message=Message, payload=Payload}}
+                                                payload=Payload,
+                                                status=wait_pubkey,
+                                                folder=sent},
+            bm_db:insert(sent, [NMessage]),
+            {ok, wait_pubkey, #state{type=Type, message=NMessage}}
     end.
 %init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
 %    #address{ripe=MyRipe} = bm_auth:decode_address(From),
@@ -165,8 +189,7 @@ wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe}=St
 wait_pubkey(_Event, State) ->
     {next_state, wait_pubkey, State}.
 
-encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, payload=Payload} = State) ->
-    %MLength = byte_size(Payload),
+encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->
     IV = crypto:rand_bytes(16),
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
     XP = crypto:compute_key(ecdh, PEK, Keyr, secp256k1),
@@ -174,15 +197,37 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, payload=
     EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
     HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
-    case Type of 
-        message ->
-            bm_dispetcher:message_sent(<<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>>);
-        broadcast ->
-            bm_dispetcher:broadcast_sent(<<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>>)
-    end,
-    {stop, ready, State};
+    {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 1};
 encrypt_message(_Event, State) ->
     {next_state, state_name, State}.
+
+make_inv(timeout, #state{type=Type, message= #message{payload = Payload, to=To, from=From}}) ->
+    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    TPayload = case Type of 
+        msg ->
+            #address{stream=Stream} = bm_auth:decode_address(To),
+            <<Time:64/big-integer, 
+              (bm_types:encode_varint(Stream))/bytes, % Reciever's stream
+              Payload/bytes>>;
+        broadcast ->
+            #address{stream=Stream} = bm_auth:decode_address(From),
+            <<Time:64/big-integer, 
+              (bm_types:encode_varint(2))/bytes,  % Broadcast version
+              (bm_types:encode_varint(Stream))/bytes, % Sender's stream
+              Payload/bytes>>
+        end,
+    POW = bm_pow:make_pow(TPayload),
+    PPayload = <<POW:64/big-integer, TPayload/bytes>>,
+    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, PPayload),
+    bm_db:insert(inventory, [#inventory{hash = Hash,
+                                        type = atom_to_binary(Type, latin1),
+                                        stream = Stream,
+                                        payload = PPayload,
+                                        time = Time
+                                       }]),
+    error_logger:info_msg("Msg sent to ~p~n", [To]),
+    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+    {stop, {shutdown, "Ready"}}.
 
 %%--------------------------------------------------------------------
 %% @private

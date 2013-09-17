@@ -5,5 +5,5 @@
 -record(inventory, {hash, stream, payload, type, time}).
 -record(pubkey, {hash, data, psk, pek, used=false, time}).
 -record(privkey, {hash, enabled=true, label, address, psk, pek, time, public}).
--record(message, {hash, to, from, subject, enc=2, folder, read=false, text, status, ackdata}).
+-record(message, {hash, to, from, subject, enc=2, folder, read=false, text, status=new, ackdata, payload}).
 
