@@ -119,7 +119,7 @@ analyse_packet(<<"inv",_/bytes>>, Length, Packet,
     State;
 analyse_packet(<<"getdata", _/bytes>>, Length, Packet,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    %error_logger:info_msg("GetData packet recieved.~p~n", [self()]),
+    error_logger:info_msg("GetData packet recieved.~p~n", [self()]),
     {ObjToSend, _} = bm_types:decode_list(Packet, fun(<<I:32/bytes, R/bytes>>) -> {I, R} end),
     MsgToSeend = lists:map(fun bm_message_creator:create_obj/1, ObjToSend),
     %error_logger:info_msg("GetData packet recieved.~n ObjToSen: ~p~n", [length(ObjToSend)]),
@@ -263,7 +263,7 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
     end,
     case bm_message_creator:create_big_inv(Stream, []) of
         {ok, Invs, _} ->
-            %error_logger:info_msg("Sending big inv~n"),
+            error_logger:info_msg("Sending big inv ~p~n", [Invs]),
             Transport:send(Socket, Invs); %TODO: aware objects excluding
         empty ->
             ok
@@ -326,7 +326,16 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->
     end.
 get_pubkey_fun_generator(Packet, State) ->
     fun(_) ->
+            error_logger:info_msg("Sending my pubkey ~n"),
             {_, Ripe} = bm_types:decode_varint(Packet),
+            RIPE = case Ripe of
+                <<0, 0, R/bytes>> ->
+                    R;
+                <<0, R/bytes>> ->
+                    R;
+                R ->
+                    R
+            end,
             case bm_db:lookup(privkey, Ripe) of
                 [#privkey{hash=Ripe, address=Addr, enabled=true}=PrKey] ->
                     error_logger:info_msg("Sending my pubkey ~p~n", [Ripe]),
