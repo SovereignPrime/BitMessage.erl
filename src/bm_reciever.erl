@@ -295,8 +295,14 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
     error_logger:info_msg("Obj ~p recieved~n", [Type]),
     IsPOW = true, %bm_pow:check_pow(Payload),
     if 
-        Time > CTime; Time =< CTime - 48 * 3600 ->
-            %error_logger:info_msg("Embded time: ~p now: ~p~n", [Time, CTime]),
+        Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
+            error_logger:info_msg("Pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
+            State;
+        Type /= <<"pubkey">>, Time =< CTime - 48 * 3600 -> 
+            error_logger:info_msg("Not pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
+            State;
+        Time > CTime + 10800 ->
+            error_logger:info_msg("Too new. Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
         Stream == OStream, IsPOW ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
