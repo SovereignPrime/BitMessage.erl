@@ -263,9 +263,10 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
     end,
     case bm_message_creator:create_big_inv(Stream, []) of
         {ok, Invs, _} ->
-            error_logger:info_msg("Sending big inv ~p~n", [Invs]),
+            %error_logger:info_msg("Sending big inv ~p~n", [Invs]),
             Transport:send(Socket, Invs); %TODO: aware objects excluding
         empty ->
+            %error_logger:info_msg("Invs empty~n"),
             ok
     end,
     State;
@@ -291,7 +292,7 @@ process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Dat
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
 process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
     CTime = bm_types:timestamp(),
-    %error_logger:info_msg("Obj ~p recieved~n", [Type]),
+    error_logger:info_msg("Obj ~p recieved~n", [Type]),
     IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Time > CTime; Time =< CTime - 48 * 3600 ->

@@ -27,9 +27,9 @@ create_big_inv(Stream, Exclude) ->
     Old = Time - InvAge,
     error_logger:info_msg("Creating big inv: ~p~n", [Old]),
     case bm_db:select(inventory, [
-                {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>}, [{'>', '$2', PubOld}], ['$1']},
-                {#inventory{stream=Stream, hash='$1', time = '$2', type='$3'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
-                ], 3000) of
+                {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>, _='_'}, [{'>', '$2', PubOld}], ['$1']},
+                {#inventory{stream=Stream, hash='$1', time = '$2', type='$3', _='_'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
+                ], 5000) of
         '$end_of_table' ->
             empty;
         {Hashes, Cont} ->
