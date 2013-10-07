@@ -24,11 +24,12 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
+    error_logger:logfile({open, "out.log"}),
     {ok, { {one_for_one, 5, 10}, [
+               ?CHILD(bm_db, worker),
                ?CHILD(bm_dispatcher, worker),
                ?CHILD(bm_address_generator, worker),
                ?CHILD(bm_pow, worker),
-               ?CHILD(bm_db, worker),
                ?CHILD(bm_decryptor_sup, supervisor),
                ?CHILD(bm_encryptor_sup, supervisor),
                ?CHILD(bm_peer_sup, supervisor) 

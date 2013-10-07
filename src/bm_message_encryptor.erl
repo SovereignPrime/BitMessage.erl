@@ -4,7 +4,7 @@
 
 -include("../include/bm.hrl").
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -34,8 +34,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage, Type) ->
-    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [DMessage, Type], []).
+start_link(DMessage) ->
+    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [DMessage], []).
 
 pubkey(PubKey) ->
     Pids = supervisor:which_children(bm_encryptor_sup),
@@ -57,7 +57,7 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([#message{to=To, from=From, subject=Subject, text=Text, status=Status}=Message, Type]) when Status == encrypt_message; Status == wait_pubkey ->
+init([#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message]) when Status == encrypt_message; Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
@@ -76,16 +76,16 @@ init([#message{to=To, from=From, subject=Subject, text=Text, status=Status}=Mess
             bm_db:insert(sent, [NMessage]),
             {ok, wait_pubkey, #state{type=Type, message=NMessage}}
     end;
-init([#message{to=To, from=From, subject=Subject, text=Text, status=new} = Message, msg=Type]) ->
+init([#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message]) ->
     #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
     {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
-            error_logger:info_msg("Keys ~p ~p ~n", [EK, SK]),
+            error_logger:info_msg(" My keys ~p ~p ~n", [EK, SK]),
             {EK, SK, Pub};
         [] ->
-            error_logger:info_warning("No Keys ~n"),
+            error_logger:info_warning("No addres ~n"),
             {stop, {shudown, "Not my address"}}
     end,
 
@@ -114,16 +114,16 @@ init([#message{to=To, from=From, subject=Subject, text=Text, status=new} = Messa
 
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
-            %error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
+            error_logger:info_msg("Pubkey found Sending msg: ~p~n", [Payload]),
                     NMessage = Message#message{hash=Hash,
                                                ackdata=AckData,
                                                payload=Payload,
                                                status=encrypt_message,
                                                folder=sent},
                     bm_db:insert(sent, [NMessage]),
-            {ok, encrypt_message, #state{type=Type, message=NMessage, pek=PEK, psk=PSK}, 1};
+            {ok, encrypt_message, #state{type=msg, message=NMessage, pek=PEK, psk=PSK}, 1};
         [] ->
-            %error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
+            error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
             bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
             NMessage = Message#message{hash=Hash,
                                                 ackdata=AckData,
@@ -131,7 +131,7 @@ init([#message{to=To, from=From, subject=Subject, text=Text, status=new} = Messa
                                                 status=wait_pubkey,
                                                 folder=sent},
             bm_db:insert(sent, [NMessage]),
-            {ok, wait_pubkey, #state{type=Type, message=NMessage}}
+            {ok, wait_pubkey, #state{type=msg, message=NMessage}}
     end.
 %init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
 %    #address{ripe=MyRipe} = bm_auth:decode_address(From),
@@ -199,7 +199,7 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message 
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
     {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 1};
 encrypt_message(_Event, State) ->
-    {next_state, state_name, State}.
+    {next_state, encrypt_message, State}.
 
 make_inv(timeout, #state{type=Type, message= #message{payload = Payload, to=To, from=From}}) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
@@ -227,7 +227,9 @@ make_inv(timeout, #state{type=Type, message= #message{payload = Payload, to=To, 
                                        }]),
     error_logger:info_msg("Msg sent to ~p~n", [To]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    {stop, {shutdown, "Ready"}}.
+    {stop, {shutdown, "Ready"}};
+make_inv(_Event, State) ->
+    {next_state, make_inv, State}.
 
 %%--------------------------------------------------------------------
 %% @private

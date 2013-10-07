@@ -28,7 +28,7 @@ start_link() ->
 
 add_decryptor(PrivKey) ->
     %TODO
-    supervisor:start_child(?MODULE, ?CHILD({cryptor, supervisor:count_children(?MODULE) + 1}, 
+    supervisor:start_child(?MODULE, ?CHILD({cryptor, make_ref()}, 
                                            bm_message_decryptor, worker, [PrivKey])).
 %%%===================================================================
 %%% Supervisor callbacks

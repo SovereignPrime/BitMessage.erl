@@ -103,7 +103,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     R = <<4, X/bytes, Y/bytes>>,
     XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
-    %error_logger:info_msg("XP: ~p~n", [XP]),
+    error_logger:info_msg("XP: ~p~n", [XP]),
     <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
     case crypto:hmac(sha256, M, EMessage) of
         HMAC ->

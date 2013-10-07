@@ -64,7 +64,16 @@ send_broadcast(Message) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{reciever=self()}}.
+    bm_db:wait_db(),
+    case bm_db:select(sent,[{[#message{status='new', _='_'}, 
+                         #message{status='wait_pubkey', _='_'}, 
+                         #message{status='encrypt_message', _='_'}], [], ['$_']}], 10000) of
+        '$end_of_table' ->
+            {ok, #state{reciever=self()}};
+        Messages ->
+            lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
+            {ok, #state{reciever=self()}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

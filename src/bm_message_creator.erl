@@ -19,7 +19,7 @@ create_inv(Hash) ->
     create_message(<<"inv">>, bm_types:encode_list(Hash, fun(H) -> H end)).
 
 create_big_inv(Stream, Exclude) ->
-    PubKeyAge = application:get_env(bitmessage, 'max_age_of_public_key', 2 * 24 * 3600),
+    PubKeyAge = application:get_env(bitmessage, 'max_age_of_public_key', 30 * 24 * 3600),
     InvAge = application:get_env(bitmessage, 'max_age_of_inventory', 2 * 24 * 3600),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
