@@ -62,7 +62,7 @@ match(Type, MatchSpec)->
     gen_server:call(?MODULE, {match, Type, MatchSpec}).
 
 wait_db() ->
-    OK = mnesia:wait_for_tables([privkey, addr, inventory], 10000),
+    OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], 10000),
     if 
         OK == ok ->
             ok;
