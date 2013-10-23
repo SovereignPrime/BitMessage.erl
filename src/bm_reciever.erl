@@ -60,8 +60,25 @@ check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>
             State
     end;
 check_packet(<<?MAGIC, _Command:12/bytes, Length:32, _Check:4/bytes, Packet/bytes>>=IPacket, #state{socket=Socket, transport=Transport}=State) when size(Packet) < Length ->
-    {ok, Data} = Transport:recv(Socket, Length - size(Packet), 5000),
-    check_packet(<<IPacket/bytes, Data/bytes>>, State);
+     case Transport:recv(Socket, Length - size(Packet), 5000) of
+        {ok, Data} ->
+                check_packet(<<IPacket/bytes, Data/bytes>>, State);
+        {error, timeout} ->
+                check_packet(IPacket, State);
+        {error, close} ->
+            error_logger:info_msg("Socket closed: ~p~n", [self()]),
+            bm_sender:unregister_peer(Socket),
+            {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
+            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
+            loop(State#state{socket=NSocket, transport=NTransport});
+        {error, R} ->
+            error_logger:info_msg("Socket error: ~p~p~n", [R, self()]),
+            bm_sender:unregister_peer(Socket),
+            Transport:close(Socket),
+            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
+            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
+            loop(State#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
+    end;
 check_packet(_, State) ->
     State.
 
@@ -119,7 +136,7 @@ analyse_packet(<<"inv",_/bytes>>, Length, Packet,
     State;
 analyse_packet(<<"getdata", _/bytes>>, Length, Packet,
                  #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    error_logger:info_msg("GetData packet recieved.~p~n", [self()]),
+    %error_logger:info_msg("GetData packet recieved.~p~n", [self()]),
     {ObjToSend, _} = bm_types:decode_list(Packet, fun(<<I:32/bytes, R/bytes>>) -> {I, R} end),
     MsgToSeend = lists:map(fun bm_message_creator:create_obj/1, ObjToSend),
     %error_logger:info_msg("GetData packet recieved.~n ObjToSen: ~p~n", [length(ObjToSend)]),
@@ -257,21 +274,13 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
     error_logger:info_msg("Connection to ~p fully established ~p~n", [Ip, self()]),
     % Check after here
     bm_sender:send_broadcast(bm_message_creator:create_message(<<"addr">>, bm_types:encode_network(#network_address{ip=Ip, port=Port, time=Time, stream=Stream}))),
-    case bm_message_creator:create_addrs_for_stream(Stream) of
-        {ok, Addrs, _} ->
-            Transport:send(Socket, Addrs);
-        empty ->
-            ok
-    end,
-    case bm_message_creator:create_big_inv(Stream, []) of
-        {ok, Invs, _} ->
-            %error_logger:info_msg("Sending big inv ~p~n", [Invs]),
-            Transport:send(Socket, Invs); %TODO: aware objects excluding
-        empty ->
-            %error_logger:info_msg("Invs empty~n"),
-            ok
-    end,
-    State;
+    Addrs = bm_message_creator:create_addrs_for_stream(Stream),
+    lists:foreach(fun(Addr) ->
+            Transport:send(Socket, Addr)
+            end, Addrs),
+    Invs = bm_message_creator:create_big_inv(Stream, []),
+    lists:foreach(fun(I) -> Transport:send(Socket, I) end, Invs), %TODO: aware objects excluding
+State;
 conection_fully_established(State) ->
     State.
 
@@ -294,7 +303,7 @@ process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Dat
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
 process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
     CTime = bm_types:timestamp(),
-    error_logger:info_msg("Obj ~p recieved~n", [Type]),
+    %error_logger:info_msg("Obj ~p recieved~n", [Type]),
     IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
@@ -335,7 +344,7 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->
     end.
 get_pubkey_fun_generator(Packet, State) ->
     fun(_) ->
-            error_logger:info_msg("Sending my pubkey ~n"),
+            %error_logger:info_msg("Sending my pubkey ~n"),
             {_, Ripe} = bm_types:decode_varint(Packet),
             RIPE = case Ripe of
                 <<0, 0, R/bytes>> when size(R) == 18 ->
@@ -345,7 +354,7 @@ get_pubkey_fun_generator(Packet, State) ->
                 R ->
                     R
             end,
-            error_logger:info_msg("Ripe: ~p~n", [RIPE]),
+            error_logger:info_msg("Looking my pubkey for Ripe: ~p~n", [RIPE]),
             case bm_db:lookup(privkey, Ripe) of
                 [#privkey{hash=Ripe, address=Addr, enabled=true}=PrKey] ->
                     error_logger:info_msg("Sending my pubkey ~p~n", [Ripe]),

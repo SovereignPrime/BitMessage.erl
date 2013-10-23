@@ -140,14 +140,15 @@ handle_call({foldr, Fun,  Type, Acc}, _From, State) ->
             end),
     {reply, Data, State};
 handle_call({select, Type, MatchSpec, N}, _From, State) ->
-     case mnesia:transaction(fun() ->
-                    mnesia:select(Type, MatchSpec, N, read)
-            end) of
-        {atomic, Data} ->
-            {reply, Data, State};
-        {atomic, '$end_of_table'} ->
-            {reply, '$end_of_table', State}
-    end;
+     {atomic, Data} = mnesia:transaction(fun() ->
+                case mnesia:select(Type, MatchSpec, N, read) of
+                    {D, C} ->
+                        iterate(C, [ D ]);
+                    '$end_of_table' ->
+                        []
+                end
+            end),
+        {reply, Data, State};
 handle_call({match, Type, MatchSpec}, _From, State) ->
      {atomic, Data} = mnesia:transaction(fun() ->
                     mnesia:match_object(Type, MatchSpec, read)
@@ -229,3 +230,10 @@ insert_obj(_, []) ->
 insert_obj(Type, [I|R]) ->
     mnesia:write(Type, I, write),
     insert_obj(Type, R).
+iterate(C, Acc) ->
+    case mnesia:select(C) of
+        {D, Cont} ->
+            Acc ++ [D] ++ iterate(Cont, Acc);
+        '$end_of_table' ->
+            Acc
+    end.

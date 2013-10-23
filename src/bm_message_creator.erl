@@ -25,36 +25,27 @@ create_big_inv(Stream, Exclude) ->
     Time = trunc(MSec * 1.0e6 + Sec),
     PubOld = Time - PubKeyAge,
     Old = Time - InvAge,
-    error_logger:info_msg("Creating big inv: ~p~n", [Old]),
-    case bm_db:select(inventory, [
+    InvList =  bm_db:select(inventory, [
                 {#inventory{stream=Stream, hash='$1', time='$2', type = <<"pubkey">>, _='_'}, [{'>', '$2', PubOld}], ['$1']},
                 {#inventory{stream=Stream, hash='$1', time = '$2', type='$3', _='_'}, [{'>', '$2', Old}, {'/=', '$3', <<"pubkey">>}], ['$1']}
-                ], 5000) of
-        '$end_of_table' ->
-            empty;
-        {Hashes, Cont} ->
-            Payload = bm_types:encode_list(Hashes, fun(O) -> <<O/bytes>> end),
-            {ok, create_message(<<"inv">>, Payload), Cont}
-    end.
+                ], 5000),
+    lists:map(fun(Inv) ->
+                create_message(<<"inv">>, bm_types:encode_list(Inv, fun(O) -> <<O/bytes>> end))
+        end, InvList).
 
 create_addrs_for_stream(Stream) ->
     {ok, NodeAge} = application:get_env(bitmessage, 'max_age_of_node'),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     Old = Time - NodeAge,
-    case bm_db:select(addr, [
+    Hashes = bm_db:select(addr, [
                 {#network_address{stream=Stream, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
                 {#network_address{stream=Stream * 2, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
                 {#network_address{stream=Stream * 2 + 1, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']}
-                ], 1000) of
-        '$end_of_table' ->
-            empty;
-        {Hashes, Cont} ->
-            Payload = bm_types:encode_list(Hashes, fun bm_types:encode_network/1),
-            {ok, create_message(<<"addr">>, Payload), Cont};
-        R ->
-            error_logger:info_msg("Geting addrs for stream: ~p~n", [R])
-    end.
+                ], 1000),
+            lists:map(fun(Hash) ->  
+                    create_message(<<"addr">>, bm_types:encode_list(Hash, fun bm_types:encode_network/1))
+        end, Hashes).
 
 create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
@@ -79,9 +70,17 @@ create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}) ->
     create_inv([ Hash ]).
                                        
 create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
+    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     UPayload = <<(bm_types:timestamp() + crypto:rand_uniform(-300, 300)):64/big-integer,
                  (bm_types:encode_varint(Version))/bytes,
                  (bm_types:encode_varint(Stream))/bytes,
                  RIPE:20/bytes>>,
     POW = bm_pow:make_pow(UPayload),
-    create_message(<<"getpubkey">>, <<POW:64/big-integer, UPayload/bytes>>).
+    Payload = <<POW:64/big-integer, UPayload/bytes>>,
+    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
+    bm_db:insert(inventory, #inventory{hash=Hash,
+                                       payload = Payload,
+                                       type = <<"getpubkey">>,
+                                       time=Time,
+                                       stream=Stream}),
+    create_inv([ Hash ]).
