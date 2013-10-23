@@ -65,12 +65,13 @@ send_broadcast(Message) ->
 %%--------------------------------------------------------------------
 init([]) ->
     bm_db:wait_db(),
-    case bm_db:select(sent,[{[#message{status='new', _='_'}, 
-                         #message{status='wait_pubkey', _='_'}, 
-                         #message{status='encrypt_message', _='_'}], [], ['$_']}], 10000) of
+    case bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
+                         {#message{status='wait_pubkey', _='_'}, [], ['$_']},
+                         {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000) of
         '$end_of_table' ->
             {ok, #state{reciever=self()}};
-        Messages ->
+        {Messages, _C} ->
+            io:format("~p~n", [Messages]),
             lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
             {ok, #state{reciever=self()}}
     end.
@@ -158,7 +159,7 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
     end;
 handle_cast({send, Type, Message}, State) ->
     error_logger:info_msg("Sending message ~p~n", [Message]),
-    bm_encryptor_sup:add_encryptor(Message, Type),
+    bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

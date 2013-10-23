@@ -57,6 +57,7 @@ init([]) ->
     NAddr = case bm_db:first(addr) of
         '$end_of_table' ->
             {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
+            %Ips= [{192,168,24,2}],
             error_logger:info_msg("Recieved addrs ~p~n", [Ips]),
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),

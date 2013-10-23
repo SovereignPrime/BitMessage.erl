@@ -35,7 +35,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(DMessage) ->
-    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [DMessage], []).
+    gen_fsm:start_link({local, ?MODULE}, ?MODULE, DMessage, []).
 
 pubkey(PubKey) ->
     Pids = supervisor:which_children(bm_encryptor_sup),
@@ -57,7 +57,7 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message]) when Status == encrypt_message; Status == wait_pubkey ->
+init(#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
@@ -76,10 +76,10 @@ init([#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=St
             bm_db:insert(sent, [NMessage]),
             {ok, wait_pubkey, #state{type=Type, message=NMessage}}
     end;
-init([#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message]) ->
+init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message) ->
     #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
+    %error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
     {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
             error_logger:info_msg(" My keys ~p ~p ~n", [EK, SK]),
@@ -194,7 +194,9 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message 
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
     XP = crypto:compute_key(ecdh, PEK, Keyr, secp256k1),
     <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
+    PLength = 16 - (size(Payload) rem 16),
+    Pad = << <<4>> || _<-lists:seq(1, PLength)>>,
+    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, <<Payload/bytes, Pad/bytes>>),
     HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
     {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 1};

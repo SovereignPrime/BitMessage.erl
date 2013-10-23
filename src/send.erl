@@ -3,8 +3,9 @@
 
 -include_lib("include/bm.hrl").
 
-main([]) ->
-    bm_dispatcher:send_message(#message{to = <<"BM-2DBJhZLvR1rwhD6rgzseiedKASEoNVCA6Q">>, 
-                                         from =  <<"BM-Gtv1nnCjSyVHnHD8VN4stfJ8sDRFqgMj">>,
+main(To) ->
+    [#privkey{address=Addr}] = bm_db:lookup(privkey, bm_db:first(privkey)),
+    bm_dispatcher:send_message(#message{to = To, 
+                                         from =  Addr,
                                          subject = <<"Test my letter">>,
                                          text = <<"Hellow world!">>}).

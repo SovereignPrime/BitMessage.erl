@@ -12,15 +12,15 @@ create_message(Command, Payload) ->
     <<?MAGIC, C:12/bytes, Length:32/big-integer, Check:4/bytes, Payload/bytes>>.
 
 create_obj(Hash) ->
-    [#inventory{type=Type, payload=Payload}] = bm_db:lookup(Hash),
+    [#inventory{type=Type, payload=Payload}] = bm_db:lookup(inventory, Hash),
     create_message(Type, Payload).
 
 create_inv(Hash) ->
     create_message(<<"inv">>, bm_types:encode_list(Hash, fun(H) -> H end)).
 
 create_big_inv(Stream, Exclude) ->
-    PubKeyAge = application:get_env(bitmessage, 'max_age_of_public_key', 30 * 24 * 3600),
-    InvAge = application:get_env(bitmessage, 'max_age_of_inventory', 2 * 24 * 3600),
+    {ok, PubKeyAge} = application:get_env(bitmessage, 'max_age_of_public_key'),
+    {ok, InvAge} = application:get_env(bitmessage, 'max_age_of_inventory'),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     PubOld = Time - PubKeyAge,
@@ -38,7 +38,7 @@ create_big_inv(Stream, Exclude) ->
     end.
 
 create_addrs_for_stream(Stream) ->
-    NodeAge = application:get_env(bitmessage, 'max_age_of_node', 2 * 24 * 3600),
+    {ok, NodeAge} = application:get_env(bitmessage, 'max_age_of_node'),
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     Old = Time - NodeAge,

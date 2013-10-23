@@ -10,6 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    application:start(sasl),
     application:start(crypto),
     application:start(ranch),
     application:start(mnesia),
@@ -19,4 +20,5 @@ stop(_State) ->
     application:stop(crypto),
     application:stop(ranch),
     application:stop(mnesia),
+    application:stop(sasl),
     ok.
