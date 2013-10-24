@@ -12,8 +12,12 @@ create_message(Command, Payload) ->
     <<?MAGIC, C:12/bytes, Length:32/big-integer, Check:4/bytes, Payload/bytes>>.
 
 create_obj(Hash) ->
-    [#inventory{type=Type, payload=Payload}] = bm_db:lookup(inventory, Hash),
-    create_message(Type, Payload).
+    case bm_db:lookup(inventory, Hash) of
+            [#inventory{type=Type, payload=Payload}] -> 
+            create_message(Type, Payload);
+        [] ->
+            error_logger:warning_msg("Can't find inv ~p~n", [Hash])
+    end.
 
 create_inv(Hash) ->
     create_message(<<"inv">>, bm_types:encode_list(Hash, fun(H) -> H end)).
@@ -62,11 +66,11 @@ create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}) ->
     POW = bm_pow:make_pow(NPayload),
     PPayload = <<POW/bytes, NPayload/bytes>>,
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, PPayload),
-    bm_db:insert(inventory, #inventory{hash=Hash,
+    bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = PPayload,
                                        type = <<"pubkey">>,
                                        time=Time,
-                                       stream=Stream}),
+                                        stream=Stream}]),
     create_inv([ Hash ]).
                                        
 create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
@@ -79,9 +83,9 @@ create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
     Payload = <<POW:64/big-integer, UPayload/bytes>>,
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
     error_logger:info_msg("Get pub key hash: ~p~n", [Hash]),
-    bm_db:insert(inventory, #inventory{hash=Hash,
+    bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = Payload,
                                        type = <<"getpubkey">>,
                                        time=Time,
-                                       stream=Stream}),
+                                        stream=Stream}]),
     create_inv([ Hash ]).

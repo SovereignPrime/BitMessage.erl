@@ -61,7 +61,6 @@ pubkey(PubKey) ->
 init(#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     {ok, wait_pubkey, #state{type=msg, message=Message}, 2};
 init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message) ->
-    io:format("Adding enc"),
     #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     %error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
