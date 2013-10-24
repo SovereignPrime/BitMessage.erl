@@ -21,6 +21,7 @@
     foldr/3, 
     select/3,
     match/2,
+    delete/2,
     wait_db/0
     ]).
 
@@ -61,8 +62,11 @@ select(Type, MatchSpec, N)->
 match(Type, MatchSpec)->
     gen_server:call(?MODULE, {match, Type, MatchSpec}).
 
+delete(Type, Rec)->
+    gen_server:cast(?MODULE, {del, Type, Rec}).
 wait_db() ->
-    OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], 10000),
+    Timeout = application:get_env(bitmessage, table_wait, 65536),
+    OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], Timeout),
     if 
         OK == ok ->
             ok;
@@ -178,6 +182,12 @@ handle_call(_Request, _From, State) ->
 handle_cast({insert, Type, Data}, State) ->
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
+        end),
+    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
+    {noreply, State};
+handle_cast({del, Type, Data}, State) ->
+     R = mnesia:transaction(fun() ->
+                mnesia:delete({ Type, Data })
         end),
     error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {noreply, State};

@@ -77,7 +77,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
-    meck:unload(bm_db),
+    %meck:unload(bm_db),
     %meck:unload(bm_pow),
     ok.
 

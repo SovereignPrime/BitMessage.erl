@@ -280,7 +280,7 @@ conection_fully_established(#state{socket=Socket, transport=Transport, stream=St
             end, Addrs),
     Invs = bm_message_creator:create_big_inv(Stream, []),
     lists:foreach(fun(I) -> Transport:send(Socket, I) end, Invs), %TODO: aware objects excluding
-State;
+    State;
 conection_fully_established(State) ->
     State.
 
@@ -307,13 +307,13 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
     IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
-            error_logger:info_msg("Pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
+            %error_logger:info_msg("Pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
         Type /= <<"pubkey">>, Time =< CTime - 48 * 3600 -> 
-            error_logger:info_msg("Not pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
+            %error_logger:info_msg("Not pubkey. Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
         Time > CTime + 10800 ->
-            error_logger:info_msg("Too new. Embded time: ~p now: ~p~n", [Time, CTime]),
+            %error_logger:info_msg("Too new. Embded time: ~p now: ~p~n", [Time, CTime]),
             State;
         Stream == OStream, IsPOW ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
@@ -407,7 +407,7 @@ check_ackdata(Payload) ->
             %error_logger:info_msg("No~n"),
             false;
         [Message] ->
-            %error_logger:info_msg("Yes~n"),
+            error_logger:info_msg("Ackdata recieved~n"),
             bm_db:insert(sent, Message#message{status=ok}),
             true
     end.
