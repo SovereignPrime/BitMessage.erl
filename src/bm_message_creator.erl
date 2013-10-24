@@ -49,7 +49,7 @@ create_addrs_for_stream(Stream) ->
 
 create_pubkey(#privkey{hash=Hash, psk=PSK, public=Pub, address=Addr}) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
-    #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
+    #address{stream=Stream, version=AVer, ripe=Hash} = bm_auth:decode_address(Addr),
     Payload = <<Time:64/big-integer,
                 AVer,
                 Stream,
@@ -78,6 +78,7 @@ create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
     POW = bm_pow:make_pow(UPayload),
     Payload = <<POW:64/big-integer, UPayload/bytes>>,
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
+    error_logger:info_msg("Get pub key hash: ~p~n", [Hash]),
     bm_db:insert(inventory, #inventory{hash=Hash,
                                        payload = Payload,
                                        type = <<"getpubkey">>,

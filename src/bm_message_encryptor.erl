@@ -164,7 +164,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
             NMessage = Message#message{status=wait_pubkey,
                                        folder=sent},
             bm_db:insert(sent, [NMessage]),
-            Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600),
+            Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
             {next_state, wait_pubkey, #state{type=msg, message=NMessage}, Timeout}
     end;
 wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, message=Message}=State) ->

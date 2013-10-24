@@ -105,6 +105,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets, transport=Transport}=State) ->
+    error_logger:info_msg("Broadcasting to ~p ~p~n", [Message, Sockets]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
@@ -162,5 +163,12 @@ code_change(_OldVsn, State, _Extra) ->
 broadcast(_, [], _) ->
     ok;
 broadcast(Message, [Socket| Rest], Transport) ->
-    Transport:send(Socket, Message),
+    inet:setopts(Socket, [{send_timeout, 100}]),
+    case Transport:send(Socket, Message) of
+        ok ->
+            ok;
+        {error, _} ->
+            error_logger:warning_msg("Deleting socket: ~p~n", [Socket]),
+            ets:delete(peers, Socket)
+    end,
     broadcast(Message, Rest, Transport).
