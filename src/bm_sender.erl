@@ -73,7 +73,7 @@ unregister_peer(Socket) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, _} = ets:new(peers, [named_table, public]),
+    ets:new(peers, [named_table, public]),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -105,12 +105,11 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets, transport=Transport}=State) ->
-    error_logger:info_msg("Broadcasting to ~p~n", [Sockets]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
-   {ok, Ip, Port} = inet:peername(Socket),
-    Time = bm_types:timetrap(),
+   {ok, { Ip, Port }} = inet:peername(Socket),
+    Time = bm_types:timestamp(),
     ets:insert(peers, {Socket, Ip, Port, Time}), 
     {noreply, State#state{sockets=[Socket|Sockets]}};
 handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->
