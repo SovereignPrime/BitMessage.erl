@@ -354,10 +354,10 @@ get_pubkey_fun_generator(Packet, State) ->
                 R ->
                     R
             end,
-            error_logger:info_msg("Looking my pubkey for Ripe: ~p~n", [RIPE]),
-            case bm_db:lookup(privkey, Ripe) of
-                [#privkey{hash=Ripe, address=Addr, enabled=true}=PrKey] ->
-                    error_logger:info_msg("Sending my pubkey ~p~n", [Ripe]),
+            error_logger:info_msg("Looking my pubkey for Ripe: ~p~n", [Ripe]),
+            case bm_db:lookup(privkey, RIPE) of
+                [#privkey{hash=RIPE, address=Addr, enabled=true}=PrKey] ->
+                    error_logger:info_msg("Sending my pubkey ~p~n", [RIPE]),
                     #address{version=Version, stream=Stream, ripe=Ripe} = bm_auth:decode_address(Addr),
                     bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
                     State;

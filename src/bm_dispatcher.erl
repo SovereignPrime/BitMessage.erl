@@ -21,7 +21,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, {addr, reciever}).
+-record(state, {reciever}).
 
 %%%===================================================================
 %%% API
@@ -48,6 +48,10 @@ send_message(Message) ->
 
 send_broadcast(Message) ->
     gen_server:cast(?MODULE, {send, broadcast, Message}).
+
+register_resiever(Reciever) ->
+    gen_server:cast(?MODULE, {register, Reciever}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -65,11 +69,15 @@ send_broadcast(Message) ->
 %%--------------------------------------------------------------------
 init([]) ->
     bm_db:wait_db(),
-    [ Messages ] = bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
-                                 {#message{status='wait_pubkey', _='_'}, [], ['$_']},
-                                 {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000),
-    io:format("~p~n", [Messages]),
-    lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
+    case bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
+                            {#message{status='wait_pubkey', _='_'}, [], ['$_']},
+                            {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000) of
+        [ Messages ] ->
+            io:format("~p~n", [Messages]),
+            lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages);
+        [] ->
+            ok
+    end,
     {ok, #state{reciever=self()}}.
 
 %%--------------------------------------------------------------------
@@ -157,6 +165,8 @@ handle_cast({send, Type, Message}, State) ->
     error_logger:info_msg("Sending message ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
     {noreply, State};
+handle_cast({register, RecieverPid}, State) ->
+    {noreply, State#state{reciever=RecieverPid}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

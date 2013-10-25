@@ -61,7 +61,14 @@ pubkey(PubKey) ->
 init(#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     {ok, wait_pubkey, #state{type=msg, message=Message}, 2};
 init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message) ->
-    #address{ripe = <<0,0,MyRipe/bytes>>} = bm_auth:decode_address(From),
+    MyRipe = case bm_auth:decode_address(From) of
+    #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
+            R;
+    #address{ripe = <<0,R/bytes>>} when size(R) == 19 -> 
+            R;
+    #address{ripe = <<R/bytes>>} when size(R) == 20 -> 
+            R
+    end,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     %error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
     {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
