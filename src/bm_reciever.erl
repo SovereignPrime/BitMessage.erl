@@ -40,11 +40,11 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->
             loop(IState#state{socket=NSocket, transport=NTransport});
         {error, R} ->
             error_logger:info_msg("Socket error: ~p~p~n", [R, self()]),
-            bm_sender:unregister_peer(Socket),
-            Transport:close(Socket),
-            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(IState#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
+            %bm_sender:unregister_peer(Socket),
+            %Transport:close(Socket),
+            %{NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
+            %send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
+            loop(IState) %#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
     end.
 
 check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>>, State) when size(Packet) > Length ->
@@ -97,7 +97,7 @@ analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
         when Length > 83, Version > 1 ->
     {_UA, StremsL} = bm_types:decode_varstr(Data),
     {Streams, _} = bm_types:decode_list(StremsL, fun bm_types:decode_varint/1),
-    %error_logger:info_msg("Version packet recieved. ~p~n", [self()]),
+    error_logger:info_msg("Version packet recieved. ~p~n", [self()]),
     #state{transport=Transport, socket=Socket} = State,
     % Sending verack
     Transport:send(Socket, bm_message_creator:create_message(<<"verack">>, <<>>)),
@@ -115,7 +115,7 @@ analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
     OState;
 
 analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
-    %error_logger:info_msg("Verack recieved.~p~n", [self()]),
+    error_logger:info_msg("Verack recieved.~p~n", [self()]),
     OState = State#state{init_stage=State#state.init_stage#init_stage{verack_recv=true}},
     conection_fully_established(OState),
     OState;

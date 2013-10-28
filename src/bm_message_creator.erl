@@ -51,7 +51,7 @@ create_addrs_for_stream(Stream) ->
                     create_message(<<"addr">>, bm_types:encode_list(Hash, fun bm_types:encode_network/1))
         end, Hashes).
 
-create_pubkey(#privkey{hash=RIPE, psk=PSK, public=Pub, address=Addr}) ->
+create_pubkey(#privkey{hash=RIPE, psk=PSK, pek=PEK, public=Pub, address=Addr}) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
     Payload = <<Time:64/big-integer,
@@ -59,9 +59,9 @@ create_pubkey(#privkey{hash=RIPE, psk=PSK, public=Pub, address=Addr}) ->
                 Stream,
                 1:32/big-integer,
                 Pub:128/bytes,
-                (bm_types:encode_varint(320)):2/bytes,
+                (bm_types:encode_varint(320))/bytes,
                 (bm_types:encode_varint(14000))/bytes>>,
-    Sig = crypto:sign(ecdsa, sha512, Payload, [PSK, secp256k1]),
+    Sig = crypto:sign(ecdsa, sha, Payload, [PSK, secp256k1]),
     NPayload = <<Payload/bytes, (bm_types:encode_varint(size(Sig)))/bytes, Sig/bytes>>,
     POW = bm_pow:make_pow(NPayload),
     PPayload = <<POW:64/big-integer, NPayload/bytes>>,
@@ -71,7 +71,7 @@ create_pubkey(#privkey{hash=RIPE, psk=PSK, public=Pub, address=Addr}) ->
                                        type = <<"pubkey">>,
                                        time=Time,
                                         stream=Stream}]),
-    file:write_file(io_lib:format("../../data/~s.dat", [Hash]), PPayload),
+    %file:write_file(io_lib:format("../../data/~s.dat", [Hash]), PPayload),
     create_inv([ Hash ]).
                                        
 create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->

@@ -114,9 +114,9 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
                 message ->
-                    bm_dispetcher:message_arrived(DMessage, Hash, Address);
+                    bm_dispatcher:message_arrived(DMessage, Hash);
                 broadcast ->
-                    bm_dispetcher:broadcast_arrived(DMessage, Hash, Address)
+                    bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
             end;
         _ ->
             %error_logger:info_msg("Msg not for me: ~p ~p~n", [Type, self()]),
@@ -134,9 +134,9 @@ handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) 
     HMAC = crypto:hmac(sha256, M, EMessage),
     case Type of 
         message ->
-            bm_dispetcher:message_sent(EMessage);
+            bm_dispatcher:message_sent(EMessage);
         broadcast ->
-            bm_dispetcher:broadcast_sent(EMessage)
+            bm_dispatcher:broadcast_sent(EMessage)
     end,
     {noreply, State};
 handle_cast(_Msg, State) ->

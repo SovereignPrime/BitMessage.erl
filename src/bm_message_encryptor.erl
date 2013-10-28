@@ -96,7 +96,7 @@ init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg
                  32, %AckData length
                  AckData:32/bytes>>,
     %error_logger:info_msg("Message ~p ~n", [UPayload]),
-    Sig = crypto:sign(ecdsa, sha512, UPayload, [MyPSK, secp256k1]),
+    Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
     %error_logger:info_msg("Sig ~p ~n", [Sig]),
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
     error_logger:info_msg("Message ~p ~n", [Payload]),
@@ -225,6 +225,7 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
                                        }]),
     error_logger:info_msg("Msg sent to ~p~n", [To]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+    file:write_file("../../data/msg.raw", PPayload),
     {stop, {shutdown, "Ready"}, State};
 make_inv(_Event, State) ->
     {next_state, make_inv, State}.

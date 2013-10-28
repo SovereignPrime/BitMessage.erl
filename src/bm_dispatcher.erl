@@ -8,6 +8,7 @@
 -export([start_link/0]).
 -export([message_arrived/3,
          broadcast_arrived/3,
+         register_resiever/1,
          send_message/1,
          send_broadcast/1
 ]).
@@ -108,12 +109,14 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{reciever=RecieverPid}=State) ->
+handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}=State) ->
+    #address{ripe=RIPE}=bm_auth:decode_address(Address),
+    error_logger:info_msg("arrived ~p  i~n", [Type]),
     {MsgVer, R} = bm_types:decode_varint(Data),
     {AddrVer, R1} = bm_types:decode_varint(R),
     {Stream, R2} = bm_types:decode_varint(R1),
     <<BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
-    R4 = case MsgVer of
+    R4 = case AddrVer of
         2 -> 
             R3;
         MV when MV >= 3 ->
@@ -124,11 +127,12 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
     case Type of
         message ->
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
+            RecOK = %true;
             if 
                 DRIPE == RIPE ->
-                    RecOK = true;
+                    true;
                 true ->
-                    RecOK = false
+                    false
             end;
         broadcast ->
             <<MsgEnc/big-integer, R5/bytes>> = R4,
@@ -137,25 +141,28 @@ handle_cast({arrived, Type, Hash, #address{ripe=RIPE}=Address,  Data},  #state{r
 
     {Message, R6} = bm_types:decode_varbin(R5),
     {AckData, R7} = bm_types:decode_varbin(R6),
+    error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", [MsgVer, Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
     <<DataSig:SLen/bytes, _/bytes>> = Data,
-    SigOK = crypto:veryfy(ecdsa, sha512, DataSig, Sig, [<<4, PSK>>, secp256k1]),
+    PuSK = <<4, PSK/bytes>>,
+    SigOK = crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]),
     if 
         RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
             {Subject, Text} = case MsgEnc of
                 1 ->
                     {"", Message};
                 2 ->
-                    [<<"Subject: ">>, <<S/bytes>>, <<"Body: ">>, <<T/bytes>>] = re:split(Message, "[\n:]", [{return, binary}, trim]),
+                    [<<"Subject">>, <<S/bytes>>, <<"Body">>, <<T/bytes>>] = re:split(Message, "[\n:]", [{return, binary}, trim]),
                     {S, T}
             end,
-            bm_db:insert(inbox, #message{hash=Hash, 
+            From = bm_auth:encode_address(AddrVer, Stream, bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>)),
+            bm_db:insert(incoming, [#message{hash=Hash, 
                                         enc=MsgEnc, 
-                                        from=bm_auth:encode_address(AddrVer, Stream, RIPE), 
+                                        from=From, 
                                         to=Address, 
                                         subject=Subject,
-                                        text=Text}),
+                                             text=Text}]),
             RecieverPid ! {msg, Hash},
             {noreply, State};
         true ->
@@ -167,7 +174,8 @@ handle_cast({send, Type, Message}, State) ->
     {noreply, State};
 handle_cast({register, RecieverPid}, State) ->
     {noreply, State#state{reciever=RecieverPid}};
-handle_cast(_Msg, State) ->
+handle_cast(Msg, State) ->
+    error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
