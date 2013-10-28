@@ -90,3 +90,15 @@ create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
                                        time=Time,
                                         stream=Stream}]),
     create_inv([ Hash ]).
+
+create_ack(#message{ackdata=Payload, from=Addr}) ->
+    <<_:64/bytes, Time:64/big-integer, _/bytes>> = Payload,
+    #address{stream=Stream} = bm_auth:decode_address(Addr),
+    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
+    error_logger:info_msg("Ack sending: ~p~n", [Hash]),
+    bm_db:insert(inventory, [#inventory{hash=Hash,
+                                       payload = Payload,
+                                       type = <<"msg">>,
+                                       time=Time,
+                                        stream=Stream}]),
+    create_inv([ Hash ]).

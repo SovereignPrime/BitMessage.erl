@@ -114,7 +114,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
                 message ->
-                    bm_dispatcher:message_arrived(DMessage, Hash);
+                    bm_dispatcher:message_arrived(DMessage, Hash, Address);
                 broadcast ->
                     bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
             end;

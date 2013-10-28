@@ -58,9 +58,9 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init(#message{to=To, from=From, subject=Subject, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
+init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     {ok, wait_pubkey, #state{type=msg, message=Message}, 2};
-init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg} = Message) ->
+init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new, type=msg} = Message) ->
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
             R;
@@ -94,7 +94,7 @@ init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg
                  (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
                  (bm_types:encode_varint(14000))/bytes, % ExtraBytes
                  Ripe/bytes,
-                 2, % Message encoding
+                 Enc, % Message encoding
                  (bm_types:encode_varint(byte_size(MSG)))/bytes,
                  MSG/bytes,
                  (bm_types:encode_varint(byte_size(Ack)))/bytes,
@@ -229,7 +229,6 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
                                        }]),
     error_logger:info_msg("Msg sent to ~p~n", [To]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    file:write_file("../../data/msg.raw", PPayload),
     {stop, {shutdown, "Ready"}, State};
 make_inv(_Event, State) ->
     {next_state, make_inv, State}.

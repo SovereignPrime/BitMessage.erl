@@ -127,7 +127,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
     case Type of
         message ->
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
-            RecOK = %true;
+            RecOK = 
             if 
                 DRIPE == RIPE ->
                     true;
@@ -153,16 +153,19 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                 1 ->
                     {"", Message};
                 2 ->
-                    [<<"Subject">>, <<S/bytes>>, <<"Body">>, <<T/bytes>>] = re:split(Message, "[\n:]", [{return, binary}, trim]),
+                    {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
                     {S, T}
             end,
             From = bm_auth:encode_address(AddrVer, Stream, bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>)),
-            bm_db:insert(incoming, [#message{hash=Hash, 
-                                        enc=MsgEnc, 
-                                        from=From, 
-                                        to=Address, 
-                                        subject=Subject,
-                                             text=Text}]),
+            MR = #message{hash=Hash, 
+                          enc=MsgEnc, 
+                          from=From, 
+                          to=Address, 
+                          subject=Subject,
+                          ackdata=AckData,
+                          text=Text},
+            bm_db:insert(incoming, [MR]),
+            bm_sender:send_broadcast(bm_message_creator:create_ack(MR)),
             RecieverPid ! {msg, Hash},
             {noreply, State};
         true ->
