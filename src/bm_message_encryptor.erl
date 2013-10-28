@@ -79,8 +79,11 @@ init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg
             error_logger:info_warning("No addres ~n"),
             {stop, {shudown, "Not my address"}}
     end,
-
-    AckData = crypto:rand_bytes(32),
+    
+    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    AckData = <<Time:64/big-integer, 1, (crypto:rand_bytes(32))/bytes>>,
+    POW = bm_pow:make_pow(AckData),
+    Ack = <<POW:64/big-integer, AckData/bytes>>,
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<1, %MSG version
@@ -91,10 +94,11 @@ init(#message{to=To, from=From, subject=Subject, text=Text, status=new, type=msg
                  (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
                  (bm_types:encode_varint(14000))/bytes, % ExtraBytes
                  Ripe/bytes,
+                 2, % Message encoding
                  (bm_types:encode_varint(byte_size(MSG)))/bytes,
                  MSG/bytes,
-                 32, %AckData length
-                 AckData:32/bytes>>,
+                 (bm_types:encode_varint(byte_size(Ack)))/bytes,
+                 Ack/bytes>>,
     %error_logger:info_msg("Message ~p ~n", [UPayload]),
     Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
     %error_logger:info_msg("Sig ~p ~n", [Sig]),
