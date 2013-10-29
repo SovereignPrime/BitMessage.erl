@@ -11,5 +11,8 @@ send_message(From, To, Subject, Text, Encoding) ->
 send_broadcast(From, Subject, Text, Encoding) ->
     bm_dispatcher:send_broadcast(#message{from=From, subject=Subject, text=Text, enc=Encoding}).
 
+generate_address(Ref) ->
+    bm_address_generator:generate_random_address(make_ref(), 1, false, Ref).
+
 register_resiever(Module) ->
     bm_dispatcher:register_resiever(Module).

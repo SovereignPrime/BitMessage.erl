@@ -16,7 +16,7 @@
          terminate/2,
          code_change/3]).
 -export([
-    generate_random_address/3
+    generate_random_address/4
     ]).
 
 %%%===================================================================
@@ -33,8 +33,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-generate_random_address(Label, Stream, EighteenthByteRipe) ->
-    gen_server:cast(?MODULE, {generate, random, Label, Stream, EighteenthByteRipe}).
+generate_random_address(Label, Stream, EighteenthByteRipe, Pid) ->
+    gen_server:cast(?MODULE, {generate, random, Label, Stream, EighteenthByteRipe, Pid}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -83,11 +83,12 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({generate, random, Label, Stream, EighteenthByteRipe}, State) ->
+handle_cast({generate, random, Label, Stream, EighteenthByteRipe, Pid}, State) ->
     PK = generate_keys(Label, Stream, EighteenthByteRipe),
     bm_db:insert(privkey, [PK]),
     bm_decryptor_sup:add_decryptor(PK),
     error_logger:info_msg("Address ~p ready~n",[PK]),
+    Pid ! {address, PK#privkey.address},
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
