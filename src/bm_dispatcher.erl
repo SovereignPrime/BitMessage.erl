@@ -8,7 +8,7 @@
 -export([start_link/0]).
 -export([message_arrived/3,
          broadcast_arrived/3,
-         register_resiever/1,
+         register_receiver/1,
          send_message/1,
          send_broadcast/1
 ]).
@@ -50,7 +50,7 @@ send_message(Message) ->
 send_broadcast(Message) ->
     gen_server:cast(?MODULE, {send, broadcast, Message}).
 
-register_resiever(Reciever) ->
+register_receiver(Reciever) ->
     gen_server:cast(?MODULE, {register, Reciever}).
 
 %%%===================================================================

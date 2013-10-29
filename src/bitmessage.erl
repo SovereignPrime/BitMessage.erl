@@ -14,5 +14,9 @@ send_broadcast(From, Subject, Text, Encoding) ->
 generate_address(Ref) ->
     bm_address_generator:generate_random_address(make_ref(), 1, false, Ref).
 
-register_resiever(Module) ->
-    bm_dispatcher:register_resiever(Module).
+register_receiver(Module) ->
+    bm_dispatcher:register_receiver(Module).
+
+get_message(Hash) ->
+    {ok, [Msg]} = bm_db:lookup(incoming, Hash),
+    {ok, Msg}.
