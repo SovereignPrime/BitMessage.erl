@@ -18,5 +18,5 @@ register_receiver(Module) ->
     bm_dispatcher:register_receiver(Module).
 
 get_message(Hash) ->
-    {ok, [Msg]} = bm_db:lookup(incoming, Hash),
+    [Msg] = bm_db:lookup(incoming, Hash),
     {ok, Msg}.
