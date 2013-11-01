@@ -181,7 +181,8 @@ wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, me
             NMessage = Message#message{status=encrypt_message},
             bm_db:insert(sent, [NMessage]),
     {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 1};
-wait_pubkey(_Event, State) ->
+wait_pubkey(Event, State) ->
+    error_logger:warning_msg("Wrong event: ~p in ~p~n", [Event, ?MODULE]),
     {next_state, wait_pubkey, State}.
 
 encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->
