@@ -106,7 +106,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = crypto:hash(sha512, Payload),
     NMessage = Message#message{payload=Payload, hash=Hash, ackdata=AckData, status=wait_pubkey},
-    {ok, wait_pubkey, #state{type=msg, message=NMessage}, 2}.
+    {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 2}.
 
 
 %init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
