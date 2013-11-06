@@ -38,13 +38,15 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->
             {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
             send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
             loop(IState#state{socket=NSocket, transport=NTransport});
+        {error, timeout} ->
+            loop(IState);
         {error, R} ->
             error_logger:info_msg("Socket error: ~p~p~n", [R, self()]),
-            %bm_sender:unregister_peer(Socket),
-            %Transport:close(Socket),
-            %{NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            %send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(IState) %#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
+            bm_sender:unregister_peer(Socket),
+            Transport:close(Socket),
+            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
+            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
+            loop(#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
     end.
 
 check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>>, State) when size(Packet) > Length ->
