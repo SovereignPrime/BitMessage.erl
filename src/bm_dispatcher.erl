@@ -156,7 +156,10 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
                     {S, T}
             end,
-            From = bm_auth:encode_address(AddrVer, Stream, bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>)),
+            FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
+            From = bm_auth:encode_address(AddrVer, Stream, FRipe),
+            PubKey = #pubkey{hash=FRipe, psk=PSK, pek=PEK, time=bm_types:timestamp()},
+            bm_db:insert(pubkey, [PubKey]),
             MR = #message{hash=Hash, 
                           enc=MsgEnc, 
                           from=From, 
