@@ -59,7 +59,8 @@ pubkey(PubKey) ->
 %% @end
 %%--------------------------------------------------------------------
 init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
-    {ok, wait_pubkey, #state{type=msg, message=Message}, 2};
+    #address{ripe=Ripe} = bm_auth:decode_address(To),
+    {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 2};
 init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new, type=msg} = Message) ->
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
@@ -167,7 +168,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                     NMessage = Message#message{status=encrypt_message,
                                                folder=sent},
                     bm_db:insert(sent, [NMessage]),
-            {next_state, encrypt_message, #state{type=msg, message=NMessage, pek=PEK, psk=PSK}, 1};
+            {next_state, encrypt_message, State#state{type=msg, message=NMessage, pek=PEK, psk=PSK}, 1};
         [] ->
             error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
             bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
@@ -175,17 +176,18 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                                        folder=sent},
             bm_db:insert(sent, [NMessage]),
             Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
-            {next_state, wait_pubkey, #state{type=msg, message=NMessage}, Timeout}
+            {next_state, wait_pubkey, State#state{type=msg, message=NMessage}, Timeout}
     end;
 wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, message=Message}=State) ->
             NMessage = Message#message{status=encrypt_message},
             bm_db:insert(sent, [NMessage]),
-    {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 1};
+    {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 0};
 wait_pubkey(Event, State) ->
-    error_logger:warning_msg("Wrong event: ~p in ~p~n", [Event, ?MODULE]),
+    error_logger:warning_msg("Wrong event: ~p status ~p in ~p~n", [Event, ?MODULE, State]),
     {next_state, wait_pubkey, State}.
 
 encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->
+    error_logger:info_msg("Encrypting ~n"),
     IV = crypto:rand_bytes(16),
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
     XP = crypto:compute_key(ecdh, <<4, PEK/bytes>>, Keyr, secp256k1),
@@ -195,9 +197,10 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message 
     EMessage = crypto:block_encrypt(aes_cbc256, E, IV, <<Payload/bytes, Pad/bytes>>),
     HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
-    {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 1};
-encrypt_message(_Event, State) ->
-    {next_state, encrypt_message, State}.
+    {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 0};
+encrypt_message(Event, State) ->
+    error_logger:warning_msg("Encrypting wrong event ~p~n", [Event]),
+    {next_state, encrypt_message, State, 0}.
 
 make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payload, to=To, from=From}=Message}=State) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
