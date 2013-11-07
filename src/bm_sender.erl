@@ -168,6 +168,8 @@ broadcast(Message, [Socket| Rest], Transport) ->
     case Transport:send(Socket, Message) of
         ok ->
             ok;
+        {error, timeout} ->
+            ok;
         {error, _} ->
             error_logger:warning_msg("Deleting socket: ~p~n", [Socket]),
             ets:delete(peers, Socket)
