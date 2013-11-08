@@ -152,7 +152,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
             {Subject, Text} = case MsgEnc of
                 1 ->
                     {"", Message};
-                2 ->
+                _ ->
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
                     {S, T}
             end,
