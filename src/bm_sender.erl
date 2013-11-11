@@ -105,14 +105,13 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets1, transport=Transport}=State) ->
-    Sockets = ets:select(peers, [{{'$1', '_', '_', '_'}, [], ['$1']}]),
+    Sockets = ets:select(peers, [{{'$1', '_'}, [], ['$1']}]),
     error_logger:info_msg("Broadcasting to ~p ~p~n", [Message, Sockets]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
-   {ok, { Ip, Port }} = inet:peername(Socket),
     Time = bm_types:timestamp(),
-    ets:insert(peers, {Socket, Ip, Port, Time}), 
+    ets:insert(peers, {Socket, Time}), 
     {noreply, State#state{sockets=[Socket|Sockets]}};
 handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->
     ets:delete(peers, Socket), 
