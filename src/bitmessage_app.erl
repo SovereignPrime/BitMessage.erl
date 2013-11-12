@@ -14,7 +14,6 @@ start(_StartType, _StartArgs) ->
     application:start(crypto),
     application:start(ranch),
     application:start(mnesia),
-    error_logger:tty(false),
     Port = application:get_env(bitmessage, listen_port, 8444),
     {ok, _} = ranch:start_listener(bitmessage_listener, 100, ranch_tcp, [{port, Port}], bm_listener, []),
     bitmessage_sup:start_link().
