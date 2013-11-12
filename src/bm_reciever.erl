@@ -277,7 +277,7 @@ process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Dat
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
 process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
     CTime = bm_types:timestamp(),
-    IsPOW = true, %bm_pow:check_pow(Payload),
+    IsPOW = bm_pow:check_pow(Payload),
     if 
         Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
             State;

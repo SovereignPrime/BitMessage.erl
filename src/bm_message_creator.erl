@@ -70,7 +70,6 @@ create_pubkey(#privkey{hash=RIPE, psk=PSK, pek=PEK, public=Pub, address=Addr}) -
                                        type = <<"pubkey">>,
                                        time=Time,
                                         stream=Stream}]),
-    %file:write_file(io_lib:format("../../data/~s.dat", [Hash]), PPayload),
     create_inv([ Hash ]).
                                        
 create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
