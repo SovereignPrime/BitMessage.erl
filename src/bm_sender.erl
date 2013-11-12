@@ -36,7 +36,7 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends formed Message to all peers
+%% Sends formed Message to all addrs
 %%
 %% @spec send_broadcast(Message) -> ok
 %% @end
@@ -73,7 +73,7 @@ unregister_peer(Socket) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    ets:new(peers, [named_table, public]),
+    ets:new(addrs, [named_table, public]),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -105,15 +105,15 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets1, transport=Transport}=State) ->
-    Sockets = ets:select(peers, [{{'$1', '_'}, [], ['$1']}]),
+    Sockets = ets:select(addrs, [{{'$1', '_'}, [], ['$1']}]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
     Time = bm_types:timestamp(),
-    ets:insert(peers, {Socket, Time}), 
+    ets:insert(addrs, {Socket, Time}), 
     {noreply, State#state{sockets=[Socket|Sockets]}};
 handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->
-    ets:delete(peers, Socket), 
+    ets:delete(addrs, Socket), 
     {noreply, State#state{sockets=lists:delete( Socket, Sockets )}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -170,6 +170,6 @@ broadcast(Message, [Socket| Rest], Transport) ->
             ok;
         {error, _} ->
             error_logger:warning_msg("Deleting socket: ~p~n", [Socket]),
-            ets:delete(peers, Socket)
+            ets:delete(addrs, Socket)
     end,
     broadcast(Message, Rest, Transport).
