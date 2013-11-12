@@ -163,10 +163,8 @@ connect_peer(Addr) ->
         [ #network_address{ip=Ip, port=Port, stream=_Stream, time=_Time} ]  ->
             case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of
                 {ok, Socket} ->
-                    error_logger:info_msg("Connected to peer: ~p on port ~p~n", [Ip, Port]),
                     {ok, Socket, bm_db:next(addr, Addr)};
                 {error, _Reason} ->
-                    %error_logger:info_msg("Error connectiong to peer: ~p on port ~p with reason ~p~n", [Ip, Port, Reason]),
                     connect_peer(bm_db:next(addr, Addr))
             end
     end.

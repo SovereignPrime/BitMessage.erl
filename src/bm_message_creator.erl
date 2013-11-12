@@ -8,7 +8,6 @@ create_message(Command, Payload) ->
     CL = byte_size(Command),
     C = <<Command/bytes, 0:(12 - CL)/unit:8>>,
     <<Check:4/bytes, _/bytes>> = crypto:hash(sha512, Payload),
-    %error_logger:info_msg("Sending  message ~nCommand: ~p~nPayload: ~p~nLength: ~p~n, Check: ~p~n", [C, Payload, Length, Check]),
     <<?MAGIC, C:12/bytes, Length:32/big-integer, Check:4/bytes, Payload/bytes>>.
 
 create_obj(Hash) ->
@@ -83,7 +82,6 @@ create_getpubkey(#address{ripe=RIPE, version=Version, stream=Stream}) ->
     POW = bm_pow:make_pow(UPayload),
     Payload = <<POW:64/big-integer, UPayload/bytes>>,
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
-    error_logger:info_msg("Get pub key hash: ~p~n", [Hash]),
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = Payload,
                                        type = <<"getpubkey">>,
@@ -95,7 +93,6 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
     <<_:8/bytes, Time:64/big-integer, _/bytes>> = Payload,
     #address{stream=Stream} = bm_auth:decode_address(Addr),
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
-    error_logger:info_msg("Ack sending: ~p~n", [Hash]),
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = Payload,
                                        type = <<"msg">>,

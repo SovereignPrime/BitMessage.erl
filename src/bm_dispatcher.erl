@@ -111,7 +111,6 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}=State) ->
     #address{ripe=RIPE}=bm_auth:decode_address(Address),
-    error_logger:info_msg("arrived ~p  i~n", [Type]),
     {MsgVer, R} = bm_types:decode_varint(Data),
     {AddrVer, R1} = bm_types:decode_varint(R),
     {Stream, R2} = bm_types:decode_varint(R1),

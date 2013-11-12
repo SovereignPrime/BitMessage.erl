@@ -106,7 +106,6 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({send, Message}, #state{sockets=Sockets1, transport=Transport}=State) ->
     Sockets = ets:select(peers, [{{'$1', '_'}, [], ['$1']}]),
-    error_logger:info_msg("Broadcasting to ~p ~p~n", [Message, Sockets]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
 handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->

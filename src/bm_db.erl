@@ -159,11 +159,9 @@ handle_call({match, Type, MatchSpec}, _From, State) ->
             end),
     {reply, Data, State};
 handle_call({insert, Type, Data}, _From, State) ->
-    %error_logger:info_msg("Insert into DB data: ~p~n", [Data]),
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
-    %error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -183,13 +181,11 @@ handle_cast({insert, Type, Data}, State) ->
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
-    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {noreply, State};
 handle_cast({del, Type, Data}, State) ->
      R = mnesia:transaction(fun() ->
                 mnesia:delete({ Type, Data })
         end),
-    error_logger:info_msg("Insert into DB result: ~p~n", [R]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

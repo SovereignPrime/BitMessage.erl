@@ -105,11 +105,9 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
     YPad = << <<0>> || _<- lists:seq(1, 32 - YLength)>>,
     R = <<4, XPad/bytes, X/bytes, YPad/bytes, Y/bytes>>,
     XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
-    error_logger:info_msg("XP: ~p~n", [XP]),
     <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
     case crypto:hmac(sha256, M, EMessage) of
         HMAC ->
-            error_logger:info_msg("Msg to me: ~p ~p ~n", [Type, self()]),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
@@ -119,7 +117,6 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
                     bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
             end;
         _ ->
-            %error_logger:info_msg("Msg not for me: ~p ~p~n", [Type, self()]),
             not_for_me
     end,
     {noreply, State};
