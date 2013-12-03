@@ -102,6 +102,8 @@ init([]) ->
             {atomic, ok} = mnesia:create_table(incoming, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]),
             {atomic, ok} = mnesia:create_table(sent, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]),
             mnesia:info();
+        {timeout, _} ->
+            timer:sleep(5000);
          ok ->
             ok;
         {error, R} ->
