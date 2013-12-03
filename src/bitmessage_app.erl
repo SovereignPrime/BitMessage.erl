@@ -19,8 +19,8 @@ start(_StartType, _StartArgs) ->
     bitmessage_sup:start_link().
 
 stop(_State) ->
-    application:stop(crypto),
-    application:stop(ranch),
-    application:stop(mnesia),
-    application:stop(sasl),
+    %application:stop(crypto),
+    %application:stop(ranch),
+    %application:stop(mnesia),
+    %application:stop(sasl),
     ok.
