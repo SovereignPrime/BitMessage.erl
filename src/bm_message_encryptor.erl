@@ -60,7 +60,7 @@ pubkey(PubKey) ->
 %%--------------------------------------------------------------------
 init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 2};
+    {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
 init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new, type=msg} = Message) ->
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
@@ -107,7 +107,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = crypto:hash(sha512, Payload),
     NMessage = Message#message{payload=Payload, hash=Hash, ackdata=AckData, status=wait_pubkey},
-    {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 2}.
+    {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
 
 %init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
@@ -168,7 +168,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                     NMessage = Message#message{status=encrypt_message,
                                                folder=sent},
                     bm_db:insert(sent, [NMessage]),
-            {next_state, encrypt_message, State#state{type=msg, message=NMessage, pek=PEK, psk=PSK}, 1};
+            {next_state, encrypt_message, State#state{type=msg, message=NMessage, pek=PEK, psk=PSK}, 0};
         [] ->
             error_logger:info_msg("No pubkey Sending msg: ~p~n", [Ripe]),
             bm_sender:send_broadcast(bm_message_creator:create_getpubkey(bm_auth:decode_address(To))),
