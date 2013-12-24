@@ -11,6 +11,14 @@ send_message(From, To, Subject, Text, Encoding) ->
 send_broadcast(From, Subject, Text, Encoding) ->
     bm_dispatcher:send_broadcast(#message{from=From, subject=Subject, text=Text, enc=Encoding}).
 
+subscribe_broadcast(Address) ->
+    #address{version=V, stream=S, ripe=R} = bm_auth:decode_address(Address),
+    <<PrivKey:32/bytes, _/bytes>> = crypto:hash(sha512, <<(bm_types:encode_varint(V))/bytes, (bm_types:encode_varint(S))/bytes, R/bytes>>),
+    PK = #privkey{hash=PrivKey, pek=PrivKey, address=Address, time=bm_types:timestamp()},
+    bm_db:insert(privkey, [PK]),
+    bm_decryptor_sup:add_decryptor(PK).
+    
+
 generate_address(Ref) ->
     bm_address_generator:generate_random_address(make_ref(), 1, false, Ref).
 

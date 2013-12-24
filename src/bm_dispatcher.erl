@@ -139,7 +139,12 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
     end,
 
     {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = bm_types:decode_varbin(R6),
+    {AckData, R7} = if Type == message ->
+            bm_types:decode_varbin(R6);
+        true ->
+            {ok, R6}
+
+    end,
     error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", [MsgVer, Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
@@ -167,7 +172,11 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                           ackdata=AckData,
                           text=Text},
             bm_db:insert(incoming, [MR]),
-            bm_sender:send_broadcast(bm_message_creator:create_ack(MR)),
+            if AckData /= ok ->
+                    bm_sender:send_broadcast(bm_message_creator:create_ack(MR));
+                true ->
+                    ok
+            end,
             RecieverPid ! {msg, Hash},
             {noreply, State};
         true ->
