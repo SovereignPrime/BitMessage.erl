@@ -59,9 +59,6 @@ end_per_testcase(_TestCase, _Config) ->
 %%% Test cases
 %%%===================================================================
 
-my_test_case() ->
-    [].
-
 test_make_check(_Config) ->
     Data = crypto:rand_bytes(32),
     POW = bm_pow:make_pow(Data),

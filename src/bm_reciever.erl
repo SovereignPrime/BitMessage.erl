@@ -1,6 +1,12 @@
 -module(bm_reciever).
--compile([export_all]).
 -include("../include/bm.hrl").
+
+-export([
+         start_link/4,
+         start_link/0,
+         init/1,
+         init/4
+        ]).
 
 -record(init_stage, {verack_sent=false,verack_recv=false}).
 -record(state, {socket, transport, version, stream = 1, init_stage = #init_stage{}, remote_streams, remote_addr}).
