@@ -84,6 +84,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new,
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     AckData = <<Time:64/big-integer, 1, (crypto:rand_bytes(32))/bytes>>,
     POW = bm_pow:make_pow(AckData),
+    io:format("~p~n", [POW]),
     Ack = <<POW:64/big-integer, AckData/bytes>>,
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
@@ -107,6 +108,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = crypto:hash(sha512, Payload),
     NMessage = Message#message{payload=Payload, hash=Hash, ackdata=AckData, status=wait_pubkey},
+    bm_db:insert(sent, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
 
