@@ -221,7 +221,7 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
         end,
     POW = bm_pow:make_pow(TPayload),
     PPayload = <<POW:64/big-integer, TPayload/bytes>>,
-    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, PPayload),
+    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(sha512, PPayload),
     NMessage = Message#message{status=ackwait,
                                hash=Hash,
                                payload=PPayload},
