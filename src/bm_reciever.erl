@@ -373,6 +373,7 @@ check_ackdata(Payload) ->
         [] ->
             false;
         [Message] ->
-            bm_db:insert(sent, Message#message{status=ok}),
+            error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
+            bm_db:insert(sent, [ Message#message{status=ok} ]),
             true
     end.
