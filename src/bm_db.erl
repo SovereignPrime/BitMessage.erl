@@ -22,6 +22,7 @@
     select/3,
     match/2,
     delete/2,
+    clear/3,
     wait_db/0
     ]).
 
@@ -64,6 +65,10 @@ match(Type, MatchSpec)->
 
 delete(Type, Rec)->
     gen_server:cast(?MODULE, {del, Type, Rec}).
+
+clear(Addr, Inv, PubKey) ->
+    gen_server:cast(?MODULE, {clear, Addr, Inv, PubKey}).
+
 wait_db() ->
     Timeout = application:get_env(bitmessage, table_wait, 65536),
     OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], Timeout),
@@ -179,6 +184,26 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({clear, Addr, Inv, PubKey}, State) ->
+    mnesia:transaction(fun() ->
+                               Time= bm_types:timestamp(),
+                               Addrs = mnesia:select(addr, [{#network_address{time='$1', _='_'}, [{'<', '$1', (Time - Addr)}], ['$_']}]),
+                               lists:foreach(fun(A) ->
+                                                     mnesia:delete_object(A)
+                                             end, Addrs),
+                               Invs = mnesia:select(inventory, [
+                                                                {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - Inv)}, {'/=', '$2', <<"pubkey">>}], ['$_']},
+                                                                {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - PubKey)}, {'==', '$2', <<"pubkey">>}], ['$_']}
+                                                               ]),
+                               lists:foreach(fun(A) ->
+                                                     mnesia:delete_object(A)
+                                             end, Invs),
+                               PubKeys = mnesia:select(pubkey, [{#pubkey{time='$1', _='_'}, [{'<', '$1', (Time - PubKey)}], ['$_']}]),
+                               lists:foreach(fun(A) ->
+                                                     mnesia:delete_object(A)
+                                             end, PubKeys)
+                       end),
+    {noreply, State};
 handle_cast({insert, Type, Data}, State) ->
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)

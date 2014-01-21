@@ -33,7 +33,8 @@ init([]) ->
                ?CHILD(bm_encryptor_sup, supervisor),
                ?CHILD(bm_dispatcher, worker),
                ?CHILD(bm_peer_sup, supervisor),
-               ?CHILD(bm_sender, worker)
+               ?CHILD(bm_sender, worker),
+               ?CHILD(bm_clear_fsm, worker)
                 ]} }.
 
 
