@@ -42,7 +42,7 @@ check_pow(<<Nonce:64/big-integer, Payload/bytes>>) ->
     check_pow(<<Nonce:64/big-integer, Payload/bytes>>, 320, 14000).
 check_pow(<<Nonce:64/big-integer, Payload/bytes>>, NTpB, ExtraBytes) ->
     %Target = 2 bxor trunc(64 / ((size(Payload) + 14000)* 320)),
-    Target = bm_types:pow(2 , 64) / ((size(Payload) + ExtraBytes)* NTpB),
+    Target = bm_types:pow(2 , 64) div ((size(Payload) + ExtraBytes)* NTpB),
     InitialHash = crypto:hash(sha512, Payload),
     <<ResultHash:64/big-integer, _/bytes>> = bm_auth:dual_sha(<<Nonce:64/big-integer, InitialHash/bytes>>),  
     ( ResultHash =< Target ).

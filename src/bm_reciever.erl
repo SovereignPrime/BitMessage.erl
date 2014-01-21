@@ -277,13 +277,15 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
             {[], Rest}
     end.
 
-process_object(Type, <<POW:64/bits, Time:32/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun) when Time /= 0 -> %Fix for 4 bytes time
-    process_object(Type, <<POW:64/bits, Time:64/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun);
-process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Data/bytes>>, State, Fun) when Time /= 0, Stream /= 0 -> %Fix for Msg w/o Addr Version
-    process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun);
-process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun) ->
+process_object(Type, <<POW:64/bits, Time:32/big-integer, AVer:8, Stream:8, Data/bytes>> = Payload, State, Fun) when Time /= 0 -> %Fix for 4 bytes time
+    process_object(Type, <<POW:64/bits, Time:64/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
+process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Data/bytes>> = Payload, State, Fun) when Time /= 0, Stream /= 0 -> %Fix for Msg w/o Addr Version
+    process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
+process_object(Type, Payload, State, Fun) ->
+    process_object(Type, Payload, State, Fun, bm_pow:check_pow(Payload)).
+
+process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun, true) ->
     CTime = bm_types:timestamp(),
-    IsPOW = true, %bm_pow:check_pow(Payload),
     if 
         Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
             State;
@@ -291,7 +293,7 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
             State;
         Time > CTime + 10800 ->
             State;
-        Stream == OStream, IsPOW ->
+        Stream == OStream ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
             case bm_db:lookup(inventory, Hash) of
                 [_] ->
@@ -303,7 +305,9 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
             end;
         true ->
             State
-    end.
+    end;
+process_object(_Type, _Payload, State, _Fun, false) ->
+    State.
 pubkey_fun_generator(Payload, Packet, Time, State) ->
     fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
