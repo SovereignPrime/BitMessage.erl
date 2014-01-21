@@ -23,6 +23,7 @@
     match/2,
     delete/2,
     clear/3,
+    ackselect/1,
     wait_db/0
     ]).
 
@@ -68,6 +69,9 @@ delete(Type, Rec)->
 
 clear(Addr, Inv, PubKey) ->
     gen_server:cast(?MODULE, {clear, Addr, Inv, PubKey}).
+
+ackselect(Inv) ->
+    gen_server:call(?MODULE, {ackselect, Inv}).
 
 wait_db() ->
     Timeout = application:get_env(bitmessage, table_wait, 65536),
@@ -169,6 +173,16 @@ handle_call({insert, Type, Data}, _From, State) ->
      R = mnesia:transaction(fun() ->
                 insert_obj(Type, Data)
         end),
+    {reply, R, State};
+handle_call({ackselect, Inv}, _From, State) ->
+    R = mnesia:transaction(fun() ->
+                                   A = mnesia:select(sent, [{#message{status=ackwait, _='_'}, [], ['$_']}]),
+                                   CTime = bm_types:timestamp(),
+                                   lists:filter(fun(#message{payload = <<_:64/bits, Time:64/big-integer, _/bytes>>}) ->
+                                                        CTime -Time > Inv
+                                                end, A)
+
+                           end),
     {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,

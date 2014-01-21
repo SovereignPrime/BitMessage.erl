@@ -61,7 +61,7 @@ pubkey(PubKey) ->
 init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
-init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new, type=msg} = Message) ->
+init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Status, type=msg} = Message) when Status == new; Status == ackwait->
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
             R;
@@ -74,10 +74,9 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=new,
     %error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
     {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
-            error_logger:info_msg(" My keys ~p ~p ~n", [EK, SK]),
             {EK, SK, Pub};
         [] ->
-            error_logger:info_warning("No addres ~n"),
+            error_logger:warning_warning("No addres ~n"),
             {stop, {shudown, "Not my address"}}
     end,
     
