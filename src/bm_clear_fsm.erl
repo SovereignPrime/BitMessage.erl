@@ -52,7 +52,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     Timeout = application:get_env(bitmessage, db_clear_interval, 1000),
-    Addr = application:get_env(bitmessage, max_age_of_addr, 172800),
+    Addr = application:get_env(bitmessage, max_age_of_node, 172800),
     Inv = application:get_env(bitmessage, max_age_of_inventory, 172800),
     PubKey = application:get_env(bitmessage, max_age_of_public_key, 2592000),
     {ok, clear, #state{timeout=Timeout, max_pubkey_age=PubKey, max_inv_age=Inv, max_addr_age=Addr}, 0}.
