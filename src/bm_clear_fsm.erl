@@ -76,7 +76,8 @@ clear(timeout, #state{timeout=Timeout, max_addr_age=Addr, max_inv_age=Inv, max_p
     bm_db:clear(Addr, Inv, PubKey),
     {atomic, Messages} = bm_db:ackselect(Inv),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
-    lists:foreach(fun(M) ->
+    lists:foreach(fun(#messages{hash=MID} = M) ->
+                          bm_db:delete(sent, MID),
                           bm_encryptor_sup:add_encryptor(M)
                   end, Messages),
     {next_state, clear, State, Timeout * 1000};
