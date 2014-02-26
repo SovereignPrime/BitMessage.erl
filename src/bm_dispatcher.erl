@@ -169,6 +169,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                           from=From, 
                           to=Address, 
                           subject=Subject,
+                          folder=incoming,
                           ackdata=AckData,
                           text=Text},
             bm_db:insert(incoming, [MR]),
