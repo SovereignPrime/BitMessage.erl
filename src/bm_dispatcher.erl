@@ -35,22 +35,25 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
+start_link() ->  % {{{1
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-message_arrived(Data, Hash, Address) ->
+message_arrived(Data, Hash, Address) ->  % {{{1
     gen_server:cast(?MODULE, {arrived, message, Hash, Address, Data}).
 
-broadcast_arrived(Data, Hash, Address) ->
+broadcast_arrived(Data, Hash, Address) ->  % {{{1
     gen_server:cast(?MODULE, {arrived, broadcast,Hash, Address, Data}).
 
-send_message(Message) ->
+send_message(Message) ->  % {{{1
+    mnesia:transaction(fun() ->
+                               mnesia:write(sent, Message, write)
+                       end),
     gen_server:cast(?MODULE, {send, msg, Message}).
 
-send_broadcast(Message) ->
+send_broadcast(Message) ->  % {{{1
     gen_server:cast(?MODULE, {send, broadcast, Message}).
 
-register_receiver(Reciever) ->
+register_receiver(Reciever) ->  % {{{1
     gen_server:cast(?MODULE, {register, Reciever}).
 
 %%%===================================================================
@@ -68,15 +71,15 @@ register_receiver(Reciever) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([]) ->  % {{{1
     bm_db:wait_db(),
     case bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
                             {#message{status='wait_pubkey', _='_'}, [], ['$_']},
                             {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000) of
-        [ Messages ] ->
+        [ Messages ] ->  % {{{2
             io:format("~p~n", [Messages]),
             lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages);
-        [] ->
+        [] ->  % {{{2
             ok
     end,
     {ok, #state{reciever=self()}}.
@@ -86,7 +89,7 @@ init([]) ->
 %% @doc
 %% Handling call messages
 %%
-%% @spec handle_call(Request, From, State) ->
+%% @spec handle_call(Request, From, State) ->  % {{{1
 %%                                   {reply, Reply, State} |
 %%                                   {reply, Reply, State, Timeout} |
 %%                                   {noreply, State} |
@@ -95,7 +98,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
 
@@ -109,57 +112,54 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}=State) ->
+handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}=State) ->  % {{{1
     #address{ripe=RIPE}=bm_auth:decode_address(Address),
     {MsgVer, R} = bm_types:decode_varint(Data),
     {AddrVer, R1} = bm_types:decode_varint(R),
     {Stream, R2} = bm_types:decode_varint(R1),
     <<BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
-    R4 = case AddrVer of
-        2 -> 
+    R4 = case AddrVer of %{{{2
+        2 ->
             R3;
         MV when MV >= 3 ->
             {NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
             {ExtraBytes, RV1} = bm_types:decode_varint(RV),
             RV1
-        end,
-    case Type of
-        message ->
+        end, %}}}
+    case Type of %{{{2
+        message -> 
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = 
-            if 
-                DRIPE == RIPE ->
+            if DRIPE == RIPE ->  % {{{3
                     true;
                 true ->
                     false
-            end;
+            end; %}}}
         broadcast ->
             <<MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = true
-    end,
+    end, %}}}
 
     {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = if Type == message ->
+    {AckData, R7} = if Type == message ->  % {{{2
             bm_types:decode_varbin(R6);
-        true ->
+        true -> 
             {ok, R6}
-
-    end,
+    end, %}}}
     error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", [MsgVer, Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
     <<DataSig:SLen/bytes, _/bytes>> = Data,
     PuSK = <<4, PSK/bytes>>,
     SigOK = crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]),
-    if 
-        RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
-            {Subject, Text} = case MsgEnc of
+    if RecOK, SigOK, AddrVer > 0, AddrVer < 4 -> %{{{2
+            {Subject, Text} = case MsgEnc of % {{{3
                 1 ->
                     {"", Message};
                 _ ->
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
                     {S, T}
-            end,
+            end, % }}}
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
             From = bm_auth:encode_address(AddrVer, Stream, FRipe),
             PubKey = #pubkey{hash=FRipe, psk=PSK, pek=PEK, time=bm_types:timestamp()},
@@ -173,23 +173,23 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                           ackdata=AckData,
                           text=Text},
             bm_db:insert(incoming, [MR]),
-            if AckData /= ok ->
+            if AckData /= ok ->  % {{{3
                     bm_sender:send_broadcast(bm_message_creator:create_ack(MR));
                 true ->
                     ok
-            end,
+            end, %}}}
             RecieverPid ! {msg, Hash},
             {noreply, State};
         true ->
             {noreply, State}
-    end;
-handle_cast({send, Type, Message}, State) ->
+    end; %}}}
+handle_cast({send, Type, Message}, State) ->  % {{{1
     error_logger:info_msg("Sending message ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
     {noreply, State};
-handle_cast({register, RecieverPid}, State) ->
+handle_cast({register, RecieverPid}, State) ->  % {{{1
     {noreply, State#state{reciever=RecieverPid}};
-handle_cast(Msg, State) ->
+handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.
 
@@ -203,7 +203,7 @@ handle_cast(Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -217,7 +217,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -228,7 +228,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================
