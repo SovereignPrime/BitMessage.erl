@@ -70,16 +70,16 @@ init([]) ->
                     end, Ips),
             bm_db:insert(addr, Addrs),
             bm_db:insert(addr, [
-                    #network_address{ip={176,31,246,114}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={109,229,197,133}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={174,3,101,111}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={90,188,238,79}, port=7829, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={184,75,69,2}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={60,225,209,243}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={5,145,140,218}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={5,19,255,216}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={193,159,162,189}, port=8444, time=bm_types:timestamp(), stream=1},
-                    #network_address{ip={86,26,15,171}, port=8444, time=bm_types:timestamp(), stream=1}
+                                #network_address{ip={ 176,31,246,114 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 109,229,197,133 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 174,3,101,111 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 90,188,238,79 }, port=7829, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 184,75,69,2 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 60,225,209,243 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 5,145,140,218 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 5,19,255,216 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 193,159,162,189 }, port=8444, time=bm_types:timestamp(), stream=1},
+                                #network_address{ip={ 86,26,15,171 }, port=8444, time=bm_types:timestamp(), stream=1}
                     ]),
             bm_db:first(addr);
         Addr ->
