@@ -63,9 +63,7 @@ init([]) ->
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),
                             Time = trunc( Sec*1.0e6 + MiSec),
-                            %<<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, <<Ip1, Ip2, Ip3, Ip4>>),
                             #network_address{
-                                %hash=Hash, 
                                 time=Time, stream=1, ip=Ip, port=8444}
                     end, Ips),
             bm_db:insert(addr, Addrs),
