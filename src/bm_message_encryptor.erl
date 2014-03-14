@@ -107,6 +107,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Stat
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
     NMessage = Message#message{payload=Payload, hash=Hash, ackdata=A, status=wait_pubkey},
+    mnesia:dirty_delete_object(sent, Message),
     bm_db:insert(sent, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
