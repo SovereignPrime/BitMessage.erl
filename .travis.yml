@@ -4,4 +4,4 @@ otp_release:
    - R16B03
    - R16B02
    - R16B01
-script: "rebar get-deps compile && rebar eunit skip_deps=true"
+script: "rebar get-deps compile"
