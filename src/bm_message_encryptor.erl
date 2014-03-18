@@ -7,7 +7,7 @@
 -export([start_link/1]).
 
 %% gen_fsm callbacks
--export([init/1,
+-export([init/1, % {{{1
          wait_pubkey/2,
          encrypt_message/2,
          make_inv/2,
@@ -16,7 +16,7 @@
          handle_sync_event/4,
          handle_info/3,
          terminate/3,
-         code_change/4]).
+         code_change/4]). %}}}
 -export([pubkey/1]).
 
 -record(state, {type, message, pek, psk, hash}).
@@ -58,10 +58,10 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey ->
+init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey -> % {{{1
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
-init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Status, type=msg} = Message) when Status == new; Status == ackwait->
+init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Status, type=msg} = Message) when Status == new; Status == ackwait-> % {{{1
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
             R;
@@ -107,12 +107,13 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Stat
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
     NMessage = Message#message{payload=Payload, hash=Hash, ackdata=A, status=wait_pubkey},
-    mnesia:dirty_delete_object(sent, Message),
+    io:format("Deleting: ~p~n", [Message]),
+    mnesia:dirty_delete(sent, Id),
     bm_db:insert(sent, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
 
-%init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) ->
+%init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) -> % {{{1
 %    #address{ripe=MyRipe} = bm_auth:decode_address(From),
 %    #address{ripe=Ripe} = bm_auth:decode_address(To),
 %
@@ -146,7 +147,7 @@ init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Stat
 %        [] ->
 %            bm_sender:send_broadcast(bm_message_creator:create_getpubkey(To)),
 %            {ok, wait_pybkey, #state{message=Message}}
-%    end.
+%    end. % }}}
 
 %%--------------------------------------------------------------------
 %% @private
