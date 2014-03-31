@@ -88,9 +88,9 @@ timestamp() ->
     {MSec, Sec, _} = now(),
     trunc(MSec * 1.0e6 + Sec).
 
-pow(Num, 0) when Num >= 0 ->
+pow(_, 0) ->
     1;
-pow(Num, Pow) when Num >= 0 ->
+pow(Num, Pow) when Pow >= 0 ->
     Num * pow(Num, Pow - 1).
 
 %%

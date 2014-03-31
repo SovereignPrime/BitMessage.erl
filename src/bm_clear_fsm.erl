@@ -8,13 +8,13 @@
 -export([start_link/0]).
 
 %% gen_fsm callbacks
--export([init/1,
+-export([init/1,  % {{{1
          clear/2,
          handle_event/3,
          handle_sync_event/4,
          handle_info/3,
          terminate/3,
-         code_change/4]).
+         code_change/4]).  % }}}
 
 -record(state, {max_addr_age, max_inv_age, max_pubkey_age, timeout}).
 
@@ -31,7 +31,7 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
+start_link() ->  % {{{1
     gen_fsm:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %%%===================================================================
@@ -51,7 +51,7 @@ start_link() ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([]) ->  % {{{1
     TT = application:get_env(bitmessage, table_wait, 16000),
     Timeout = application:get_env(bitmessage, db_clear_interval, 1000),
     Addr = application:get_env(bitmessage, max_age_of_node, 172800),
@@ -74,7 +74,7 @@ init([]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-clear(timeout, #state{timeout=Timeout, max_addr_age=Addr, max_inv_age=Inv, max_pubkey_age=PubKey} = State) ->
+clear(timeout, #state{timeout=Timeout, max_addr_age=Addr, max_inv_age=Inv, max_pubkey_age=PubKey} = State) ->  % {{{1
     bm_db:clear(Addr, Inv, PubKey),
     {atomic, Messages} = bm_db:ackselect(Inv),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
@@ -83,7 +83,7 @@ clear(timeout, #state{timeout=Timeout, max_addr_age=Addr, max_inv_age=Inv, max_p
                           bm_encryptor_sup:add_encryptor(M)
                   end, Messages),
     {next_state, clear, State, Timeout * 1000};
-clear(_Event, #state{timeout=Timeout} = State) ->
+clear(_Event, #state{timeout=Timeout} = State) ->  % {{{1
     {next_state, clear, State, Timeout * 1000}.
 
 %%--------------------------------------------------------------------
@@ -104,7 +104,7 @@ clear(_Event, #state{timeout=Timeout} = State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
+state_name(_Event, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, state_name, State}.
 
@@ -121,7 +121,7 @@ state_name(_Event, _From, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_Event, StateName, State) ->
+handle_event(_Event, StateName, State) ->  % {{{1
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -140,7 +140,7 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(_Event, _From, StateName, State) ->
+handle_sync_event(_Event, _From, StateName, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, StateName, State}.
 
@@ -157,7 +157,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
+handle_info(_Info, StateName, State) ->  % {{{1
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -171,7 +171,7 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _StateName, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -183,7 +183,7 @@ terminate(_Reason, _StateName, _State) ->
 %%                   {ok, StateName, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, StateName, State, _Extra) ->
+code_change(_OldVsn, StateName, State, _Extra) ->  % {{{1
     {ok, StateName, State}.
 
 %%%===================================================================

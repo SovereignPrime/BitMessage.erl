@@ -119,48 +119,48 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
     {AddrVer, R1} = bm_types:decode_varint(R),
     {Stream, R2} = bm_types:decode_varint(R1),
     <<BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
-    R4 = case AddrVer of %{{{2
+    R4 = case AddrVer of
         2 ->
             R3;
         MV when MV >= 3 ->
             {NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
             {ExtraBytes, RV1} = bm_types:decode_varint(RV),
             RV1
-        end, %}}}
-    case Type of %{{{2
+        end,
+    case Type of
         message -> 
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = 
-            if DRIPE == RIPE ->  % {{{3
+            if DRIPE == RIPE ->
                     true;
                 true ->
                     false
-            end; %}}}
+            end;
         broadcast ->
             <<MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = true
-    end, %}}}
+    end,
 
     {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = if Type == message ->  % {{{2
+    {AckData, R7} = if Type == message ->
             bm_types:decode_varbin(R6);
         true -> 
             {ok, R6}
-    end, %}}}
+    end,
     error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", [MsgVer, Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
     <<DataSig:SLen/bytes, _/bytes>> = Data,
     PuSK = <<4, PSK/bytes>>,
     SigOK = crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]),
-    if RecOK, SigOK, AddrVer > 0, AddrVer < 4 -> %{{{2
-            {Subject, Text} = case MsgEnc of % {{{3
+    if RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
+            {Subject, Text} = case MsgEnc of
                 1 ->
                     {"", Message};
                 _ ->
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
                     {S, T}
-            end, % }}}
+            end,
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
             From = bm_auth:encode_address(AddrVer, Stream, FRipe),
             PubKey = #pubkey{hash=FRipe, psk=PSK, pek=PEK, time=bm_types:timestamp()},
@@ -172,18 +172,19 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                           subject=Subject,
                           folder=incoming,
                           ackdata=AckData,
+                          status=unread,
                           text=Text},
             bm_db:insert(incoming, [MR]),
-            if AckData /= ok ->  % {{{3
+            if AckData /= ok ->
                     bm_sender:send_broadcast(bm_message_creator:create_ack(MR));
                 true ->
                     ok
-            end, %}}}
+            end,
             RecieverPid ! {msg, Hash},
             {noreply, State};
         true ->
             {noreply, State}
-    end; %}}}
+    end;
 handle_cast({send, Type, Message}, State) ->  % {{{1
     error_logger:info_msg("Sending message ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}),

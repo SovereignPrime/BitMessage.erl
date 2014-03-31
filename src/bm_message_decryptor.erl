@@ -8,16 +8,16 @@
 -export([start_link/1]).
 
 %% gen_server callbacks
--export([init/1,
+-export([init/1,  % {{{1
          handle_call/3,
          handle_cast/2,
          handle_info/2,
          terminate/2,
-         code_change/3]).
--export([
+         code_change/3]).  % }}}
+-export([  % {{{1
     decrypt_message/2,
     decrypt_broadcast/2
-    ]).
+    ]).  % }}}
 
 -record(state, {type, key}).
 
@@ -32,18 +32,18 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Init) ->
+start_link(Init) ->  % {{{1
     gen_server:start_link(?MODULE, [Init], []).
 
-decrypt_message(Data, Hash) ->
+decrypt_message(Data, Hash) ->  % {{{1
     Pids = supervisor:which_children(bm_decryptor_sup),
     send_all(Pids, {decrypt, message, Hash, Data}).
 
-decrypt_broadcast(Data, Hash) ->
+decrypt_broadcast(Data, Hash) ->  % {{{1
     Pids = supervisor:which_children(bm_decryptor_sup),
     send_all(Pids, {decrypt, broadcast, Hash, Data}).
 
-encrypt_broadcast(Data) ->
+encrypt_broadcast(Data) ->  % {{{1
     gen_server:cast(?MODULE, {encrypt, Data}).
 
 %%%===================================================================
@@ -61,7 +61,7 @@ encrypt_broadcast(Data) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Init]) ->
+init([Init]) ->  % {{{1
     %bm_dispatcher:register_cryptor(self()),
     {ok, Init}.
 
@@ -79,7 +79,7 @@ init([Init]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
 
@@ -93,7 +93,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, Type, Hash, <<IV:16/bytes, 
+handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
                               _:16/integer,  %Curve type
                               XLength:16/big-integer, X:XLength/bytes, 
                               YLength:16/big-integer, Y:YLength/bytes, 
@@ -121,7 +121,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,
     end,
     {noreply, State};
 
-handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->
+handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->  % {{{1
     MLength = byte_size(Payload),
     IV = crypto:rand_bytes(16),
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
@@ -136,7 +136,7 @@ handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) 
             bm_dispatcher:broadcast_sent(EMessage)
     end,
     {noreply, State};
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -149,7 +149,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -163,7 +163,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -174,15 +174,15 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_all([], _Msg) ->
+send_all([], _Msg) ->  % {{{1
     ok;
-send_all([Pid|Rest], Msg) ->
+send_all([Pid|Rest], Msg) ->  % {{{1
     {_, P, _, _} = Pid,
     gen_server:cast(P, Msg),
     send_all(Rest, Msg).

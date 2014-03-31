@@ -8,12 +8,12 @@
 -export([start_link/0]).
 
 %% gen_server callbacks
--export([init/1,
+-export([init/1,  % {{{1
          handle_call/3,
          handle_cast/2,
          handle_info/2,
          terminate/2,
-         code_change/3]).
+         code_change/3]).  % }}}
 
 -export([get_socket/0]).
 
@@ -30,10 +30,10 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
+start_link() ->  % {{{1
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get_socket() ->
+get_socket() ->  % {{{1
     bm_db:wait_db(),
     gen_server:call(?MODULE, register, infinity).
 
@@ -52,7 +52,7 @@ get_socket() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([]) ->  % {{{1
     bm_db:wait_db(),
     NAddr = case bm_db:first(addr) of
         '$end_of_table' ->
@@ -99,7 +99,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(register, _From, #state{addr=Addr}=State) ->
+handle_call(register, _From, #state{addr=Addr}=State) ->  % {{{1
     case connect_peer(Addr) of
         {ok, Socket, NAddr} ->
             %gen_tcp:controlling_process(Socket, From),
@@ -107,7 +107,7 @@ handle_call(register, _From, #state{addr=Addr}=State) ->
          E -> 
             {stop, E, State}
     end;
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
 
@@ -121,7 +121,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -134,7 +134,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -148,7 +148,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -159,17 +159,17 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-connect_peer('$end_of_table') ->
+connect_peer('$end_of_table') ->  % {{{1
     error_logger:info_msg("Connecton list ended~n"),
     timer:sleep(500000),
     connect_peer(bm_db:first(addr));
-connect_peer(Addr) ->
+connect_peer(Addr) ->  % {{{1
     case bm_db:lookup(addr, Addr) of
         [ #network_address{ip=Ip, port=Port, stream=_Stream, time=_Time} ]  ->
             case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of
