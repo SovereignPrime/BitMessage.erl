@@ -34,11 +34,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage) ->
+start_link(DMessage) ->  % {{{1
     io:format("~p~n", [DMessage]),
     gen_fsm:start_link(?MODULE, DMessage, []).
 
-pubkey(PubKey) ->
+pubkey(PubKey) ->  % {{{1
     Pids = supervisor:which_children(bm_encryptor_sup),
     send_all(Pids, {pubkey, PubKey}).
 %%%===================================================================
@@ -238,7 +238,7 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     {stop, {shutdown, "Ready"}, State};
 make_inv(_Event, State) ->
-    {next_state, make_inv, State}.
+    {next_state, make_inv, State, 0}.
 
 %%--------------------------------------------------------------------
 %% @private

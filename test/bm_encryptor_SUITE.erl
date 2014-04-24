@@ -29,7 +29,7 @@ all() ->
     [encrypt_with_ready_key].
 
 suite() ->
-    [{timetrap, {seconds, 300}}].
+    [{timetrap, {seconds, 500}}].
 
 groups() ->
     [].
