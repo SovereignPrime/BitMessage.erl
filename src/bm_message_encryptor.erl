@@ -34,11 +34,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage) ->
+start_link(DMessage) ->  % {{{1
     io:format("~p~n", [DMessage]),
     gen_fsm:start_link(?MODULE, DMessage, []).
 
-pubkey(PubKey) ->
+pubkey(PubKey) ->  % {{{1
     Pids = supervisor:which_children(bm_encryptor_sup),
     send_all(Pids, {pubkey, PubKey}).
 %%%===================================================================
@@ -164,7 +164,7 @@ init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, st
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
+wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->  % {{{1
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
@@ -181,15 +181,15 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
             Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
             {next_state, wait_pubkey, State#state{type=msg, message=NMessage}, Timeout}
     end;
-wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, message=Message}=State) ->
+wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, message=Message}=State) ->  % {{{1
             NMessage = Message#message{status=encrypt_message},
             bm_db:insert(sent, [NMessage]),
     {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 0};
-wait_pubkey(Event, State) ->
+wait_pubkey(Event, State) ->  % {{{1
     error_logger:warning_msg("Wrong event: ~p status ~p in ~p~n", [Event, ?MODULE, State]),
     {next_state, wait_pubkey, State}.
 
-encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->
+encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->  % {{{1
     error_logger:info_msg("Encrypting ~n"),
     IV = crypto:rand_bytes(16),
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
@@ -201,11 +201,11 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message 
     HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
     {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 0};
-encrypt_message(Event, State) ->
+encrypt_message(Event, State) ->  % {{{1
     error_logger:warning_msg("Encrypting wrong event ~p~n", [Event]),
     {next_state, encrypt_message, State, 0}.
 
-make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payload, to=To, from=From}=Message}=State) ->
+make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payload, to=To, from=From}=Message}=State) ->  % {{{1
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     TPayload = case Type of 
         msg ->
@@ -237,8 +237,8 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
     error_logger:info_msg("Msg sent to ~p~n", [To]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     {stop, {shutdown, "Ready"}, State};
-make_inv(_Event, State) ->
-    {next_state, make_inv, State}.
+make_inv(_Event, State) ->  % {{{1
+    {next_state, make_inv, State, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -258,7 +258,7 @@ make_inv(_Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
+state_name(_Event, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, state_name, State}.
 
@@ -275,7 +275,7 @@ state_name(_Event, _From, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_Event, StateName, State) ->
+handle_event(_Event, StateName, State) ->  % {{{1
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -294,7 +294,7 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(_Event, _From, StateName, State) ->
+handle_sync_event(_Event, _From, StateName, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, StateName, State}.
 
@@ -311,7 +311,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
+handle_info(_Info, StateName, State) ->  % {{{1
     {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -325,7 +325,7 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _StateName, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -337,15 +337,15 @@ terminate(_Reason, _StateName, _State) ->
 %%                   {ok, StateName, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, StateName, State, _Extra) ->
+code_change(_OldVsn, StateName, State, _Extra) ->  % {{{1
     {ok, StateName, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_all([], _Msg) ->
+send_all([], _Msg) ->  % {{{1
     ok;
-send_all([Pid|Rest], Msg) ->
+send_all([Pid|Rest], Msg) ->  % {{{1
     {_, P, _, _} = Pid,
     gen_fsm:send_event(P, Msg),
     send_all(Rest, Msg).
