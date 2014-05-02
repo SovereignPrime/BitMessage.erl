@@ -45,7 +45,8 @@ broadcast_arrived(Data, Hash, Address) ->  % {{{1
     gen_server:cast(?MODULE, {arrived, broadcast,Hash, Address, Data}).
 
 send_message(Message) ->  % {{{1
-    NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text)},
+    NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
+                              type=msg},
     mnesia:transaction(fun() ->
                                mnesia:write(sent, NMessage, write)
                        end),
