@@ -4,7 +4,7 @@
 
 -include("../include/bm.hrl").
 
-%% API
+%% API  {{{1
 -export([start_link/0]).
 -export([message_arrived/3,
          broadcast_arrived/3,
@@ -13,7 +13,6 @@
          send_broadcast/1
 ]).
 
-
 %% gen_server callbacks
 -export([init/1,
          handle_call/3,
@@ -21,6 +20,7 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+% }}}
 
 -record(state, {reciever}).
 
