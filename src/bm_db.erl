@@ -219,7 +219,8 @@ handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
                                                     end, PubKeys);
                                   true ->
                                       ok
-                               end),
+                               end
+                       end),
     {noreply, State};
 handle_cast({insert, Type, Data}, State) -> %  {{{1
      R = mnesia:transaction(fun() -> 
