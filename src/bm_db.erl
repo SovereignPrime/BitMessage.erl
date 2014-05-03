@@ -200,22 +200,26 @@ handle_call(_Request, _From, State) -> %  {{{1
 handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
     mnesia:transaction(fun() -> 
                                Time= bm_types:timestamp(),
-                               Addrs = mnesia:select(addr, [{#network_address{time='$1', _='_'}, [{'<', '$1', (Time - Addr)}], ['$_']}]),
-                               lists:foreach(fun(A) -> %  {{{2
-                                                     mnesia:delete_object(A)
-                                             end, Addrs),
-                               Invs = mnesia:select(inventory, [
-                                                                {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - Inv)}, {'/=', '$2', <<"pubkey">>}], ['$_']},
-                                                                {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - PubKey)}, {'==', '$2', <<"pubkey">>}], ['$_']}
-                                                               ]),
-                               lists:foreach(fun(A) -> %  {{{2
-                                                     mnesia:delete_object(A)
-                                             end, Invs),
-                               PubKeys = mnesia:select(pubkey, [{#pubkey{time='$1', _='_'}, [{'<', '$1', (Time - PubKey)}], ['$_']}]),
-                               lists:foreach(fun(A) -> %  {{{2
-                                                     mnesia:delete_object(A)
-                                             end, PubKeys)
-                       end),
+                               Len = mnesia:table_info(inventory, size),
+                               if Len >= 5000 ->
+                                      Addrs = mnesia:select(addr, [{#network_address{time='$1', _='_'}, [{'<', '$1', (Time - Addr)}], ['$_']}]),
+                                      lists:foreach(fun(A) -> 
+                                                            mnesia:delete_object(A)
+                                                    end, Addrs),
+                                      Invs = mnesia:select(inventory, [
+                                                                       {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - Inv)}, {'/=', '$2', <<"pubkey">>}], ['$_']},
+                                                                       {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - PubKey)}, {'==', '$2', <<"pubkey">>}], ['$_']}
+                                                                      ]),
+                                      lists:foreach(fun(A) ->
+                                                            mnesia:delete_object(A)
+                                                    end, Invs),
+                                      PubKeys = mnesia:select(pubkey, [{#pubkey{time='$1', _='_'}, [{'<', '$1', (Time - PubKey)}], ['$_']}]),
+                                      lists:foreach(fun(A) ->
+                                                            mnesia:delete_object(A)
+                                                    end, PubKeys);
+                                  true ->
+                                      ok
+                               end),
     {noreply, State};
 handle_cast({insert, Type, Data}, State) -> %  {{{1
      R = mnesia:transaction(fun() -> 
