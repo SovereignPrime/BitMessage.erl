@@ -22,7 +22,7 @@
          code_change/3]).
 % }}}
 
--record(state, {reciever}).
+-record(state, {callback=?MODULE}).
 
 %%%===================================================================
 %%% API
@@ -55,8 +55,8 @@ send_message(Message) ->  % {{{1
 send_broadcast(Message) ->  % {{{1
     gen_server:cast(?MODULE, {send, broadcast, Message}).
 
-register_receiver(Reciever) ->  % {{{1
-    gen_server:cast(?MODULE, {register, Reciever}).
+register_receiver(Callback) ->  % {{{1
+    gen_server:cast(?MODULE, {register, Callback}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -114,7 +114,7 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}=State) ->  % {{{1
+handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
     #address{ripe=RIPE}=bm_auth:decode_address(Address),
     {MsgVer, R} = bm_types:decode_varint(Data),
     {AddrVer, R1} = bm_types:decode_varint(R),
@@ -181,7 +181,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{reciever=RecieverPid}
                 true ->
                     ok
             end,
-            RecieverPid ! {msg, Hash},
+            Callback:received(Hash),
             {noreply, State};
         true ->
             {noreply, State}
@@ -190,12 +190,14 @@ handle_cast({send, Type, Message}, State) ->  % {{{1
     error_logger:info_msg("Sending message ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
     {noreply, State};
-handle_cast({register, RecieverPid}, State) ->  % {{{1
-    {noreply, State#state{reciever=RecieverPid}};
+handle_cast({register, Module}, State) ->  % {{{1
+    {noreply, State#state{callback=Module}};
 handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.
 
+received(_) ->  % {{{1
+    ok.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc

@@ -2,6 +2,14 @@
 -compile([export_all]).
 -include("../include/bm.hrl").
 
+behaviour_info(callbacks) ->  % {{{1
+    [
+     {received, 1}
+    ];
+behaviour_info(_) ->  % {{{1
+    undefined.
+
+
 send_message(From, To, Subject, Text) ->  % {{{1
     bm_dispatcher:send_message(#message{from=From, to=To, subject=Subject, text=Text}).
 
@@ -22,7 +30,7 @@ subscribe_broadcast(Address) ->  % {{{1
 generate_address(Ref) ->  % {{{1
     bm_address_generator:generate_random_address(make_ref(), 1, false, Ref).
 
-register_receiver(Module) ->  % {{{1
+start_link(Module) ->  % {{{1
     bm_dispatcher:register_receiver(Module).
 
 get_message(Hash) ->  % {{{1
