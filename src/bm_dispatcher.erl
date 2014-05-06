@@ -78,13 +78,13 @@ init([]) ->  % {{{1
     case bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
                             {#message{status='wait_pubkey', _='_'}, [], ['$_']},
                             {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000) of
-        [ Messages ] ->  % {{{2
+        [ Messages ] ->
             io:format("~p~n", [Messages]),
             lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages);
-        [] ->  % {{{2
+        [] ->
             ok
     end,
-    {ok, #state{reciever=self()}}.
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
