@@ -59,7 +59,14 @@ init([]) ->  % {{{1
             {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
             
             %Ips= [{192,168,24,112}],
-            error_logger:info_msg("Recieved addrs ~p~n", [Ips]),
+            ConfAddrs = lists:map(fun({I, P, S}) ->
+                                         #network_address{ip=I,
+                                                          port=P,
+                                                          stream=S,
+                                                          time=bm_types:timestamp()}
+                                 end, 
+                                 application:get_env(bitmessage, peers, [])),
+            error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips, ConfAddrs]),
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),
                             Time = trunc( Sec*1.0e6 + MiSec),
@@ -67,18 +74,7 @@ init([]) ->  % {{{1
                                 time=Time, stream=1, ip=Ip, port=8444}
                     end, Ips),
             bm_db:insert(addr, Addrs),
-            bm_db:insert(addr, [
-                                #network_address{ip={ 176,31,246,114 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 109,229,197,133 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 174,3,101,111 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 90,188,238,79 }, port=7829, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 184,75,69,2 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 60,225,209,243 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 5,145,140,218 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 5,19,255,216 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 193,159,162,189 }, port=8444, time=bm_types:timestamp(), stream=1},
-                                #network_address{ip={ 86,26,15,171 }, port=8444, time=bm_types:timestamp(), stream=1}
-                    ]),
+            bm_db:insert(addr, ConfAddrs),
             bm_db:first(addr);
         Addr ->
             Addr
