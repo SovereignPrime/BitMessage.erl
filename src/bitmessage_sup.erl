@@ -24,7 +24,6 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    error_logger:logfile({open, "out.log"}),
     {ok, { {one_for_one, 5, 10}, [
                ?CHILD(bm_db, worker),
                ?CHILD(bm_address_generator, worker),
@@ -36,6 +35,3 @@ init([]) ->
                ?CHILD(bm_sender, worker),
                ?CHILD(bm_clear_fsm, worker)
                 ]} }.
-
-
-
