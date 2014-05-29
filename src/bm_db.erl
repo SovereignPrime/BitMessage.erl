@@ -98,7 +98,7 @@ wait_db() -> %  {{{1
 %% @end
 %%--------------------------------------------------------------------
 init([]) -> %  {{{1
-    case mnesia:wait_for_tables([inventory, privkey, addr], 5000) of %  {{{2
+    case mnesia:wait_for_tables([inventory, privkey, addr], 5000) of
         {timeout, [inventory, privkey, addr]}  ->
             mnesia:stop(),
             mnesia:create_schema([node()]),
@@ -108,8 +108,7 @@ init([]) -> %  {{{1
             {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, [node()]}, {attributes, record_info(fields, privkey)}, {type, set}]),
             {atomic, ok} = mnesia:create_table(addr, [{disc_copies, [node()]}, {attributes, record_info(fields, network_address)}, {type, set}, {record_name, network_address}]),
             {atomic, ok} = mnesia:create_table(incoming, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]),
-            {atomic, ok} = mnesia:create_table(sent, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]),
-            mnesia:info();
+            {atomic, ok} = mnesia:create_table(sent, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]);
         {timeout, _} ->
             timer:sleep(5000);
          ok ->
