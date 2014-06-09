@@ -19,4 +19,3 @@ Functionality enhancement
 1. Add broadcast sending
 2. Add callbacks for different not critical, but usefull events
 3. Probably make `message` table from `sent` and `incoming`
-
