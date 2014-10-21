@@ -115,9 +115,14 @@ handle_call(_Request, _From, State) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
-    #address{ripe=RIPE}=bm_auth:decode_address(Address),
-    {MsgVer, R} = bm_types:decode_varint(Data),
-    {AddrVer, R1} = bm_types:decode_varint(R),
+    #address{version=AddrVer, ripe=RIPE}=bm_auth:decode_address(Address),
+     R1 = case bm_types:decode_varint(Data) of
+           {1, RT} ->
+               {A, R} = bm_types:decode_varint(RT),
+               R;
+           {_, R} ->
+                R
+       end,
     {Stream, R2} = bm_types:decode_varint(R1),
     <<BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
     R4 = case AddrVer of
@@ -133,9 +138,9 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = 
             if DRIPE == RIPE ->
-                    true;
-                true ->
-                    false
+                   true;
+               true ->
+                   false
             end;
         broadcast ->
             <<MsgEnc/big-integer, R5/bytes>> = R4,
@@ -148,12 +153,13 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
         true -> 
             {ok, R6}
     end,
-    error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", [MsgVer, Message, AckData]),
+    error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", ["MsgVer", Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
     <<DataSig:SLen/bytes, _/bytes>> = Data,
     PuSK = <<4, PSK/bytes>>,
     SigOK = crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]),
+    error_logger:info_msg("~p ~p ~p~n", [RecOK, SigOK, AddrVer]),
     if RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
             {Subject, Text} = case MsgEnc of
                 1 ->
@@ -164,7 +170,11 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             end,
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
             From = bm_auth:encode_address(AddrVer, Stream, FRipe),
-            PubKey = #pubkey{hash=FRipe, psk=PSK, pek=PEK, time=bm_types:timestamp()},
+            PubKey = #pubkey{hash=FRipe,
+                             psk=PSK,
+                             pek=PEK,
+                             time=bm_types:timestamp()},
+            error_logger:info_msg("~p~n", [PubKey]),
             bm_db:insert(pubkey, [PubKey]),
             MR = #message{hash=Hash, 
                           enc=MsgEnc, 
@@ -184,6 +194,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             Callback:received(Hash),
             {noreply, State};
         true ->
+            error_logger:info_msg("test~n"),
             {noreply, State}
     end;
 handle_cast({send, Type, Message}, State) ->  % {{{1
