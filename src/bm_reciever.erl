@@ -1,36 +1,38 @@
 -module(bm_reciever).
 -include("../include/bm.hrl").
 
+%% API {{{1
 -export([
          start_link/4,
          start_link/0,
          init/1,
          init/4
         ]).
+%}}}
 
 -record(init_stage, {verack_sent=false,verack_recv=false}).
 -record(state, {socket, transport, version, stream = 1, init_stage = #init_stage{}, remote_streams, remote_addr}).
 
-start_link(Ref, Socket, Transport, Opts) ->
+start_link(Ref, Socket, Transport, Opts) ->  % {{{1
     Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
     
     {ok, Pid}.
 
-start_link() ->
+start_link() ->  % {{{1
     proc_lib:start_link(?MODULE, init, [self()]).
 
-init(Ref, Socket, Transport, _Opts) ->
+init(Ref, Socket, Transport, _Opts) ->  % {{{1
     ok = ranch:accept_ack(Ref),
     loop(#state{socket=Socket, transport=Transport}).
 
-init(Parent) ->
+init(Parent) ->  % {{{1
     ok = proc_lib:init_ack(Parent, {ok, self()}),
     timer:sleep(1000),
     {Transport, Socket} =  bm_connetion_dispatcher:get_socket(),
     send_version(#state{socket=Socket, transport=Transport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
     loop(#state{socket=Socket, transport=Transport}).
 
-loop(#state{socket = Socket, transport = Transport}=IState) ->
+loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
     case Transport:recv(Socket,0, 50000) of
         {ok, Packet} ->
             State = check_packet(Packet, IState),
@@ -49,12 +51,28 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->
             send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
             loop(#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
     end.
-
-check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>>, State) when size(Packet) > Length ->
+%% Check packet  {{{1
+check_packet(<<?MAGIC,
+               Command:12/bytes,
+               Length:32,
+               Check:4/bytes,
+               Packet/bytes>>,
+             State) when size(Packet) > Length ->
     <<NPacket:Length/bytes, Rest/bytes>> = Packet,
-    NState = check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, NPacket/bytes>>, State),
+    NState = check_packet(<<?MAGIC,
+                            Command:12/bytes,
+                            Length:32,
+                            Check:4/bytes,
+                            NPacket/bytes>>,
+                          State),
     check_packet(Rest, NState);
-check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>>, State) when size(Packet) == Length ->
+
+check_packet(<<?MAGIC,
+               Command:12/bytes,
+               Length:32,
+               Check:4/bytes,
+               Packet/bytes>>,
+             State) when size(Packet) == Length ->
     case crypto:hash(sha512, Packet) of
         <<Check:32/bits, _/bits>> ->
             update_peer_time(State),
@@ -62,7 +80,15 @@ check_packet(<<?MAGIC, Command:12/bytes, Length:32, Check:4/bytes, Packet/bytes>
         _ ->
             State
     end;
-check_packet(<<?MAGIC, _Command:12/bytes, Length:32, _Check:4/bytes, Packet/bytes>>=IPacket, #state{socket=Socket, transport=Transport}=State) when size(Packet) < Length ->
+
+check_packet(<<?MAGIC,
+               _Command:12/bytes,
+               Length:32,
+               _Check:4/bytes,
+               Packet/bytes>>=IPacket,
+             #state{socket=Socket,
+                    transport=Transport}=State) when size(Packet) < Length ->
+
      case Transport:recv(Socket, Length - size(Packet), 5000) of
         {ok, Data} ->
                 check_packet(<<IPacket/bytes, Data/bytes>>, State);
@@ -71,14 +97,31 @@ check_packet(<<?MAGIC, _Command:12/bytes, Length:32, _Check:4/bytes, Packet/byte
         {error, close} ->
             bm_sender:unregister_peer(Socket),
             {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(State#state{socket=NSocket, transport=NTransport});
+            send_version(#state{
+                            socket=NSocket,
+                            transport=NTransport,
+                            remote_addr=#network_address{
+                                           ip={127,0,0,1},
+                                           port=8444,
+                                           time=bm_types:timestamp(),
+                                           stream=1}}),
+            loop(State#state{socket=NSocket,
+                             transport=NTransport});
         {error, R} ->
             bm_sender:unregister_peer(Socket),
             Transport:close(Socket),
             {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(State#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
+            send_version(#state{
+                            socket=NSocket,
+                            transport=NTransport,
+                            remote_addr=#network_address{
+                                           ip={127,0,0,1},
+                                           port=8444,
+                                           time=bm_types:timestamp(),
+                                           stream=1}}),
+            loop(State#state{socket=NSocket,
+                             transport=NTransport,
+                             init_stage=#init_stage{}})
     end;
 check_packet(_, State) ->
     State.
@@ -87,24 +130,34 @@ check_packet(_, State) ->
 %% Messages
 %%%
 
-analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
-                                           1:64/big-integer, % 'services' field of protocol
-                                           Time:64/big-integer,
-                                           _AddrRecv:26/bytes,
-                                           AddrFrom:26/bytes,
-                                           _Nonce:8/bytes,
-                                           Data/bytes>>,
-              #state{stream=Stream, init_stage=InitStage}=State) 
-        when Length > 83, Version > 1 ->
+%% Version message  {{{1
+analyse_packet(<<"version",
+                 _/bytes>>,
+               Length,
+               <<Version:32/big-integer,
+                 1:64/big-integer, % 'services' field of protocol
+                 Time:64/big-integer,
+                 _AddrRecv:26/bytes,
+                 AddrFrom:26/bytes,
+                 _Nonce:8/bytes,
+                 Data/bytes>>,
+              #state{stream=Stream,
+                     init_stage=InitStage}=State) when Length > 83,
+                                                       Version > 1 ->
     {_UA, StremsL} = bm_types:decode_varstr(Data),
     {Streams, _} = bm_types:decode_list(StremsL, fun bm_types:decode_varint/1),
     #state{transport=Transport, socket=Socket} = State,
     % Sending verack
     Transport:send(Socket, bm_message_creator:create_message(<<"verack">>, <<>>)),
     Stage = InitStage#init_stage{verack_sent=true},
-    PeerAddr = <<Time:64/big-integer, Stream:32/big-integer, AddrFrom/bytes>>,
+    PeerAddr = <<Time:64/big-integer,
+                 Stream:32/big-integer,
+                 AddrFrom/bytes>>,
     {RAddr, _} = bm_types:decode_network(PeerAddr),
-    OState = State#state{version=Version, init_stage=Stage, remote_streams=Streams, remote_addr=RAddr},
+    OState = State#state{version=Version,
+                         init_stage=Stage,
+                         remote_streams=Streams,
+                         remote_addr=RAddr},
 
     if Stage#init_stage.verack_recv == false ->
             send_version(OState);
@@ -114,107 +167,212 @@ analyse_packet(<<"version", _/bytes>>, Length, <<Version:32/big-integer,
     end,
     OState;
 
+%% Verack maessage  {{{1
 analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
-    OState = State#state{init_stage=State#state.init_stage#init_stage{verack_recv=true}},
+    OState = State#state{
+               init_stage=State#state.init_stage#init_stage{
+                                        verack_recv=true
+                                       }},
     conection_fully_established(OState),
     OState;
 
-analyse_packet(<<"addr", _/bytes>>, _Length, Data, #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+%% Addr message  {{{1
+analyse_packet(<<"addr", _/bytes>>,
+               _Length,
+               Data,
+               #state{
+                  init_stage=#init_stage{
+                                verack_recv=true,
+                                verack_sent=true
+                               }} = State) ->
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
     bm_db:insert(addr, Addrs),
     State;
-analyse_packet(<<"inv",_/bytes>>, Length, Packet, 
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+
+%% Inv message  {{{1
+analyse_packet(<<"inv",_/bytes>>,
+               Length,
+               Packet, 
+               #state{
+                  init_stage=#init_stage{
+                                verack_recv=true,
+                                verack_sent=true
+                               }} = State) ->
     {ObjsToGet, _} = bm_types:decode_list(Packet, fun invs_to_list/1),
     send_getdata(ObjsToGet, State),
     State;
-analyse_packet(<<"getdata", _/bytes>>, Length, Packet,
-                 #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
-    {ObjToSend, _} = bm_types:decode_list(Packet, fun(<<I:32/bytes, R/bytes>>) -> {I, R} end),
+
+%% GetData message  {{{1
+analyse_packet(<<"getdata", _/bytes>>,
+               Length,
+               Packet,
+               #state{transport=Transport,
+                      socket=Socket,
+                      init_stage=#init_stage{verack_recv=true,
+                                             verack_sent=true}} = State) ->
+
+    {ObjToSend, _} = bm_types:decode_list(Packet,
+                                          fun(<<I:32/bytes,
+                                                R/bytes>>) -> {I, R} end),
+
     MsgToSeend = lists:map(fun bm_message_creator:create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
-analyse_packet(<<"ping", _>>, _Length, _Packet,
-                 #state{transport=Transport, socket=Socket,init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+
+%% Ping message (seems obsolated) {{{1
+analyse_packet(<<"ping", _>>,
+               _Length,
+               _Packet,
+                 #state{
+                    transport=Transport,
+                    socket=Socket,
+                    init_stage=#init_stage{
+                                  verack_recv=true,
+                                  verack_sent=true
+                                 }} = State) ->
     % Sending pong
-    Transport:send(Socket, <<?MAGIC, "pong", 0:8/unit:8-integer, 0:32/integer, 16#cf83e135:32/big-integer>>),
+    Transport:send(Socket,
+                   <<?MAGIC,
+                     "pong",
+                     0:8/unit:8-integer,
+                     0:32/integer,
+                     16#cf83e135:32/big-integer>>),
     State;
 
 %%%
 %% Objects 
 %%%
 
-analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
-                                             Time:32/big-integer,
-                                             AVer:8/big-integer,
-                                             Packet/bytes>>=Payload,
-                 #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0, AVer >= 2->
+%% GetPubKey {{{1
+analyse_packet(<<"getpubkey", _/bytes>>,
+               Length,
+               <<PNonce:64/big-integer,
+                 Time:32/big-integer,
+                 AVer:8/big-integer,
+                 Packet/bytes>>=Payload,
+               #state{transport=Transport,
+                      socket=Socket,
+                      init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true
+                                   }} = State) when Time /= 0,
+                                                    AVer >= 2->
     Fun = get_pubkey_fun_generator(Packet, State),
     process_object(<<"getpubkey">>, Payload, State, Fun);
-analyse_packet(<<"getpubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
-                                             Time:64/big-integer,
-                                             AVer:8/big-integer,
-                                             Packet/bytes>>=Payload,
-                 #state{transport=Transport, socket=Socket, init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when  Time /= 0, AVer >= 2->
+analyse_packet(<<"getpubkey", _/bytes>>,
+               Length,
+               <<PNonce:64/big-integer,
+                 Time:64/big-integer,
+                 AVer:8/big-integer,
+                 Packet/bytes>>=Payload,
+               #state{transport=Transport,
+                      socket=Socket,
+                      init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true
+                                   }} = State) when  Time /= 0,
+                                                     AVer >= 2->
     Fun = get_pubkey_fun_generator(Packet, State),
     process_object(<<"getpubkey">>, Payload, State, Fun);
 
-analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
-                                          Time:32/big-integer,
-                                          AVer:8/big-integer,
-                                          Packet/bytes>> = Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0, AVer >= 2 ->
+%% PubKey messsage  {{{1
+analyse_packet(<<"pubkey", _/bytes>>,
+               Length,
+               <<PNonce:64/big-integer,
+                 Time:32/big-integer,
+                 AVer:8/big-integer,
+                 Packet/bytes>> = Payload,
+                 #state{init_stage=#init_stage{
+                                      verack_recv=true,
+                                      verack_sent=true
+                                     }} = State) when Time /= 0,
+                                                      AVer >= 2 ->
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
 
-analyse_packet(<<"pubkey", _/bytes>>, Length, <<PNonce:64/big-integer,
-                                          Time:64/big-integer,
-                                          AVer:8/big-integer,
-                                          Packet/bytes>> = Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0, AVer >= 2 ->
+analyse_packet(<<"pubkey", _/bytes>>,
+               Length,
+               <<PNonce:64/big-integer,
+                 Time:64/big-integer,
+                 AVer:8/big-integer,
+                 Packet/bytes>> = Payload,
+               #state{init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true
+                                   }} = State) when Time /= 0,
+                                                    AVer >= 2 ->
+
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
-analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes, 
-                                              Time:32/big-integer,
-                                              Stream:8/integer, 
-                                              EMessage/bytes>> = Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0 ->
+
+%% Msg message  {{{1
+analyse_packet(<<"msg", _/bytes>>,
+               _Length,
+               <<_POW:8/bytes, 
+                 Time:32/big-integer,
+                 Stream:8/integer, 
+                 EMessage/bytes>> = Payload,
+                 #state{init_stage=#init_stage{
+                                      verack_recv=true,
+                                      verack_sent=true
+                                     }} = State) when Time /= 0 ->
     Fun = msg_fun_generator(EMessage, State),  
     process_object(<<"msg">>, Payload, State, Fun);
-analyse_packet(<<"msg", _/bytes>>, _Length, <<_POW:8/bytes, 
-                                              Time:64/big-integer,
-                                              Stream:8/integer, 
-                                              EMessage/bytes>> = Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State)
-        when Time /= 0 ->
+
+analyse_packet(<<"msg", _/bytes>>,
+               _Length,
+               <<_POW:8/bytes, 
+                 Time:64/big-integer,
+                 Stream:8/integer, 
+                 EMessage/bytes>> = Payload,
+               #state{init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true
+                                   }} = State) when Time /= 0 ->
     Fun = msg_fun_generator(EMessage, State),  
     process_object(<<"msg">>, Payload, State, Fun);
-analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
-                                                    Time:32/big-integer,
-                                                    BVer:8/big-integer,
-                                                    _Stream:8/integer, 
-                                                    EMessage/bytes>> = Payload,
-               #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0, BVer >= 2 ->
+
+
+%% Broadcast message {{{1
+analyse_packet(<<"broadcast", _/bytes>>,
+               _Length,
+               <<_POW:8/bytes, 
+                 Time:32/big-integer,
+                 BVer:8/big-integer,
+                 _Stream:8/integer, 
+                 EMessage/bytes>> = Payload,
+               #state{init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true
+                                   }} = State) when Time /= 0,
+                                                    BVer >= 2 ->
+
     Fun =  broadcast_fun_generator(BVer, EMessage, State), 
     process_object(<<"broadcast">>, Payload, State, Fun);
-analyse_packet(<<"broadcast", _/bytes>>, _Length, <<_POW:8/bytes, 
-                                              Time:64/big-integer,
-                                              BVer:8/big-integer, 
-                                              _Stream:8/integer, 
-                                              EMessage/bytes>> = Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) 
-        when Time /= 0, BVer >= 2 ->
+
+analyse_packet(<<"broadcast", _/bytes>>,
+               _Length,
+               <<_POW:8/bytes, 
+                 Time:64/big-integer,
+                 BVer:8/big-integer, 
+                 _Stream:8/integer, 
+                 EMessage/bytes>> = Payload,
+                 #state{init_stage=#init_stage{
+                                      verack_recv=true,
+                                      verack_sent=true
+                                     }} = State) when Time /= 0,
+                                                      BVer >= 2 ->
+
     Fun =  broadcast_fun_generator(BVer, EMessage, State), 
     process_object(<<"broadcast">>, Payload, State, Fun);
     
-analyse_packet(Command, _, Payload,
-                 #state{init_stage=#init_stage{verack_recv=true, verack_sent=true}} = State) ->
+%% Unexpected message {{{1
+analyse_packet(Command,
+               _,
+               Payload,
+               #state{init_stage=#init_stage{
+                                    verack_recv=true,
+                                    verack_sent=true}} = State) ->
     error_logger:warning_msg("Other packet recieved.~n Command: ~p~nPayload: ~p~n", [Command, Payload]),
     State.
                
@@ -222,8 +380,13 @@ analyse_packet(Command, _, Payload,
 %% Responce sending routines
 %%%
 
-send_version(#state{transport=Transport, socket=Socket, stream=Stream, remote_addr=RAddr } = _State) ->
+%% Senv version  {{{1
+send_version(#state{transport=Transport,
+                    socket=Socket,
+                    stream=Stream,
+                    remote_addr=RAddr } = _State) ->
     send_version(Transport, Socket, Stream, RAddr). 
+
 send_version(Transport, Socket, Stream, RAddr) ->
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
@@ -242,17 +405,26 @@ send_version(Transport, Socket, Stream, RAddr) ->
                 Streams/bytes>>,
     Transport:send(Socket, bm_message_creator:create_message(<<"version">>, Message)).
 
-send_getdata(Objs, #state{socket=Socket, transport=Transport} = _State) ->
+send_getdata(Objs,  % {{{1
+             #state{socket=Socket,
+                    transport=Transport} = _State) ->
     Payload = bm_types:encode_list(lists:flatten(Objs), fun(O) -> <<O/bytes>> end),
     Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload)).
 
 
 
-conection_fully_established(#state{socket=Socket, transport=Transport, stream=Stream, init_stage=#init_stage{verack_sent=true, verack_recv=true}}=State) ->
+conection_fully_established(#state{socket=Socket,  % {{{1
+                                   transport=Transport,
+                                   stream=Stream,
+                                   init_stage=#init_stage{
+                                                 verack_sent=true,
+                                                 verack_recv=true
+                                                }}=State) ->
     bm_sender:register_peer(Socket),
     {ok, { Ip, Port }} = inet:peername(Socket),
     Time = bm_types:timestamp(),
     % Check after here
+
     bm_sender:send_broadcast(bm_message_creator:create_message(<<"addr">>, bm_types:encode_network(#network_address{ip=Ip, port=Port, time=Time, stream=Stream}))),
     Addrs = bm_message_creator:create_addrs_for_stream(Stream),
     lists:foreach(fun(Addr) ->
