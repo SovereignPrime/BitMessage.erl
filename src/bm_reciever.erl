@@ -1,6 +1,7 @@
 -module(bm_reciever).
 -include("../include/bm.hrl").
 
+-compile([export_all]).
 %% API {{{1
 -export([
          start_link/4,
@@ -210,7 +211,8 @@ analyse_packet(<<"getdata", _/bytes>>,
                       socket=Socket,
                       init_stage=#init_stage{verack_recv=true,
                                              verack_sent=true}} = State) ->
-
+    error_logger:info_msg("MSG = ~p~n", [Packet]),
+    file:write_file("./test/data/getdata.bin", Packet),
     {ObjToSend, _} = bm_types:decode_list(Packet,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
@@ -370,17 +372,15 @@ analyse_packet(<<"broadcast", _/bytes>>,
 analyse_packet(Command,
                _,
                Payload,
-               #state{init_stage=#init_stage{
-                                    verack_recv=true,
-                                    verack_sent=true}} = State) ->
-    error_logger:warning_msg("Other packet recieved.~n Command: ~p~nPayload: ~p~n", [Command, Payload]),
+               State) ->
+    error_logger:warning_msg("Other packet recieved.~n Command: ~p~nPayload: ~p~n State: ~p~n", [Command, Payload, State]),
     State.
                
 %%%
 %% Responce sending routines
 %%%
 
-%% Senv version  {{{1
+%% Send version  {{{1
 send_version(#state{transport=Transport,
                     socket=Socket,
                     stream=Stream,
@@ -437,7 +437,7 @@ conection_fully_established(State) ->
     State.
 
 %%%
-%% Some packet decoders
+%% Some packet decoders  {{{1
 %%%
     
 invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
@@ -449,14 +449,37 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
             {[], Rest}
     end.
 
-process_object(Type, <<POW:64/bits, Time:32/big-integer, AVer:8, Stream:8, Data/bytes>> = Payload, State, Fun) when Time /= 0 -> %Fix for 4 bytes time
+%% Process object {{{1
+process_object(Type,
+               <<POW:64/bits,
+                 Time:32/big-integer,
+                 AVer:8,
+                 Stream:8,
+                 Data/bytes>> = Payload,
+               State,
+               Fun) when Time /= 0 -> %Fix for 4 bytes time
     process_object(Type, <<POW:64/bits, Time:64/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
-process_object(<<"msg">>=Type, <<POW:64/bits, Time:64/big-integer, Stream:8, Data/bytes>> = Payload, State, Fun) when Time /= 0, Stream /= 0 -> %Fix for Msg w/o Addr Version
+process_object(<<"msg">>=Type,
+               <<POW:64/bits,
+                 Time:64/big-integer,
+                 Stream:8,
+                 Data/bytes>> = Payload,
+               State,
+               Fun) when Time /= 0,
+                         Stream /= 0 -> %Fix for Msg w/o Addr Version
     process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
 process_object(Type, Payload, State, Fun) ->
     process_object(Type, Payload, State, Fun, bm_pow:check_pow(Payload)).
 
-process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer, _Data/bytes>> = Payload, #state{stream=OStream}=State, Fun, true) ->
+process_object(Type,
+               <<_:64/bits,
+                 Time:64/big-integer,
+                 _:8,
+                 Stream:8/big-integer,
+                 _Data/bytes>> = Payload,
+               #state{stream=OStream}=State,
+               Fun,
+               true) ->
     CTime = bm_types:timestamp(),
     if 
         Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
@@ -471,7 +494,12 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
                 [_] ->
                     State;
                 [] ->
-                    bm_db:insert(inventory, [ #inventory{hash=Hash, payload=Payload, type=Type, time=Time, stream=Stream} ]),
+                    bm_db:insert(inventory,
+                                 [ #inventory{hash=Hash,
+                                              payload=Payload,
+                                              type=Type,
+                                              time=Time,
+                                              stream=Stream} ]),
                     bm_sender:send_broadcast(bm_message_creator:create_inv([ Hash ])),
                     Fun(Hash)
             end;
@@ -480,7 +508,8 @@ process_object(Type, <<_:64/bits, Time:64/big-integer, _:8, Stream:8/big-integer
     end;
 process_object(_Type, _Payload, State, _Fun, false) ->
     State.
-pubkey_fun_generator(Payload, Packet, Time, State) ->
+
+pubkey_fun_generator(Payload, Packet, Time, State) ->  % {{{1
     fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
             <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes, _/bytes>> = Data,
@@ -490,7 +519,7 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->
             bm_message_encryptor:pubkey(Pubkey),
             State 
     end.
-get_pubkey_fun_generator(Packet, State) ->
+get_pubkey_fun_generator(Packet, State) ->  % {{{1
     fun(_) ->
             {_, Ripe} = bm_types:decode_varint(Packet),
             RIPE = case Ripe of
@@ -502,8 +531,12 @@ get_pubkey_fun_generator(Packet, State) ->
                     R
             end,
             case bm_db:lookup(privkey, RIPE) of
-                [#privkey{hash=RIPE, address=Addr, enabled=true}=PrKey] ->
-                    #address{version=Version, stream=Stream, ripe=Ripe} = bm_auth:decode_address(Addr),
+                [#privkey{hash=RIPE,
+                          address=Addr,
+                          enabled=true}=PrKey] ->
+                    #address{version=Version,
+                             stream=Stream,
+                             ripe=Ripe} = bm_auth:decode_address(Addr),
                     bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
                     State;
                 [] ->
@@ -511,7 +544,7 @@ get_pubkey_fun_generator(Packet, State) ->
             end
     end.
 
-msg_fun_generator(EMessage, State) ->
+msg_fun_generator(EMessage, State) ->  %  {{{1
     fun(Hash) ->
             case check_ackdata(EMessage) of
                 true ->
@@ -521,7 +554,8 @@ msg_fun_generator(EMessage, State) ->
                     State
             end
     end. 
-broadcast_fun_generator(BVer, EMessage, State) ->
+
+broadcast_fun_generator(BVer, EMessage, State) ->  %  {{{1
     fun(Hash) ->
             case BVer of
                 1 ->
@@ -538,14 +572,20 @@ broadcast_fun_generator(BVer, EMessage, State) ->
 %% Helpers
 %%%
 
-update_peer_time(#state{socket=Socket, stream=Stream}) ->
+update_peer_time(#state{socket=Socket, stream=Stream}) ->  % {{{1
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
     {ok, {Ip, Port}} = inet:peername(Socket),
-    bm_db:insert(addr, [#network_address{time=Time, ip=Ip, port=Port, stream=Stream}]).
+    bm_db:insert(addr,
+                 [#network_address{time=Time,
+                                   ip=Ip,
+                                   port=Port,
+                                   stream=Stream}]).
 
-check_ackdata(Payload) ->
-    case bm_db:match(sent, #message{ackdata=Payload, status=ackwait, _='_'}) of
+check_ackdata(Payload) ->  % {{{1
+    case bm_db:match(sent, #message{ackdata=Payload,
+                                    status=ackwait,
+                                    _='_'}) of
         [] ->
             false;
         [Message] ->
