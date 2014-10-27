@@ -57,8 +57,8 @@
 
 all() ->
     [
-     %inv_packet,
-     version_packet
+     version_packet,
+     verack_packet
     ].
 
 suite() ->
@@ -100,7 +100,7 @@ end_per_testcase(_TestCase, Config) ->
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
-version_packet() ->
+version_packet() ->  % {{{1
     [].
 
 version_packet(Config) ->  % {{{1
@@ -122,16 +122,18 @@ version_packet(Config) ->  % {{{1
                                          #state{transport=test,
                                                 socket=Socket}).
 
-verack_packet() ->
+verack_packet() ->  % {{{1
     [].
 
-verack_packet(_Config) ->
-    bm_reciever:analyse_packet(<<"verack", 0:6/unit:8>>,0, <<>>, #state{}).
+verack_packet(_Config) ->  % {{{1
+    #state{
+      init_stage=#init_stage{verack_recv=true}
+      } = bm_reciever:analyse_packet(<<"verack", 0:6/unit:8>>,0, <<>>, #state{}).
 
-addr_packet() ->
+addr_packet() ->  % {{{1
     [].
 
-addr_packet(_Config) ->
+addr_packet(_Config) ->  % {{{1
     MSG = <<13,0,0,0,0,84,71,200,154,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,
             255,255,84,73,186,110,32,252,0,0,0,0,84,71,210,15,0,0,0,1,0,0,0,0,0,0,
             0,1,0,0,0,0,0,0,0,0,0,0,255,255,46,177,33,177,32,252,0,0,0,0,84,71,214,
@@ -152,42 +154,50 @@ addr_packet(_Config) ->
             0,0,0,0,0,0,255,255,95,208,248,35,32,252>>,
     SZ = size(MSG),
     bm_reciever:analyse_packet(<<"addr", 0:(12 - 4)/unit:8>>, SZ, MSG, #state{}).
-inv_packet() ->
+
+inv_packet() ->  % {{{1
     [].
 
-inv_packet(_Config) ->
+inv_packet(_Config) ->  % {{{1
     {ok, MSG} = file:read_file("./test/data/inv.bin"),
     SZ = size(MSG),
     bm_reciever:analyse_packet(<<"inv", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
 
-% getdata_packet() ->
+% getdata_packet() ->  % {{{1
 %     [].
-% getdata_packet(_Config) ->
+%
+% getdata_packet(_Config) ->  % {{{1
 % 
 %     SZ = size(MSG),
 %     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}).
-% get_pubkey_packet() ->
+%
+% get_pubkey_packet() ->  % {{{1
 %     [].
-% get_pubkey_packet(_Config) ->
+%
+% get_pubkey_packet(_Config) ->  % {{{1
 % 
 %     SZ = size(MSG),
 %     bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
-% pubkey_packet() ->
+% pubkey_packet() ->  % {{{1
 %     [].
-% pubkey_packet(_Config) ->
+%
+% pubkey_packet(_Config) ->  % {{{1
 % 
 %     SZ = size(MSG),
 %     bm_reciever:analyse_packet(<<"pubkey", 0:(12 - 6)/unit:8>>, SZ, MSG, #state{}).
 % 
-% msg_packet() ->
+% msg_packet() ->  % {{{1
 %     [].
-% msg_packet(_Config) ->
+% 
+% msg_packet(_Config) ->  % {{{1
 % 
 %     SZ = size(MSG),
 %     bm_reciever:analyse_packet(<<"msg", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
-% broadcast_packet() ->
+%
+% broadcast_packet() ->  % {{{1
 %     [].
-% broadcast_packet(_Config) ->
+%
+% broadcast_packet(_Config) ->  % {{{1
 % 
 %     SZ = size(MSG),
 %     bm_reciever:analyse_packet(<<"broadcast", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
