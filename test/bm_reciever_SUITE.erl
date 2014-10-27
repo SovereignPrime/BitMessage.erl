@@ -3,7 +3,6 @@
 -include("../include/bm.hrl").
 -include_lib("common_test/include/ct.hrl").
 
-
 -record(init_stage,
         {verack_sent=false,
          verack_recv=false}).
@@ -38,17 +37,17 @@
         addr_packet/0,
         addr_packet/1,
         inv_packet/0,
-        inv_packet/1,
-        getdata_packet/0,
-        getdata_packet/1,
-        get_pubkey_packet/0,
-        get_pubkey_packet/1,
-        pubkey_packet/0,
-        pubkey_packet/1,
-        msg_packet/0,
-        msg_packet/1,
-        broadcast_packet/0,
-        broadcast_packet/1
+        inv_packet/1
+        %getdata_packet/0,
+        %getdata_packet/1,
+        %get_pubkey_packet/0,
+        %get_pubkey_packet/1,
+        %pubkey_packet/0,
+        %pubkey_packet/1,
+        %msg_packet/0,
+        %msg_packet/1,
+        %broadcast_packet/0,
+        %broadcast_packet/1
     ]).
 
 
@@ -58,6 +57,7 @@
 
 all() ->
     [
+     %inv_packet,
      version_packet
     ].
 
@@ -70,7 +70,7 @@ groups() ->
 init_per_suite(Config) ->
     Config.
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
     ok.
 
 group(_GroupName) ->
@@ -83,9 +83,18 @@ end_per_group(_GroupName, _Config) ->
     ok.
 
 init_per_testcase(_TestCase, Config) ->
-    Config.
+    {ok, OSocket} = gen_tcp:listen(0, []),
+    {ok, Port} = inet:port(OSocket),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [inet, {keepalive, true}]),
+    meck:new(test, [non_strict]),
+    meck:expect(test, send, fun(Socket, MSG) ->
+                                    io:format("~p~n", [MSG])
+                            end),
+    [{osocket, OSocket}, {socket, Socket} | Config].
 
-end_per_testcase(_TestCase, _Config) ->
+end_per_testcase(_TestCase, Config) ->
+    Socket = dict:fetch(socket, dict:from_list(Config)),
+    gen_udp:close(Socket),
     ok.
 
 %%%===================================================================
@@ -94,13 +103,24 @@ end_per_testcase(_TestCase, _Config) ->
 version_packet() ->
     [].
 
-version_packet(_Config) ->
+version_packet(Config) ->  % {{{1
+    Socket = dict:fetch(socket, dict:from_list(Config)),
     MSG = <<0,0,0,2,0,0,0,0,0,0,0,1,0,0,0,0,84,71,44,79,0,0,0,0,0,0,0,1,0,0,0,0,
             0,0,0,0,0,0,255,255,94,50,253,51,201,131,0,0,0,0,0,0,0,1,0,0,0,0,0,
             0,0,0,0,0,255,255,127,0,0,1,32,252,115,170,57,172,72,126,34,107,20,
             47,80,121,66,105,116,109,101,115,115,97,103,101,58,48,46,52,46,50,
             47,1,1>>,
-    bm_reciever:analyse_packet(<<"version", 0:5/unit:8>>, size(MSG), MSG, #state{}).
+    #state{version=2,
+           init_stage=#init_stage{verack_sent=true,
+                                  verack_recv=false},
+           remote_streams=[1],
+           remote_addr={network_address,{127,0,0,1},8444,1413950543,1,1}
+          } = bm_reciever:analyse_packet(<<"version",
+                                           0:5/unit:8>>,
+                                         size(MSG),
+                                         MSG,
+                                         #state{transport=test,
+                                                socket=Socket}).
 
 verack_packet() ->
     [].
@@ -136,38 +156,38 @@ inv_packet() ->
     [].
 
 inv_packet(_Config) ->
-
+    {ok, MSG} = file:read_file("./test/data/inv.bin"),
     SZ = size(MSG),
     bm_reciever:analyse_packet(<<"inv", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
 
-getdata_packet() ->
-    [].
-getdata_packet(_Config) ->
-
-    SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}).
-get_pubkey_packet() ->
-    [].
-get_pubkey_packet(_Config) ->
-
-    SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
-pubkey_packet() ->
-    [].
-pubkey_packet(_Config) ->
-
-    SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"pubkey", 0:(12 - 6)/unit:8>>, SZ, MSG, #state{}).
-
-msg_packet() ->
-    [].
-msg_packet(_Config) ->
-
-    SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"msg", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
-broadcast_packet() ->
-    [].
-broadcast_packet(_Config) ->
-
-    SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"broadcast", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
+% getdata_packet() ->
+%     [].
+% getdata_packet(_Config) ->
+% 
+%     SZ = size(MSG),
+%     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}).
+% get_pubkey_packet() ->
+%     [].
+% get_pubkey_packet(_Config) ->
+% 
+%     SZ = size(MSG),
+%     bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
+% pubkey_packet() ->
+%     [].
+% pubkey_packet(_Config) ->
+% 
+%     SZ = size(MSG),
+%     bm_reciever:analyse_packet(<<"pubkey", 0:(12 - 6)/unit:8>>, SZ, MSG, #state{}).
+% 
+% msg_packet() ->
+%     [].
+% msg_packet(_Config) ->
+% 
+%     SZ = size(MSG),
+%     bm_reciever:analyse_packet(<<"msg", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
+% broadcast_packet() ->
+%     [].
+% broadcast_packet(_Config) ->
+% 
+%     SZ = size(MSG),
+%     bm_reciever:analyse_packet(<<"broadcast", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
