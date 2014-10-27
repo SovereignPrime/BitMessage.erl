@@ -39,9 +39,9 @@
         addr_packet/0,
         addr_packet/1,
         inv_packet/0,
-        inv_packet/1
-        %getdata_packet/0,
-        %getdata_packet/1,
+        inv_packet/1,
+        getdata_packet/0,
+        getdata_packet/1
         %get_pubkey_packet/0,
         %get_pubkey_packet/1,
         %pubkey_packet/0,
@@ -62,7 +62,8 @@ all() ->  % {{{1
      version_packet,
      verack_packet,
      addr_packet,
-     inv_packet
+     inv_packet,
+     getdata_packet
     ].
 
 suite() ->  % {{{1
@@ -101,8 +102,18 @@ init_per_testcase(_TestCase, Config) ->  % {{{1
                                        ok
                             end),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
+                                       io:format("~p~n", [I]),
                                        ok
                             end),
+    meck:new(bm_message_creator, [passthrough]),
+    meck:expect(bm_message_creator, create_obj, fun(<<165,40,135,49,43,249,18,255,
+                                                      174,139,155,56,33,113,234,
+                                                      186,244,19,94,208,251,208,
+                                                      84,75,224,222,99,93,143,239,
+                                                      10,190>>) ->
+                                                        <<"TEST_MSG">>
+                                                end),
+
     [{osocket, OSocket}, {socket, Socket} | Config].
 
 end_per_testcase(_TestCase, Config) ->  % {{{1
@@ -193,14 +204,24 @@ inv_packet(_Config) ->  % {{{1
     ?assertEqual(12097, meck:num_calls(bm_db, lookup, [inventory, '_'])),
     ?assert(meck:validate(test)).
 
-% getdata_packet() ->  % {{{1
-%     [].
-%
-% getdata_packet(_Config) ->  % {{{1
-% 
-%     SZ = size(MSG),
-%     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}).
-%
+getdata_packet() ->  % {{{1
+    [].
+
+getdata_packet(_Config) ->  % {{{1
+    {ok, MSG} = file:read_file("../../test/data/getdata.bin"),
+    SZ = size(MSG),
+    bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}),
+    ?assertEqual(1, meck:num_calls(bm_message_creator,
+                                   create_obj,
+                                   [<<165,40,135,49,43,249,18,255,
+                                     174,139,155,56,33,113,234,
+                                     186,244,19,94,208,251,208,
+                                     84,75,224,222,99,93,143,239,
+                                     10,190>>])),
+    ?assertEqual(1, meck:num_calls(test, 
+                                   send,
+                                   ['_', <<"TEST_MSG">>])).
+
 % get_pubkey_packet() ->  % {{{1
 %     [].
 %
