@@ -2,21 +2,23 @@
 
 -include("../include/bm.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
+%% Records {{{1
 -record(init_stage,
-        {verack_sent=false,
-         verack_recv=false}).
+        {verack_sent=true,
+         verack_recv=true}).
 
 -record(state,
         {socket,
-         transport,
+         transport=test,
          version,
          stream = 1,
          init_stage = #init_stage{},
          remote_streams,
          remote_addr}).
 
-%% API
+%% API  {{{1
 -export([all/0,
          suite/0,
          groups/0,
@@ -28,7 +30,7 @@
          init_per_testcase/2,
          end_per_testcase/2]).
 
-%% Test cases
+%% Test cases  {{{1
 -export([
         version_packet/0,
         version_packet/1,
@@ -49,40 +51,42 @@
         %broadcast_packet/0,
         %broadcast_packet/1
     ]).
-
+%% }}}
 
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
 
-all() ->
+all() ->  % {{{1
     [
      version_packet,
-     verack_packet
+     verack_packet,
+     addr_packet,
+     inv_packet
     ].
 
-suite() ->
+suite() ->  % {{{1
     [{timestamp, {seconds, 30}}].
 
-groups() ->
+groups() ->  % {{{1
     [].
 
-init_per_suite(Config) ->
+init_per_suite(Config) ->  % {{{1
     Config.
 
-end_per_suite(Config) ->
+end_per_suite(Config) ->  % {{{1
     ok.
 
-group(_GroupName) ->
+group(_GroupName) ->  % {{{1
     [].
 
-init_per_group(_GroupName, Config) ->
+init_per_group(_GroupName, Config) ->  % {{{1
     Config.
 
-end_per_group(_GroupName, _Config) ->
+end_per_group(_GroupName, _Config) ->  % {{{1
     ok.
 
-init_per_testcase(_TestCase, Config) ->
+init_per_testcase(_TestCase, Config) ->  % {{{1
     {ok, OSocket} = gen_tcp:listen(0, []),
     {ok, Port} = inet:port(OSocket),
     {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [inet, {keepalive, true}]),
@@ -90,9 +94,18 @@ init_per_testcase(_TestCase, Config) ->
     meck:expect(test, send, fun(Socket, MSG) ->
                                     io:format("~p~n", [MSG])
                             end),
+    meck:new(bm_db),
+    meck:expect(bm_db, insert, fun(addr,L) when length(L) /= 13 ->
+                                       error(unexpected_addr_length);
+                                  (addr, _) ->
+                                       ok
+                            end),
+    meck:expect(bm_db, lookup, fun(inventory, I) ->
+                                       ok
+                            end),
     [{osocket, OSocket}, {socket, Socket} | Config].
 
-end_per_testcase(_TestCase, Config) ->
+end_per_testcase(_TestCase, Config) ->  % {{{1
     Socket = dict:fetch(socket, dict:from_list(Config)),
     gen_udp:close(Socket),
     ok.
@@ -120,7 +133,10 @@ version_packet(Config) ->  % {{{1
                                          size(MSG),
                                          MSG,
                                          #state{transport=test,
-                                                socket=Socket}).
+                                                socket=Socket,
+                                               init_stage=#init_stage{
+                                                            verack_recv=false,
+                                                            verack_sent=false}}).
 
 verack_packet() ->  % {{{1
     [].
@@ -128,7 +144,14 @@ verack_packet() ->  % {{{1
 verack_packet(_Config) ->  % {{{1
     #state{
       init_stage=#init_stage{verack_recv=true}
-      } = bm_reciever:analyse_packet(<<"verack", 0:6/unit:8>>,0, <<>>, #state{}).
+      } = bm_reciever:analyse_packet(<<"verack",
+                                       0:6/unit:8>>,
+                                     0,
+                                     <<>>,
+                                     #state{
+                                        init_stage=#init_stage{
+                                                      verack_recv=false,
+                                                      verack_sent=false}}).
 
 addr_packet() ->  % {{{1
     [].
@@ -153,15 +176,22 @@ addr_packet(_Config) ->  % {{{1
             62,15,242,32,252,0,0,0,0,84,71,180,20,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,
             0,0,0,0,0,0,255,255,95,208,248,35,32,252>>,
     SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"addr", 0:(12 - 4)/unit:8>>, SZ, MSG, #state{}).
+    bm_reciever:analyse_packet(<<"addr",
+                                 0:(12 - 4)/unit:8>>,
+                               SZ,
+                               MSG,
+                               #state{}),
+    ?assert(meck:validate(bm_db)).
 
 inv_packet() ->  % {{{1
     [].
 
 inv_packet(_Config) ->  % {{{1
-    {ok, MSG} = file:read_file("./test/data/inv.bin"),
+    {ok, MSG} = file:read_file("../../test/data/inv.bin"),
     SZ = size(MSG),
-    bm_reciever:analyse_packet(<<"inv", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
+    bm_reciever:analyse_packet(<<"inv", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}),
+    ?assertEqual(12097, meck:num_calls(bm_db, lookup, [inventory, '_'])),
+    ?assert(meck:validate(test)).
 
 % getdata_packet() ->  % {{{1
 %     [].
