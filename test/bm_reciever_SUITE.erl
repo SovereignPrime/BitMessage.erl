@@ -41,9 +41,9 @@
         inv_packet/0,
         inv_packet/1,
         getdata_packet/0,
-        getdata_packet/1
-        %get_pubkey_packet/0,
-        %get_pubkey_packet/1,
+        getdata_packet/1,
+        get_pubkey_packet/0,
+        get_pubkey_packet/1
         %pubkey_packet/0,
         %pubkey_packet/1,
         %msg_packet/0,
@@ -63,7 +63,8 @@ all() ->  % {{{1
      verack_packet,
      addr_packet,
      inv_packet,
-     getdata_packet
+     getdata_packet,
+     get_pubkey_packet
     ].
 
 suite() ->  % {{{1
@@ -96,24 +97,24 @@ init_per_testcase(_TestCase, Config) ->  % {{{1
                                     io:format("~p~n", [MSG])
                             end),
     meck:new(bm_db),
-    meck:expect(bm_db, insert, fun(addr,L) when length(L) /= 13 ->
-                                       error(unexpected_addr_length);
-                                  (addr, _) ->
-                                       ok
-                            end),
+    meck:new(bm_message_creator, [passthrough]),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
                                        io:format("~p~n", [I]),
+                                       [];
+                                  (privkey, _) ->
+                                       []
+                            end),
+    meck:expect(bm_db, insert, fun(inventory, _) ->
                                        ok
                             end),
-    meck:new(bm_message_creator, [passthrough]),
-    meck:expect(bm_message_creator, create_obj, fun(<<165,40,135,49,43,249,18,255,
-                                                      174,139,155,56,33,113,234,
-                                                      186,244,19,94,208,251,208,
-                                                      84,75,224,222,99,93,143,239,
-                                                      10,190>>) ->
+    meck:expect(bm_message_creator, create_inv, fun(_) ->
                                                         <<"TEST_MSG">>
                                                 end),
 
+    meck:new(bm_sender),
+    meck:expect(bm_sender, send_broadcast, fun(_) ->
+                                                   ok
+                                                end),
     [{osocket, OSocket}, {socket, Socket} | Config].
 
 end_per_testcase(_TestCase, Config) ->  % {{{1
@@ -187,6 +188,11 @@ addr_packet(_Config) ->  % {{{1
             62,15,242,32,252,0,0,0,0,84,71,180,20,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,
             0,0,0,0,0,0,255,255,95,208,248,35,32,252>>,
     SZ = size(MSG),
+    meck:expect(bm_db, insert, fun(addr,L) when length(L) /= 13 ->
+                                       error(unexpected_addr_length);
+                                  (addr, _) ->
+                                       ok
+                               end),
     bm_reciever:analyse_packet(<<"addr",
                                  0:(12 - 4)/unit:8>>,
                                SZ,
@@ -200,6 +206,10 @@ inv_packet() ->  % {{{1
 inv_packet(_Config) ->  % {{{1
     {ok, MSG} = file:read_file("../../test/data/inv.bin"),
     SZ = size(MSG),
+    meck:expect(bm_db, lookup, fun(inventory, I) ->
+                                       io:format("~p~n", [I]),
+                                       [ok]
+                            end),
     bm_reciever:analyse_packet(<<"inv", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}),
     ?assertEqual(12097, meck:num_calls(bm_db, lookup, [inventory, '_'])),
     ?assert(meck:validate(test)).
@@ -210,6 +220,13 @@ getdata_packet() ->  % {{{1
 getdata_packet(_Config) ->  % {{{1
     {ok, MSG} = file:read_file("../../test/data/getdata.bin"),
     SZ = size(MSG),
+    meck:expect(bm_db, lookup, fun(inventory, I) ->
+                                       io:format("~p~n", [I]),
+                                       [ok]
+                            end),
+    meck:expect(bm_message_creator, create_obj, fun(_) ->
+                                                        <<"TEST_MSG">>
+                                                end),
     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}),
     ?assertEqual(1, meck:num_calls(bm_message_creator,
                                    create_obj,
@@ -222,13 +239,33 @@ getdata_packet(_Config) ->  % {{{1
                                    send,
                                    ['_', <<"TEST_MSG">>])).
 
-% get_pubkey_packet() ->  % {{{1
-%     [].
-%
-% get_pubkey_packet(_Config) ->  % {{{1
-% 
-%     SZ = size(MSG),
-%     bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
+get_pubkey_packet() ->  % {{{1
+    [].
+
+get_pubkey_packet(_Config) ->  % {{{1
+    {ok, MSG} = file:read_file("../../test/data/getpubkey.bin"),
+    SZ = size(MSG),
+    bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}),
+    ?assertEqual(1, meck:num_calls(bm_db, 
+                                   lookup,
+                                   [inventory, <<61,23,11,37,175,120,225,39,187,
+                                                 70,65,167,37,17,50,92,251,119,
+                                                 0,229,90,19,107,165,70,62,213,
+                                                 187,254,82,96,24>>])),
+    ?assertEqual(1, meck:num_calls(bm_db, 
+                                   insert,
+                                   [inventory,
+                                    [#inventory{
+                                        hash= <<61,23,11,37,175,120,225,39,187,
+                                                70,65,167,37,17,50,92,251,119,
+                                                0,229,90,19,107,165,70,62,213,
+                                                187,254,82,96,24>>,
+                                        payload=MSG,
+                                        type= <<"getpubkey">>,
+                                        stream=1,
+                                       _='_'} ]])),
+    ?assert(meck:validate(bm_message_creator)),
+    ?assert(meck:validate(bm_sender)).
 % pubkey_packet() ->  % {{{1
 %     [].
 %
