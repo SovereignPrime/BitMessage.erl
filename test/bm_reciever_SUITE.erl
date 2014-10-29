@@ -45,9 +45,9 @@
         get_pubkey_packet/0,
         get_pubkey_packet/1,
         pubkey_packet/0,
-        pubkey_packet/1
-        %msg_packet/0,
-        %msg_packet/1,
+        pubkey_packet/1,
+        msg_packet/0,
+        msg_packet/1
         %broadcast_packet/0,
         %broadcast_packet/1
     ]).
@@ -65,7 +65,8 @@ all() ->  % {{{1
      inv_packet,
      getdata_packet,
      get_pubkey_packet,
-     pubkey_packet
+     pubkey_packet,
+     msg_packet
     ].
 
 suite() ->  % {{{1
@@ -100,6 +101,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{1
     meck:new(bm_db),
     meck:new(bm_message_creator, [passthrough]),
     meck:new(bm_message_encryptor),
+    meck:new(bm_message_decryptor),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
                                        io:format("~p~n", [I]),
                                        [];
@@ -366,14 +368,42 @@ pubkey_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_encryptor, pubkey, [PK])),
     ?assert(meck:called(bm_sender, send_broadcast, '_')).
 
-% msg_packet() ->  % {{{1
-%     [].
-% 
-% msg_packet(_Config) ->  % {{{1
-% 
-%     SZ = size(MSG),
-%     bm_reciever:analyse_packet(<<"msg", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}).
-%
+msg_packet() ->  % {{{1
+    [].
+
+msg_packet(_Config) ->  % {{{1
+    {ok, MSG} = file:read_file("../../test/data/msg.bin"),
+    SZ = size(MSG),
+    meck:expect(bm_db, match, fun(_, _) ->
+                                       []
+                            end),
+    meck:expect(bm_message_decryptor,
+                decrypt_message,
+                fun(_, _) ->
+                        ok
+                end),
+    bm_reciever:analyse_packet(<<"msg", 0:(12 - 3)/unit:8>>, SZ, MSG, #state{}),
+    ?assert(meck:called(bm_db, 
+                        lookup,
+                        [inventory, <<181,49,89,67,9,108,64,192,100,111,153,
+                                      153,56,147,229,185,156,48,87,89,235,64,
+                                      105,93,44,90,85,247,182,164,192,240>>])),
+    ?assert(meck:called(bm_db, 
+                        insert,
+                        [inventory,
+                         [#inventory{
+                             %hash= <<181,49,89,67,9,108,64,192,100,111,153,
+                             %         153,56,147,229,185,156,48,87,89,235,64,
+                             %         105,93,44,90,85,247,182,164,192,240>>,
+                             %payload=MSG,
+                             type= <<"msg">>,
+                             stream=1,
+                             _='_'} ]])),
+    ?assert(meck:called(bm_message_creator, create_inv, '_')),
+    ?assert(meck:called(bm_sender, send_broadcast, '_')),
+    ?assert(meck:called(bm_message_decryptor, decrypt_message, '_')).
+    
+
 % broadcast_packet() ->  % {{{1
 %     [].
 %
