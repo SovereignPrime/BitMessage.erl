@@ -211,8 +211,6 @@ analyse_packet(<<"getdata", _/bytes>>,
                       socket=Socket,
                       init_stage=#init_stage{verack_recv=true,
                                              verack_sent=true}} = State) ->
-    error_logger:info_msg("MSG = ~p~n", [Packet]),
-    file:write_file("./test/data/getdata.bin", Packet),
     {ObjToSend, _} = bm_types:decode_list(Packet,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
@@ -259,8 +257,9 @@ analyse_packet(<<"getpubkey", _/bytes>>,
                                     verack_sent=true
                                    }} = State) when Time /= 0,
                                                     AVer >= 2->
-    Fun = get_pubkey_fun_generator(Packet, State),
-    process_object(<<"getpubkey">>, Payload, State, Fun);
+   Fun = get_pubkey_fun_generator(Packet, State),
+   process_object(<<"getpubkey">>, Payload, State, Fun);
+
 analyse_packet(<<"getpubkey", _/bytes>>,
                Length,
                <<PNonce:64/big-integer,
@@ -303,7 +302,8 @@ analyse_packet(<<"pubkey", _/bytes>>,
                                     verack_sent=true
                                    }} = State) when Time /= 0,
                                                     AVer >= 2 ->
-
+    %error_logger:info_msg("MSG = ~p~n", [Payload]),
+    %file:write_file("./test/data/pubkey.bin", Payload),
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
 
@@ -514,7 +514,11 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->  % {{{1
             {_, Data} = bm_types:decode_varint(Packet),
             <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes, _/bytes>> = Data,
             Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            Pubkey = #pubkey{hash=Ripe, data=Payload, time=Time, psk=PSK, pek=PEK},
+            Pubkey = #pubkey{hash=Ripe,
+                             data=Payload,
+                             time=Time,
+                             psk=PSK,
+                             pek=PEK},
             bm_db:insert(pubkey, [Pubkey]),
             bm_message_encryptor:pubkey(Pubkey),
             State 
