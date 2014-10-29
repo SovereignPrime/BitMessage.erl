@@ -47,9 +47,9 @@
         pubkey_packet/0,
         pubkey_packet/1,
         msg_packet/0,
-        msg_packet/1
-        %broadcast_packet/0,
-        %broadcast_packet/1
+        msg_packet/1,
+        broadcast_packet/0,
+        broadcast_packet/1
     ]).
 %% }}}
 
@@ -66,7 +66,8 @@ all() ->  % {{{1
      getdata_packet,
      get_pubkey_packet,
      pubkey_packet,
-     msg_packet
+     msg_packet,
+     broadcast_packet
     ].
 
 suite() ->  % {{{1
@@ -404,10 +405,34 @@ msg_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_decryptor, decrypt_message, '_')).
     
 
-% broadcast_packet() ->  % {{{1
-%     [].
-%
-% broadcast_packet(_Config) ->  % {{{1
-% 
-%     SZ = size(MSG),
-%     bm_reciever:analyse_packet(<<"broadcast", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}).
+broadcast_packet() ->  % {{{1
+    [].
+
+broadcast_packet(_Config) ->  % {{{1
+    {ok, MSG} = file:read_file("../../test/data/broadcast.bin"),
+    SZ = size(MSG),
+    meck:expect(bm_message_decryptor,
+                decrypt_broadcast,
+                fun(_, _) ->
+                        ok
+                end),
+    bm_reciever:analyse_packet(<<"broadcast", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}),
+    ?assert(meck:called(bm_db, 
+                        lookup,
+                        [inventory, <<195,91,41,65,161,132,186,147,163,5,38,21,
+                                      67,135,249,10,88,34,210,104,128,69,
+                                      237,92,137,78,44,167,138,191,151,170>>])),
+    ?assert(meck:called(bm_db, 
+                        insert,
+                        [inventory,
+                         [#inventory{
+                             hash= <<195,91,41,65,161,132,186,147,163,5,38,21,
+                                     67,135,249,10,88,34,210,104,128,69,
+                                     237,92,137,78,44,167,138,191,151,170>>,
+                             payload=MSG,
+                             type= <<"broadcast">>,
+                             stream=1,
+                             _='_'} ]])),
+    ?assert(meck:called(bm_message_creator, create_inv, '_')),
+    ?assert(meck:called(bm_sender, send_broadcast, '_')),
+    ?assert(meck:called(bm_message_decryptor, decrypt_broadcast, '_')).
