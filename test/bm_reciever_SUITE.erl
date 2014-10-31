@@ -54,10 +54,10 @@
 %% }}}
 
 %%%===================================================================
-%%% Common Test callbacks
+%%% Common Test callbacks  {{{1
 %%%===================================================================
 
-all() ->  % {{{1
+all() ->  % {{{2
     [
      version_packet,
      verack_packet,
@@ -70,31 +70,35 @@ all() ->  % {{{1
      broadcast_packet
     ].
 
-suite() ->  % {{{1
-    [{timestamp, {seconds, 30}}].
+suite() ->  % {{{2
+    [{timestamp, {seconds, 300}}].
 
-groups() ->  % {{{1
+groups() ->  % {{{2
     [].
 
-init_per_suite(Config) ->  % {{{1
+init_per_suite(Config) ->  % {{{2
     Config.
 
-end_per_suite(Config) ->  % {{{1
+end_per_suite(Config) ->  % {{{2
     ok.
 
-group(_GroupName) ->  % {{{1
+group(_GroupName) ->  % {{{2
     [].
 
-init_per_group(_GroupName, Config) ->  % {{{1
+init_per_group(_GroupName, Config) ->  % {{{2
     Config.
 
-end_per_group(_GroupName, _Config) ->  % {{{1
+end_per_group(_GroupName, _Config) ->  % {{{2
     ok.
 
-init_per_testcase(_TestCase, Config) ->  % {{{1
-    {ok, OSocket} = gen_tcp:listen(0, []),
-    {ok, Port} = inet:port(OSocket),
-    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [inet, {keepalive, true}]),
+init_per_testcase(TestCase, Config) ->  % {{{2
+    meck:new(inet, [unstick, passthrough]),
+    meck:expect(inet, peername, fun(socket) ->
+                                        {ok, {{127,0,0,1}, 5432}}
+                                end),
+    meck:expect(inet, sockname, fun(socket) ->
+                                        {ok, {{127,0,0,1}, 5432}}
+                                end),
     meck:new(test, [non_strict]),
     meck:expect(test, send, fun(Socket, MSG) ->
                                     io:format("~p~n", [MSG])
@@ -120,21 +124,23 @@ init_per_testcase(_TestCase, Config) ->  % {{{1
     meck:expect(bm_sender, send_broadcast, fun(_) ->
                                                    ok
                                                 end),
-    [{osocket, OSocket}, {socket, Socket} | Config].
+    Config.
 
-end_per_testcase(_TestCase, Config) ->  % {{{1
-    Socket = dict:fetch(socket, dict:from_list(Config)),
-    gen_udp:close(Socket),
+end_per_testcase(_TestCase, Config) ->  % {{{2
     ok.
 
 %%%===================================================================
-%%% Test cases
+%%% Test cases  {{{1
 %%%===================================================================
-version_packet() ->  % {{{1
+
+%%====================================================================
+%% Objects tests  {{{1
+%%====================================================================
+version_packet() ->  % {{{2
     [].
 
-version_packet(Config) ->  % {{{1
-    Socket = dict:fetch(socket, dict:from_list(Config)),
+version_packet(Config) ->  % {{{2
+    Socket = socket,
     MSG = <<0,0,0,2,0,0,0,0,0,0,0,1,0,0,0,0,84,71,44,79,0,0,0,0,0,0,0,1,0,0,0,0,
             0,0,0,0,0,0,255,255,94,50,253,51,201,131,0,0,0,0,0,0,0,1,0,0,0,0,0,
             0,0,0,0,0,255,255,127,0,0,1,32,252,115,170,57,172,72,126,34,107,20,
@@ -155,10 +161,10 @@ version_packet(Config) ->  % {{{1
                                                             verack_recv=false,
                                                             verack_sent=false}}).
 
-verack_packet() ->  % {{{1
+verack_packet() ->  % {{{2
     [].
 
-verack_packet(_Config) ->  % {{{1
+verack_packet(_Config) ->  % {{{2
     #state{
       init_stage=#init_stage{verack_recv=true}
       } = bm_reciever:analyse_packet(<<"verack",
@@ -170,10 +176,10 @@ verack_packet(_Config) ->  % {{{1
                                                       verack_recv=false,
                                                       verack_sent=false}}).
 
-addr_packet() ->  % {{{1
+addr_packet() ->  % {{{2
     [].
 
-addr_packet(_Config) ->  % {{{1
+addr_packet(_Config) ->  % {{{2
     MSG = <<13,0,0,0,0,84,71,200,154,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,
             255,255,84,73,186,110,32,252,0,0,0,0,84,71,210,15,0,0,0,1,0,0,0,0,0,0,
             0,1,0,0,0,0,0,0,0,0,0,0,255,255,46,177,33,177,32,252,0,0,0,0,84,71,214,
@@ -205,10 +211,10 @@ addr_packet(_Config) ->  % {{{1
                                #state{}),
     ?assert(meck:called(bm_db, insert, '_')).
 
-inv_packet() ->  % {{{1
+inv_packet() ->  % {{{2
     [].
 
-inv_packet(_Config) ->  % {{{1
+inv_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/inv.bin"),
     SZ = size(MSG),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
@@ -219,10 +225,10 @@ inv_packet(_Config) ->  % {{{1
     ?assertEqual(12097, meck:num_calls(bm_db, lookup, [inventory, '_'])),
     ?assert(meck:called(test, send, '_')).
 
-getdata_packet() ->  % {{{1
+getdata_packet() ->  % {{{2
     [].
 
-getdata_packet(_Config) ->  % {{{1
+getdata_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/getdata.bin"),
     SZ = size(MSG),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
@@ -244,12 +250,15 @@ getdata_packet(_Config) ->  % {{{1
                                    send,
                                    ['_', <<"TEST_MSG">>])).
 
-get_pubkey_packet() ->  % {{{1
+get_pubkey_packet() ->  % {{{2
     [].
 
-get_pubkey_packet(_Config) ->  % {{{1
+get_pubkey_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/getpubkey.bin"),
     SZ = size(MSG),
+    meck:expect(bm_types, timestamp, fun() ->
+                                             1414575390
+                                     end),
     bm_reciever:analyse_packet(<<"getpubkey", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}),
     ?assert(meck:called(bm_db, 
                         lookup,
@@ -272,12 +281,15 @@ get_pubkey_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_creator, create_inv, '_')),
     ?assert(meck:called(bm_sender, send_broadcast, '_')).
 
-pubkey_packet() ->  % {{{1
+pubkey_packet() ->  % {{{2
     [].
 
-pubkey_packet(_Config) ->  % {{{1
+pubkey_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/pubkey.bin"),
     SZ = size(MSG),
+    meck:expect(bm_types, timestamp, fun() ->
+                                             1414575390
+                                     end),
     meck:expect(bm_db, insert, fun(_, _) ->
                                        ok
                             end),
@@ -356,10 +368,10 @@ pubkey_packet(_Config) ->  % {{{1
                         insert,
                         [inventory,
                          [#inventory{
-                             hash= <<1,24,237,23,227,179,132,217,171,
-                                     32,89,140,91,48,42,88,212,154,
-                                     207,104,198,101,212,68,49,246,
-                                     192,205,88,169,158,12>>,
+                             %hash= <<1,24,237,23,227,179,132,217,171,
+                             %        32,89,140,91,48,42,88,212,154,
+                             %        207,104,198,101,212,68,49,246,
+                             %        192,205,88,169,158,12>>,
                              payload=MSG,
                              type= <<"pubkey">>,
                              stream=1,
@@ -369,12 +381,15 @@ pubkey_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_encryptor, pubkey, [PK])),
     ?assert(meck:called(bm_sender, send_broadcast, '_')).
 
-msg_packet() ->  % {{{1
+msg_packet() ->  % {{{2
     [].
 
-msg_packet(_Config) ->  % {{{1
+msg_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/msg.bin"),
     SZ = size(MSG),
+    meck:expect(bm_types, timestamp, fun() ->
+                                             1414575390
+                                     end),
     meck:expect(bm_db, match, fun(_, _) ->
                                        []
                             end),
@@ -405,12 +420,15 @@ msg_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_decryptor, decrypt_message, '_')).
     
 
-broadcast_packet() ->  % {{{1
+broadcast_packet() ->  % {{{2
     [].
 
-broadcast_packet(_Config) ->  % {{{1
+broadcast_packet(_Config) ->  % {{{2
     {ok, MSG} = file:read_file("../../test/data/broadcast.bin"),
     SZ = size(MSG),
+    meck:expect(bm_types, timestamp, fun() ->
+                                             1414575390
+                                     end),
     meck:expect(bm_message_decryptor,
                 decrypt_broadcast,
                 fun(_, _) ->
@@ -436,3 +454,7 @@ broadcast_packet(_Config) ->  % {{{1
     ?assert(meck:called(bm_message_creator, create_inv, '_')),
     ?assert(meck:called(bm_sender, send_broadcast, '_')),
     ?assert(meck:called(bm_message_decryptor, decrypt_broadcast, '_')).
+
+%%====================================================================
+%% Packet tests  {{{1
+%%====================================================================
