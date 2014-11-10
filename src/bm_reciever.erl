@@ -15,9 +15,7 @@
 -record(state, {socket, transport, version, stream = 1, init_stage = #init_stage{}, remote_streams, remote_addr}).
 
 start_link(Ref, Socket, Transport, Opts) ->  % {{{1
-    Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
-    
-    {ok, Pid}.
+    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
 start_link() ->  % {{{1
     proc_lib:start_link(?MODULE, init, [self()]).
@@ -53,6 +51,7 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
             loop(#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
     end.
 %% Check packet  {{{1
+-spec check_packet(binary(), #state{}) -> #state{}.
 check_packet(<<?MAGIC,
                Command:12/bytes,
                Length:32,
@@ -302,8 +301,6 @@ analyse_packet(<<"pubkey", _/bytes>>,
                                     verack_sent=true
                                    }} = State) when Time /= 0,
                                                     AVer >= 2 ->
-    %error_logger:info_msg("MSG = ~p~n", [Payload]),
-    %file:write_file("./test/data/pubkey.bin", Payload),
     Fun = pubkey_fun_generator(Payload, Packet, Time, State),
     process_object(<<"pubkey">>, Payload, State, Fun);
 
@@ -365,6 +362,8 @@ analyse_packet(<<"broadcast", _/bytes>>,
                                      }} = State) when Time /= 0,
                                                       BVer >= 2 ->
 
+    %error_logger:info_msg("MSG = ~p~n", [Payload]),
+    %file:write_file("./test/data/broadcast.bin", Payload),
     Fun =  broadcast_fun_generator(BVer, EMessage, State), 
     process_object(<<"broadcast">>, Payload, State, Fun);
     
@@ -381,6 +380,7 @@ analyse_packet(Command,
 %%%
 
 %% Send version  {{{1
+-spec send_version(#state{}) -> ok | {error, atom()}.
 send_version(#state{transport=Transport,
                     socket=Socket,
                     stream=Stream,
@@ -388,11 +388,15 @@ send_version(#state{transport=Transport,
     send_version(Transport, Socket, Stream, RAddr). 
 
 send_version(Transport, Socket, Stream, RAddr) ->
-    {MSec, Sec, _} = now(),
-    Time = trunc(MSec * 1.0e6 + Sec),
+    Time = bm_types:timestamp(),
     {ok, {Ip, Port}} = inet:sockname(Socket),
-    <<_:12/bytes, AddrRecv/bytes>> = bm_types:encode_network(RAddr),
-    <<_:12/bytes, AddrFrom/bytes>> = bm_types:encode_network(#network_address{time=Time, stream=Stream, ip=Ip, port=Port}),
+    <<_:12/bytes,
+      AddrRecv/bytes>> = bm_types:encode_network(RAddr),
+    <<_:12/bytes,
+      AddrFrom/bytes>> = bm_types:encode_network(#network_address{time=Time,
+                                                                  stream=Stream,
+                                                                  ip=Ip,
+                                                                  port=Port}),
     Nonce = crypto:rand_bytes(8),
     Streams = bm_types:encode_list([Stream], fun bm_types:encode_varint/1),
     Message = <<2:32/big-integer,
@@ -405,7 +409,8 @@ send_version(Transport, Socket, Stream, RAddr) ->
                 Streams/bytes>>,
     Transport:send(Socket, bm_message_creator:create_message(<<"version">>, Message)).
 
-send_getdata(Objs,  % {{{1
+-spec send_getdata(list(), #state{}) -> ok | {error, atom()}.  % {{{1
+send_getdata(Objs,
              #state{socket=Socket,
                     transport=Transport} = _State) ->
     Payload = bm_types:encode_list(lists:flatten(Objs), fun(O) -> <<O/bytes>> end),
@@ -413,7 +418,8 @@ send_getdata(Objs,  % {{{1
 
 
 
-conection_fully_established(#state{socket=Socket,  % {{{1
+-spec conection_fully_established(#state{}) -> #state{}.  % {{{1
+conection_fully_established(#state{socket=Socket,
                                    transport=Transport,
                                    stream=Stream,
                                    init_stage=#init_stage{
@@ -439,7 +445,7 @@ conection_fully_established(State) ->
 %%%
 %% Some packet decoders  {{{1
 %%%
-    
+-spec invs_to_list(binary()) -> {binary() | [], binary()}.
 invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
     case bm_db:lookup(inventory, Inv) of
         [] ->
@@ -450,6 +456,11 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
     end.
 
 %% Process object {{{1
+-spec process_object(Type, Object, State, Fun) -> #state{} when 
+      Type :: binary(),
+      Object :: binary(),
+      State :: #state{},
+      Fun :: fun((binary()) -> #state{}).
 process_object(Type,
                <<POW:64/bits,
                  Time:32/big-integer,
@@ -471,6 +482,12 @@ process_object(<<"msg">>=Type,
 process_object(Type, Payload, State, Fun) ->
     process_object(Type, Payload, State, Fun, bm_pow:check_pow(Payload)).
 
+-spec process_object(Type, Object, State, Fun, POW) -> #state{} when 
+      Type :: binary(),
+      Object :: binary(),
+      State :: #state{},
+      POW :: boolean(),
+      Fun :: fun((binary()) -> #state{}).
 process_object(Type,
                <<_:64/bits,
                  Time:64/big-integer,
@@ -509,6 +526,10 @@ process_object(Type,
 process_object(_Type, _Payload, State, _Fun, false) ->
     State.
 
+-spec pubkey_fun_generator(binary(),
+                           binary(),
+                           integer(),
+                           #state{}) -> fun((binary()) -> #state{}).
 pubkey_fun_generator(Payload, Packet, Time, State) ->  % {{{1
     fun(_) ->
             {_, Data} = bm_types:decode_varint(Packet),
@@ -523,6 +544,9 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->  % {{{1
             bm_message_encryptor:pubkey(Pubkey),
             State 
     end.
+
+-spec get_pubkey_fun_generator(binary(),
+                              #state{}) -> fun((binary()) -> #state{}).
 get_pubkey_fun_generator(Packet, State) ->  % {{{1
     fun(_) ->
             {_, Ripe} = bm_types:decode_varint(Packet),
@@ -548,7 +572,8 @@ get_pubkey_fun_generator(Packet, State) ->  % {{{1
             end
     end.
 
-msg_fun_generator(EMessage, State) ->  %  {{{1
+-spec msg_fun_generator(binary(), #state{}) -> fun((binary()) -> #state{}).  %  {{{1
+msg_fun_generator(EMessage, State) ->
     fun(Hash) ->
             case check_ackdata(EMessage) of
                 true ->
@@ -559,6 +584,9 @@ msg_fun_generator(EMessage, State) ->  %  {{{1
             end
     end. 
 
+-spec broadcast_fun_generator(integer(),
+                              binary(),
+                              #state{}) ->  fun((binary()) -> #state{}).
 broadcast_fun_generator(BVer, EMessage, State) ->  %  {{{1
     fun(Hash) ->
             case BVer of
@@ -576,6 +604,7 @@ broadcast_fun_generator(BVer, EMessage, State) ->  %  {{{1
 %% Helpers
 %%%
 
+-spec update_peer_time(#state{}) -> any(). % ???
 update_peer_time(#state{socket=Socket, stream=Stream}) ->  % {{{1
     {MSec, Sec, _} = now(),
     Time = trunc(MSec * 1.0e6 + Sec),
@@ -586,6 +615,7 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->  % {{{1
                                    port=Port,
                                    stream=Stream}]).
 
+-spec check_ackdata(binary()) -> boolean().
 check_ackdata(Payload) ->  % {{{1
     case bm_db:match(sent, #message{ackdata=Payload,
                                     status=ackwait,
