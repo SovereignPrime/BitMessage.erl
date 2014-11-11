@@ -2,7 +2,6 @@
 -compile([export_all]).
 -include("../include/bm.hrl").
 
-%-include_lib("eunit/include/eunit.hrl").
 
 -export_type([
               timestamp/0
@@ -137,68 +136,3 @@ pow(_, 0) ->
 pow(Num, Pow) when Pow >= 0 ->
     Num * pow(Num, Pow - 1).
 
-%%
-%% Test cases
-%%
-
-%integer_to_bytes_test_() ->
-%    [
-%        ?_assert(integer_to_bytes(crypto:bytes_to_integer(<<"TEST">>)) == <<"TEST">>)
-%        ].
-%
-%encode_varint_test_() ->
-%    [
-%        ?_assert(encode_varint(10) == <<10>>),
-%        ?_assert(encode_varint(253) == <<16#fd, 00, 253>>),
-%        ?_assert(encode_varint(252) == <<252>>),
-%        ?_assert(encode_varint(65535) == <<16#fd,16#ff, 16#ff>>),
-%        ?_assert(encode_varint(65536) == <<16#fe, 00, 01, 00, 00>>),
-%        ?_assert(encode_varint(4294967295) == <<16#fe, 16#ff, 16#ff, 16#ff, 16#ff>>),
-%        ?_assert(encode_varint(4294967296) == <<16#ff, 00, 00, 00, 01, 00, 00, 00, 00>>)
-%        ].
-%decode_encode_varint_test_() ->
-%    [
-%        ?_assert(decode_varint(encode_varint(10))== {10, <<>>}),
-%        ?_assert(decode_varint(encode_varint(253))== {253, <<>>}),
-%        ?_assert(decode_varint(encode_varint(252))== {252, <<>>}),
-%        ?_assert(decode_varint(encode_varint(65535))== {65535, <<>>}),
-%        ?_assert(decode_varint(encode_varint(65536))== {65536, <<>>}),
-%        ?_assert(decode_varint(encode_varint(4294967295))== {4294967295, <<>>}),
-%        ?_assert(decode_varint(encode_varint(4294967296))== {4294967296, <<>>}),
-%        ?_assert(decode_varint(<<(encode_varint(4294967296))/bits, <<"test">>/bits>>)== {4294967296, <<"test">>})
-%        ].
-%
-%encode_varstr_test_() ->
-%    [
-%        ?_assert(encode_varstr("1234567890") == <<10,"1234567890">>)
-%        ].
-%decode_encode_varstr_test_() ->
-%    [
-%        ?_assert(decode_varstr(encode_varstr("TEST")) == {"TEST", <<>>})
-%                ].
-%
-%encode_list_test_() ->
-%    [
-%        ?_assert(encode_list([1,2,3,4,5,6,7,8,9,0], fun encode_varint/1) == <<10, 1,2,3,4,5,6,7,8,9,0>>),
-%        ?_assert(encode_list([1,255,3,4,5,65536,7,8,9,0], fun encode_varint/1) == <<10, 1,(encode_varint(255))/bytes,3,4,5,(encode_varint(65536))/bytes,7,8,9,0>>),
-%        ?_assert(encode_list(["a", "b"], fun([O]) -> <<O>> end) == <<2, "a", "b">>)
-%                ].
-%
-%decode_encode_list_test_() ->
-%    [
-%        ?_assert(decode_list(encode_list([1,2,3,4,5,6,7,8,9,0], fun encode_varint/1), fun decode_varint/1) == {[1,2,3,4,5,6,7,8,9,0], <<>>}),
-%        ?_assert(decode_list(encode_list([1,255,3,4,5,65536,7,8,9,0], fun encode_varint/1), fun decode_varint/1) == {[1,255,3,4,5,65536,7,8,9,0], <<>>}),
-%        ?_assert(decode_list(encode_list(["a", "b"], fun([O]) -> <<O>> end), fun(<<O:8/integer, R/bytes>>)-> {[O], R}  end) == {["a", "b"], <<>>})
-%                ].
-%
-%encode_network_test_() ->
-%    {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
-%    [
-%        ?_assert(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1} ) == <<333:64/big-integer, 1:32/big-integer, 1:64/big-integer, 0,0,0,0,0,0,0,0,0,0,255,255, 127,0,0,1, 8080:16/big-integer>>)
-%                ].
-%
-%decode_encode_network_test_() ->
-%    {ok, IP} = inet:parse_ipv4_address("127.0.0.1"),
-%    [
-%        ?_assert(decode_network(encode_network(#network_address{time=333, stream=1, ip=IP, port=8080, services=1})) == {#network_address{time=333, stream=1, ip=IP, port=8080, services=1}, <<>>})
-%                ].

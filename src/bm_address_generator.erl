@@ -33,6 +33,17 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Generate random bitmessage address and keypair
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_random_address(Label, Stream, EighteenthByteRipe, Fun) -> ok when
+      Label :: reference(),
+      Stream :: integer(),
+      EighteenthByteRipe :: boolean(),
+      Fun :: fun(({address, binary()}) -> any()).
 generate_random_address(Label, Stream, EighteenthByteRipe, Fun) ->
     gen_server:cast(?MODULE, {generate, random, Label, Stream, EighteenthByteRipe, Fun}).
 
@@ -149,6 +160,17 @@ code_change(_OldVsn, State, _Extra) ->
 %    end,
 %    bm_auth:encode_address(3, Stream, Ripe).
                           
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates keypair recurcively and saves result to db
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_keys(Label, Stream, EighteenthByteRipe) -> #privkey{} when
+      Label :: any(),
+      Stream ::integer(),
+      EighteenthByteRipe :: boolean().
 generate_keys(Label, Stream, EighteenthByteRipe) ->
     {<<4, PSK/bytes>> = PotentialPubSign, PotentialPrivSign} = crypto:generate_key(ecdh, secp256k1),
     {<<4, PEK/bytes>> = PotentialPubKey, PotentialPrivKey} = crypto:generate_key(ecdh, secp256k1),

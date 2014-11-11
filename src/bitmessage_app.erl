@@ -9,6 +9,7 @@
 %% Application callbacks
 %% ===================================================================
 
+-spec start(application:start_type(), term()) -> supervisor:start_ret().
 start(_StartType, _StartArgs) ->
     application:start(sasl),
     application:start(crypto),
@@ -18,9 +19,6 @@ start(_StartType, _StartArgs) ->
     {ok, _} = ranch:start_listener(bitmessage_listener, 100, ranch_tcp, [{port, Port}], bm_listener, []),
     bitmessage_sup:start_link().
 
+-spec stop(term()) -> ok.
 stop(_State) ->
-    %application:stop(crypto),
-    %application:stop(ranch),
-    %application:stop(mnesia),
-    %application:stop(sasl),
     ok.
