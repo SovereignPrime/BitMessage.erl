@@ -33,6 +33,13 @@
 start_link() ->  % {{{1
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets next socket from cursor OBSOLATED
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec get_socket() -> {gen_tcp, gen_tcp:socket()}.
 get_socket() ->  % {{{1
     bm_db:wait_db(),
     gen_server:call(?MODULE, register, infinity).
@@ -161,6 +168,12 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+%% @doc Peer cursor function
+%%
+-spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when
+      Ret :: {ok, gen_tcp:socket(), inet:ip4_address()}.
 connect_peer('$end_of_table') ->  % {{{1
     error_logger:info_msg("Connecton list ended~n"),
     timer:sleep(500000),
