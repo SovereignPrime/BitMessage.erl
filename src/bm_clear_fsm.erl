@@ -16,7 +16,13 @@
          terminate/3,
          code_change/4]).  % }}}
 
--record(state, {max_addr_age, max_inv_age, max_pubkey_age, timeout}).
+-record(state,
+        {
+         max_addr_age :: integer(),
+         max_inv_age :: integer(),
+         max_pubkey_age :: integer(),
+         timeout :: integer()
+        }).
 
 %%%===================================================================
 %%% API
@@ -57,7 +63,13 @@ init([]) ->  % {{{1
     Addr = application:get_env(bitmessage, max_age_of_node, 172800),
     Inv = application:get_env(bitmessage, max_age_of_inventory, 172800),
     PubKey = application:get_env(bitmessage, max_age_of_public_key, 2592000),
-    {ok, clear, #state{timeout=Timeout, max_pubkey_age=PubKey, max_inv_age=Inv, max_addr_age=Addr}, TT}.
+    {ok,
+     clear,
+     #state{timeout=Timeout,
+            max_pubkey_age=PubKey,
+            max_inv_age=Inv,
+            max_addr_age=Addr},
+     TT}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -68,7 +80,7 @@ init([]) ->  % {{{1
 %% name as the current state name StateName is called to handle
 %% the event. It is also called if a timeout occurs.
 %%
-%% @spec state_name(Event, State) ->
+%% @spec clear(Event, State) ->
 %%                   {next_state, NextStateName, NextState} |
 %%                   {next_state, NextStateName, NextState, Timeout} |
 %%                   {stop, Reason, NewState}
