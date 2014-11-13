@@ -159,7 +159,7 @@ create_getpubkey(#address{ripe=RIPE,
 %%
 %% Creates ack message object and saves it to DB and 
 %% returnd inv message
--spec create_getpubkey(#message{}) -> message_bin().  % {{{1
+-spec create_ack(#message{}) -> message_bin().  % {{{1
 create_ack(#message{ackdata=Payload, from=Addr}) ->
     <<_:16/bytes, PLen:32/big-integer, _:4/bytes, PPayload/bytes>> = Payload,
     <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
