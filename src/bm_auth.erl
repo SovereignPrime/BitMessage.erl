@@ -57,7 +57,7 @@ decode_address(<<"BM-",Data/bytes>>) ->
 
 %% @doc Generates ripe from data
 %%
--spec generate_ripe(iolist()) -> binary().
+-spec generate_ripe(iolist() | binary()) -> binary().
 generate_ripe(Str) ->
     crypto:hash(ripemd160, crypto:hash(sha512, Str)).
 

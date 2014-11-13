@@ -34,6 +34,8 @@
              | privkey
              | network_address.
 
+-type table() :: type() | 'incomming' | 'sent'.
+
 -type type_record() :: #message{}
                     | #pubkey{}
                     | #privkey{}
@@ -77,8 +79,8 @@ next(Type, Prev)-> %  {{{1
 
 %% @doc Gets element from `Type` table with `ID`
 %%
--spec lookup(type(), term()) -> any().
-lookup(Type, Id)-> %  {{{1
+-spec lookup(table(), term()) -> any(). %  {{{1
+lookup(Type, Id)->
     gen_server:call(?MODULE, {get, Type, Id}).
 
 %% @doc Fold `Fun` through all `Type` elements
