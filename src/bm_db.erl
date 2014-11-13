@@ -2,7 +2,7 @@
 
 -behaviour(gen_server).
 -include("../include/bm.hrl").
-
+-define(R(Type), #Type{}).
 %% API
 -export([start_link/0]).
 
@@ -29,6 +29,16 @@
 
 -record(state, {addr}).
 
+-type type() :: message 
+             | pubkey 
+             | privkey
+             | network_address.
+
+-type type_record() :: #message{}
+                    | #pubkey{}
+                    | #privkey{}
+                    | #network_address{}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -37,42 +47,91 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link() -> {ok, Pid} | ignore | {error, Error} %  {{{1
 %% @end
 %%--------------------------------------------------------------------
-start_link() -> %  {{{1
+start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-insert(Type, Data) -> %  {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Insert data into DB
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec insert(type(), [type_record()]) -> {atomic, ok} | {error, atom()}. %  {{{1
+insert(Type, Data) ->
     gen_server:call(?MODULE, {insert, Type, Data}).
 
+%% @doc Gets id of first element of `Type` table
+%%
+-spec first(type()) -> any().
 first(Type)-> %  {{{1
     gen_server:call(?MODULE, {first, Type}).
 
+%% @doc Gets id of next element of `Type` table
+%%
+-spec next(type(), term()) -> any().
 next(Type, Prev)-> %  {{{1
     gen_server:call(?MODULE, {next, Type, Prev}).
 
-lookup(Type, Prev)-> %  {{{1
-    gen_server:call(?MODULE, {get, Type, Prev}).
+%% @doc Gets element from `Type` table with `ID`
+%%
+-spec lookup(type(), term()) -> any().
+lookup(Type, Id)-> %  {{{1
+    gen_server:call(?MODULE, {get, Type, Id}).
 
+%% @doc Fold `Fun` through all `Type` elements
+%%
+-spec foldr(fun((type_record(), TAcc) -> term()), TAcc, type()) -> any().
 foldr(Fun, Acc, Type)-> %  {{{1
     gen_server:call(?MODULE, {foldr, Fun, Type, Acc}).
 
+%% @doc Select `MatchSpec` for `Type` limit `N`
+%%
+-spec select(type(), MatchSpec, non_neg_integer()) -> [type_record()] when
+      MatchSpec :: ets:match_spec().
 select(Type, MatchSpec, N)-> %  {{{1
     gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
 
+%% @doc Matches `MatchSpec` for `Type` 
+%%
+-spec match(type(), MatchSpec) -> [type_record()] when
+      MatchSpec :: ets:match_spec().
 match(Type, MatchSpec)-> %  {{{1
     gen_server:call(?MODULE, {match, Type, MatchSpec}).
 
-delete(Type, Rec)-> %  {{{1
-    gen_server:cast(?MODULE, {del, Type, Rec}).
+%% @doc Deletes element w/`Id` from `Type` table
+%%
+-spec delete(type(), term()) -> ok.
+delete(Type, Id)-> %  {{{1
+    gen_server:cast(?MODULE, {del, Type, Id}).
 
+%% @doc 
+%% Clears DB from outdated data
+%%
+%% Used by bm_clear_fsm
+%% @end
+-spec clear(MaxAddrAge, MaxInvAge, MaxPubKeyAge) -> ok when
+      MaxAddrAge :: integer(),
+      MaxInvAge :: integer(),
+      MaxPubKeyAge :: integer().
 clear(Addr, Inv, PubKey) -> %  {{{1
     gen_server:cast(?MODULE, {clear, Addr, Inv, PubKey}).
 
-ackselect(Inv) -> %  {{{1
-    gen_server:call(?MODULE, {ackselect, Inv}).
+%% @doc 
+%% Selects messages w/o akc to resend
+%%
+%% Used by bm_clear_fsm ??? 
+-spec ackselect(integer()) -> [#message{}].
+ackselect(MinInvAge) -> %  {{{1
+    gen_server:call(?MODULE, {ackselect, MinInvAge}).
 
+%% @doc
+%% Waits for DB to initialize
+%%
+%% @end
+-spec wait_db() -> ok.
 wait_db() -> %  {{{1
     Timeout = application:get_env(bitmessage, table_wait, 65536),
     OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], Timeout),
