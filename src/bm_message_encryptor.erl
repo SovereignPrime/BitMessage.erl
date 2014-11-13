@@ -38,7 +38,14 @@ start_link(DMessage) ->  % {{{1
     io:format("~p~n", [DMessage]),
     gen_fsm:start_link(?MODULE, DMessage, []).
 
-pubkey(PubKey) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Informs encrypotor about receiving new PubKey
+%% 
+%% @end
+%%--------------------------------------------------------------------
+-spec pubkey(#pubkey{}) -> ok.  % {{{1
+pubkey(PubKey) ->
     Pids = supervisor:which_children(bm_encryptor_sup),
     send_all(Pids, {pubkey, PubKey}).
 %%%===================================================================
@@ -58,10 +65,31 @@ pubkey(PubKey) ->  % {{{1
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init(#message{to=To, from=From, subject=Subject, enc=Enc, text=Text,type=Type, status=Status}=Message) when Status == encrypt_message; Status == wait_pubkey -> % {{{1
+
+%% Init for already packed messages  {{{2
+init(#message{to=To,
+              from=From,
+              subject=Subject,
+              enc=Enc,
+              text=Text,
+              type=Type,
+              status=Status}=Message) 
+  when Status == encrypt_message;
+       Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
-init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, status=Status, type=msg} = Message) when Status == new; Status == ackwait-> % {{{1
+
+%% Init for new and resending messages  {{{2
+init(#message{hash=Id,
+              to=To,
+              from=From,
+              subject=Subject,
+              enc=Enc,
+              text=Text,
+              status=Status,
+              type=msg} = Message) 
+  when Status == new;
+       Status == ackwait->
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
             R;
@@ -71,7 +99,6 @@ init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, st
             R
     end,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    %error_logger:info_msg("Sending msg from ~p to ~p ~n", [MyRipe, To]),
     {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
             {EK, SK, Pub};
@@ -100,9 +127,7 @@ init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, st
                  MSG/bytes,
                  (bm_types:encode_varint(byte_size(Ack)))/bytes,
                  Ack/bytes>>,
-    %error_logger:info_msg("Message ~p ~n", [UPayload]),
     Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
-    %error_logger:info_msg("Sig ~p ~n", [Sig]),
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
@@ -112,8 +137,12 @@ init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, st
     bm_db:insert(sent, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
-
-%init([#message{to=To, from=From, subject=Subject, text=Text}=Message, broadcast=Type]) -> % {{{1
+%% TODO: Init for broadcasts  {{{2
+%init([#message{to=To,
+%from=From,
+%subject=Subject,
+%text=Text}=Message,
+%broadcast=Type]) ->
 %    #address{ripe=MyRipe} = bm_auth:decode_address(From),
 %    #address{ripe=Ripe} = bm_auth:decode_address(To),
 %
@@ -152,19 +181,22 @@ init(#message{hash=Id, to=To, from=From, subject=Subject, enc=Enc, text=Text, st
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
-%% the event. It is also called if a timeout occurs.
-%%
-%% @spec state_name(Event, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%% State for waiting PubKey for encryption
+%% 
 %% @end
 %%--------------------------------------------------------------------
-wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->  % {{{1
+-spec wait_pubkey(term(), #state{}) ->  % {{{1
+                  {next_state, NextStateName, NextState} |
+                  {next_state, NextStateName, NextState, Timeout} |
+                  {stop, Reason, NewState} when
+      NextStateName :: atom(),
+      NewState :: #state{},
+      Timeout :: integer(),
+      Reason :: term(),
+      NewState :: atom().
+
+%% Timeout check for PubKey in DB and rsend GetPubKey  % {{{2
+wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     case bm_db:lookup(pubkey, Ripe) of
         [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
@@ -181,15 +213,47 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->  % {{{1
             Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
             {next_state, wait_pubkey, State#state{type=msg, message=NMessage}, Timeout}
     end;
-wait_pubkey({pubkey, #pubkey{pek=PEK, psk=PSK, hash=Ripe}}, #state{hash=Ripe, message=Message}=State) ->  % {{{1
+
+%% Receive PubKey and check compability  % {{{2
+wait_pubkey({pubkey,
+             #pubkey{pek=PEK,
+                     psk=PSK,
+                     hash=Ripe}},
+            #state{hash=Ripe,
+                   message=Message}=State) ->
             NMessage = Message#message{status=encrypt_message},
             bm_db:insert(sent, [NMessage]),
     {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 0};
-wait_pubkey(Event, State) ->  % {{{1
+
+%% Default {{{2
+wait_pubkey(Event, State) ->
     error_logger:warning_msg("Wrong event: ~p status ~p in ~p~n", [Event, ?MODULE, State]),
     {next_state, wait_pubkey, State}.
 
-encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message = #message{payload=Payload} = Message} = State) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Message encryption stage
+%% 
+%% @end
+%%--------------------------------------------------------------------
+-spec encrypt_message(term(), #state{}) ->  % {{{1
+                  {next_state, NextStateName, NextState} |
+                  {next_state, NextStateName, NextState, Timeout} |
+                  {stop, Reason, NewState} when
+      NextStateName :: atom(),
+      NewState :: #state{},
+      Timeout :: integer(),
+      Reason :: term(),
+      NewState :: atom().
+
+%% Decrypt % {{{2
+encrypt_message(timeout,
+                #state{pek=PEK,
+                       psk=PSK,
+                       hash=Ripe,
+                       type=Type,
+                       message = #message{payload=Payload} = Message} = State) ->
     error_logger:info_msg("Encrypting ~n"),
     IV = crypto:rand_bytes(16),
     {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
@@ -201,11 +265,36 @@ encrypt_message(timeout, #state{pek=PEK, psk=PSK, hash=Ripe, type=Type, message 
     HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
     {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 0};
-encrypt_message(Event, State) ->  % {{{1
+
+%% Default {{{2
+encrypt_message(Event, State) ->
     error_logger:warning_msg("Encrypting wrong event ~p~n", [Event]),
     {next_state, encrypt_message, State, 0}.
 
-make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payload, to=To, from=From}=Message}=State) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Inv creating stage
+%% 
+%% @end
+%%--------------------------------------------------------------------
+-spec make_inv(term(), #state{}) ->  % {{{1
+                  {next_state, NextStateName, NextState} |
+                  {next_state, NextStateName, NextState, Timeout} |
+                  {stop, Reason, NewState} when
+      NextStateName :: atom(),
+      NewState :: #state{},
+      Timeout :: integer(),
+      Reason :: term(),
+      NewState :: atom().
+
+%% Work cycle {{{2
+make_inv(timeout,
+         #state{type=Type,
+                message= #message{hash=MID,
+                                  payload = Payload,
+                                  to=To,
+                                  from=From}=Message}=State) ->
     Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     TPayload = case Type of 
         msg ->
@@ -238,30 +327,9 @@ make_inv(timeout, #state{type=Type, message= #message{hash=MID, payload = Payloa
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     {stop, {shutdown, "Ready"}, State};
 
-make_inv(_Event, State) ->  % {{{1
+%% Default {{{2
+make_inv(_Event, State) ->
     {next_state, make_inv, State, 0}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_event/[2,3], the instance of this function with
-%% the same name as the current state name StateName is called to
-%% handle the event.
-%%
-%% @spec state_name(Event, From, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
-%% @end
-%%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->  % {{{1
-    Reply = ok,
-    {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -344,7 +412,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-send_all([], _Msg) ->  % {{{1
+
+%% Send to all encrypotors
+-spec send_all([pid()], term()) -> ok.  % {{{1
+send_all([], _Msg) ->
     ok;
 send_all([Pid|Rest], Msg) ->  % {{{1
     {_, P, _, _} = Pid,
