@@ -1,6 +1,7 @@
 -module(bm_decryptor_sup).
 
 -behaviour(supervisor).
+-include("../include/bm.hrl").
 
 %% API
 -export([start_link/0]).
@@ -26,6 +27,13 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds decryptor process w/new keypair
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec add_decryptor(#privkey{}) -> supervisor:startchild_ret().
 add_decryptor(PrivKey) ->
     %TODO
     supervisor:start_child(?MODULE, ?CHILD({cryptor, make_ref()}, 

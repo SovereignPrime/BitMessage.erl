@@ -38,13 +38,40 @@
 start_link() ->  % {{{1
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-message_arrived(Data, Hash, Address) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback when new incomming message arrived
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec message_arrived(Data, Hash, Address) ->  ok when % {{{1
+      Data :: binary(),
+      Hash :: binary(),
+      Address :: binary().
+message_arrived(Data, Hash, Address) ->
     gen_server:cast(?MODULE, {arrived, message, Hash, Address, Data}).
 
-broadcast_arrived(Data, Hash, Address) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback when new incomming broadcast arrived
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec broadcast_arrived(Data, Hash, Address) ->  ok when % {{{1
+      Data :: binary(),
+      Hash :: binary(),
+      Address :: binary().
+broadcast_arrived(Data, Hash, Address) ->
     gen_server:cast(?MODULE, {arrived, broadcast,Hash, Address, Data}).
 
-send_message(Message) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Send a message
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec send_message(#message{}) ->  ok. % {{{1
+send_message(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
                               type=msg},
     mnesia:transaction(fun() ->
@@ -52,10 +79,29 @@ send_message(Message) ->  % {{{1
                        end),
     gen_server:cast(?MODULE, {send, msg, NMessage}).
 
-send_broadcast(Message) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Send a broadcast TODO
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec send_broadcast(#message{}) ->  ok. % {{{1
+send_broadcast(Message) ->
+    NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
+                              type=msg},
+    mnesia:transaction(fun() ->
+                               mnesia:write(sent, NMessage, write)
+                       end),
     gen_server:cast(?MODULE, {send, broadcast, Message}).
 
-register_receiver(Callback) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Registers callback module
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec register_receiver(atom()) -> ok.  % {{{1
+register_receiver(Callback) ->
     gen_server:cast(?MODULE, {register, Callback}).
 
 %%%===================================================================
@@ -91,7 +137,7 @@ init([]) ->  % {{{1
 %% @doc
 %% Handling call messages
 %%
-%% @spec handle_call(Request, From, State) ->  % {{{1
+%% @spec handle_call(Request, From, State) ->
 %%                                   {reply, Reply, State} |
 %%                                   {reply, Reply, State, Timeout} |
 %%                                   {noreply, State} |
@@ -207,6 +253,9 @@ handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.
 
+%% @doc Default callback
+%%
+-spec received(any()) -> ok.
 received(_) ->  % {{{1
     ok.
 %%--------------------------------------------------------------------

@@ -28,9 +28,9 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, string()}.  % {{{1
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -38,9 +38,10 @@ start_link() ->
 %% @doc
 %% Sends formed Message to all addrs
 %%
-%% @spec send_broadcast(Message) -> ok
 %% @end
 %%--------------------------------------------------------------------
+-spec send_broadcast(Message) -> ok when  % {{{1
+      Message :: iodata().
 send_broadcast(Message) ->
     gen_server:cast(?MODULE, {send, Message}).
 
@@ -48,12 +49,19 @@ send_broadcast(Message) ->
 %% @doc
 %% Register new peer in sender
 %%
-%% @spec send_broadcast(Message) -> ok
 %% @end
 %%--------------------------------------------------------------------
+-spec register_peer(gen_tcp:socket()) -> ok.  % {{{1
 register_peer(Socket) ->
     gen_server:cast(?MODULE, {register, Socket}).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Unregister peer in sender
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec unregister_peer(gen_tcp:socket()) -> ok.  % {{{1
 unregister_peer(Socket) ->
     gen_server:cast(?MODULE, {unregister, Socket}).
 
@@ -159,17 +167,26 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Broadcasts `Message` to all `Sockets` through `Transport`
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec broadcast(iodata(), [gen_tcp:socket()], atom()) -> ok. % {{{1
 broadcast(_, [], _) ->
     ok;
 broadcast(Message, [Socket| Rest], Transport) ->
     inet:setopts(Socket, [{send_timeout, 100}]),
     case Transport:send(Socket, Message) of
         ok ->
-            ok;
+            broadcast(Message, Rest, Transport);
         {error, timeout} ->
-            ok;
+            broadcast(Message, Rest, Transport);
         {error, _} ->
             error_logger:warning_msg("Deleting socket: ~p~n", [Socket]),
-            ets:delete(addrs, Socket)
-    end,
-    broadcast(Message, Rest, Transport).
+            ets:delete(addrs, Socket),
+            broadcast(Message, Rest, Transport)
+    end.

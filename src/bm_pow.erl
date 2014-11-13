@@ -29,19 +29,32 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, string()}. % {{{1
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts POW counting for `Payload`
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec make_pow(binary()) -> integer().  % {{{1
 make_pow(Payload) ->
     gen_server:call(?MODULE, {make, Payload}, infinity).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Check POW correctness for object
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec check_pow(binary()) -> boolean().  % {{{1
 check_pow(<<Nonce:64/big-integer, Payload/bytes>>) ->
     check_pow(<<Nonce:64/big-integer, Payload/bytes>>, 320, 14000).
 check_pow(<<Nonce:64/big-integer, Payload/bytes>>, NTpB, ExtraBytes) ->
-    %Target = 2 bxor trunc(64 / ((size(Payload) + 14000)* 320)),
     Target = bm_types:pow(2 , 64) div ((size(Payload) + ExtraBytes)* NTpB),
     InitialHash = crypto:hash(sha512, Payload),
     <<ResultHash:64/big-integer, _/bytes>> = bm_auth:dual_sha(<<Nonce:64/big-integer, InitialHash/bytes>>),  
@@ -62,7 +75,7 @@ check_pow(<<Nonce:64/big-integer, Payload/bytes>>, NTpB, ExtraBytes) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([]) ->  % {{{1
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -79,8 +92,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({make, Payload}, _From, State) ->
-    %Target = 2 bxor trunc(64 / ((size(Payload) + 14000 + 8)* 320)),
+handle_call({make, Payload}, _From, State) ->  % {{{1
     Target = bm_types:pow(2 , 64) / ((size(Payload) + 14000 + 8)* 320),
     InitialHash = crypto:hash(sha512, Payload),
     {ok, Reply, _} = compute_pow(InitialHash, Target),
@@ -99,7 +111,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -112,7 +124,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -126,7 +138,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -137,14 +149,20 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec compute_pow(binary(), integer()) -> integer().  % {{{1
 compute_pow(InitialHash, Target) ->
     compute_pow(InitialHash, Target, 99999999999999999999, 0).
+
+-spec compute_pow(binary(), Target, TrialValue, Nonce) -> Nonce  when % {{{1
+      Target :: integer(),
+      TrialValue :: integer(),
+      Nonce :: integer().
 compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target ->
     <<ResultHash:8/big-integer-unit:8, _/bytes>> = bm_auth:dual_sha(<<(Nonce + 1):64/big-integer, InitialHash/bytes>>),
     compute_pow(InitialHash, Target, ResultHash, Nonce + 1);

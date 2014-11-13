@@ -2,11 +2,7 @@
 -define(ADDR_PREFIX, "BM-").
 
 %% @doc Binary message type
--type message_bin() :: <<?MAGIC:4/bytes,
-                         Command:12/bytes,
-                         Length:32/big-integer,
-                         Check:4/bytes,
-                         Payload/bytes>>.
+-type message_bin() :: binary().
 
 %% @doc Network address storing structure
 -record(network_address,
