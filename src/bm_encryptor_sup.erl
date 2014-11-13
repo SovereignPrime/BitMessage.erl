@@ -2,6 +2,8 @@
 
 -behaviour(supervisor).
 
+-include("../include/bm.hrl").
+
 %% API
 -export([start_link/0]).
 -export([add_encryptor/1]).
@@ -20,12 +22,19 @@
 %% @doc
 %% Starts the supervisor
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link() -> {ok, Pid} | ignore | {error, Error} {{{1
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds new encryptor process for message
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec add_encryptor(#message{}) -> supervisor:startchild_ret().
 add_encryptor(DMessage) ->
     supervisor:start_child(?MODULE, [DMessage]).
 
