@@ -19,9 +19,9 @@
 %% @doc
 %% Starts the supervisor
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> {ok, pid()} | ignore | {error, string()}.
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
