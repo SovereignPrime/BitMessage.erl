@@ -35,16 +35,28 @@
 start_link(Init) ->  % {{{1
     gen_server:start_link(?MODULE, [Init], []).
 
-decrypt_message(Data, Hash) ->  % {{{1
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds message to decrypt
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec decrypt_message(binary(), binary()) -> ok. % {{{1
+decrypt_message(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
     send_all(Pids, {decrypt, message, Hash, Data}).
 
-decrypt_broadcast(Data, Hash) ->  % {{{1
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds broadcast to decrypt
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec decrypt_broadcast(binary(), binary()) -> ok. % {{{1
+decrypt_broadcast(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
     send_all(Pids, {decrypt, broadcast, Hash, Data}).
-
-encrypt_broadcast(Data) ->  % {{{1
-    gen_server:cast(?MODULE, {encrypt, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -62,7 +74,6 @@ encrypt_broadcast(Data) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 init([Init]) ->  % {{{1
-    %bm_dispatcher:register_cryptor(self()),
     {ok, Init}.
 
 %%--------------------------------------------------------------------
@@ -121,21 +132,6 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
     end,
     {noreply, State};
 
-handle_cast({encrypt, Type, Payload}, #state{type=encryptor, key=PubKey}=State) ->  % {{{1
-    MLength = byte_size(Payload),
-    IV = crypto:rand_bytes(16),
-    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
-    XP = crypto:compute_key(ecdh, PubKey, Keyr, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, Payload),
-    HMAC = crypto:hmac(sha256, M, EMessage),
-    case Type of 
-        message ->
-            bm_dispatcher:message_sent(EMessage);
-        broadcast ->
-            bm_dispatcher:broadcast_sent(EMessage)
-    end,
-    {noreply, State};
 handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
@@ -180,6 +176,12 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @doc Sends cast to all decryptors
+%%
+-spec send_all(PIDs, Msg) -> ok when
+      PIDs :: [pid()],
+      Msg :: term().
 send_all([], _Msg) ->  % {{{1
     ok;
 send_all([Pid|Rest], Msg) ->  % {{{1
