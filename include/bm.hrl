@@ -52,7 +52,7 @@
          psk :: binary(),
          pek :: binary(),
          time :: bm_types:timestamp(),
-         public :: boolean()
+         public :: binary()
         }).
 
 %% Messages and broadcasts storing structure
