@@ -184,7 +184,7 @@ generate_keys(Label, Stream, EighteenthByteRipe) ->
                      label=Label,
                      time=bm_types:timestamp()};
         {<<0, Ripe/bytes>>, false} ->
-                     #privkey{hash=Ripe, 
+            #privkey{hash=Ripe, 
                      address=bm_auth:encode_address(3, Stream, <<0, Ripe/bytes>>),
                      psk=PotentialPrivSign,
                      pek=PotentialPrivKey,

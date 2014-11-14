@@ -188,7 +188,7 @@ check_packet(_, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec analyse_packet(Command, Length, Payload, State) -> State when  % {{{1
-      Command :: <<_:12>>,
+      Command :: <<_:96>>,
       Length :: non_neg_integer(),
       Payload :: binary(),
       State :: #state{}.
@@ -502,13 +502,26 @@ conection_fully_established(#state{socket=Socket,
     Time = bm_types:timestamp(),
     % Check after here
 
-    bm_sender:send_broadcast(bm_message_creator:create_message(<<"addr">>, bm_types:encode_network(#network_address{ip=Ip, port=Port, time=Time, stream=Stream}))),
+    bm_sender:send_broadcast(
+      bm_message_creator:create_message(
+        <<"addr">>,
+        bm_types:encode_network(
+          #network_address{ip=Ip,
+                           port=Port,
+                           time=Time,
+                           stream=Stream}))),
+
     Addrs = bm_message_creator:create_addrs_for_stream(Stream),
     lists:foreach(fun(Addr) ->
-            Transport:send(Socket, Addr)
+                          Transport:send(Socket, Addr),
+                          ok
             end, Addrs),
     Invs = bm_message_creator:create_big_inv(Stream, []),
-    lists:foreach(fun(I) -> Transport:send(Socket, I) end, Invs), %TODO: aware objects excluding
+    lists:foreach(fun(I) ->
+                          Transport:send(Socket, I),
+                          ok 
+                  end,
+                  Invs), %TODO: aware objects excluding
     State;
 conection_fully_established(State) ->
     State.
@@ -652,7 +665,8 @@ get_pubkey_fun_generator(Packet, State) ->
             end
     end.
 
--spec msg_fun_generator(binary(), #state{}) -> fun((binary()) -> #state{}).  %  {{{2
+-spec msg_fun_generator(binary(), State) -> fun((binary()) -> State) when  %  {{{2
+ State :: #state{}.
 msg_fun_generator(EMessage, State) ->
     fun(Hash) ->
             case check_ackdata(EMessage) of
@@ -666,18 +680,22 @@ msg_fun_generator(EMessage, State) ->
 
 -spec broadcast_fun_generator(integer(),  % {{{2
                               binary(),
-                              #state{}) ->  fun((binary()) -> #state{}).
+                              State) ->  fun((binary()) -> State) when
+      State :: #state{}.
 broadcast_fun_generator(BVer, EMessage, State) ->
     fun(Hash) ->
             case BVer of
                 1 ->
-                    bm_dispatcher:broadcast_arrived(EMessage, Hash, broadcast);
+                    bm_dispatcher:broadcast_arrived(EMessage,
+                                                    Hash,
+                                                    <<"broadcast">>), %% DEPRECATED
+                    State;
                 2 ->
-                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash);
+                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash),
+                    State;
                 _ ->
-                    ok
-            end,
-            State
+                    State
+            end
     end.
 
 %%%
@@ -704,6 +722,6 @@ check_ackdata(Payload) ->
             false;
         [Message] ->
             error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
-            bm_db:insert(sent, [ Message#message{status=ok} ]),
+            bm_db:insert(sent, [Message#message{status=ok}]),
             true
     end.

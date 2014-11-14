@@ -10,7 +10,8 @@
          broadcast_arrived/3,
          register_receiver/1,
          send_message/1,
-         send_broadcast/1
+         send_broadcast/1,
+         received/1
 ]).
 
 %% gen_server callbacks
@@ -113,23 +114,17 @@ register_receiver(Callback) ->
 %% @doc
 %% Initializes the server
 %%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->  % {{{1
+-spec init([]) -> {ok, #state{}}.  % {{{1
+init([]) ->
     bm_db:wait_db(),
-    case bm_db:select(sent,[{#message{status='new', _='_'}, [], ['$_']},
-                            {#message{status='wait_pubkey', _='_'}, [], ['$_']},
-                            {#message{status='encrypt_message', _='_'}, [], ['$_']}], 10000) of
-        [ Messages ] ->
-            io:format("~p~n", [Messages]),
-            lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages);
-        [] ->
-            ok
-    end,
+    Messages = bm_db:select(sent,
+                            [{#message{status='new', _='_'}, [], ['$_']},
+                             {#message{status='wait_pubkey', _='_'}, [], ['$_']},
+                             {#message{status='encrypt_message', _='_'}, [], ['$_']}],
+                            10000),
+    lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -170,13 +165,13 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                 R
        end,
     {Stream, R2} = bm_types:decode_varint(R1),
-    <<BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
+    <<_BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
     R4 = case AddrVer of
         2 ->
             R3;
         MV when MV >= 3 ->
-            {NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
-            {ExtraBytes, RV1} = bm_types:decode_varint(RV),
+            {_NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
+            {_ExtraBytes, RV1} = bm_types:decode_varint(RV),
             RV1
         end,
     case Type of

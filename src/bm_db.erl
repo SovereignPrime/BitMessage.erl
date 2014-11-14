@@ -32,13 +32,18 @@
 -type type() :: message 
              | pubkey 
              | privkey
+             | inventory
              | network_address.
 
--type table() :: type() | 'incomming' | 'sent'.
+-type table() :: type() 
+                | 'incoming' 
+                | 'sent' 
+                | 'addr'.
 
 -type type_record() :: #message{}
                     | #pubkey{}
                     | #privkey{}
+                    | #inventory{}
                     | #network_address{}.
 
 %%%===================================================================
@@ -61,20 +66,20 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec insert(type(), [type_record()]) -> {atomic, ok} | {error, atom()}. %  {{{1
+-spec insert(table(), [type_record()]) -> {atomic, ok} | {error, atom()}. %  {{{1
 insert(Type, Data) ->
     gen_server:call(?MODULE, {insert, Type, Data}).
 
 %% @doc Gets id of first element of `Type` table
 %%
--spec first(type()) -> any().
-first(Type)-> %  {{{1
+-spec first(table()) -> any(). %  {{{1
+first(Type)->
     gen_server:call(?MODULE, {first, Type}).
 
 %% @doc Gets id of next element of `Type` table
 %%
--spec next(type(), term()) -> any().
-next(Type, Prev)-> %  {{{1
+-spec next(table(), any()) -> any(). %  {{{1
+next(Type, Prev)->
     gen_server:call(?MODULE, {next, Type, Prev}).
 
 %% @doc Gets element from `Type` table with `ID`
@@ -85,27 +90,26 @@ lookup(Type, Id)->
 
 %% @doc Fold `Fun` through all `Type` elements
 %%
--spec foldr(fun((type_record(), TAcc) -> term()), TAcc, type()) -> any().
-foldr(Fun, Acc, Type)-> %  {{{1
+-spec foldr(fun((type_record(), TAcc) -> term()), TAcc, type()) -> any(). %  {{{1
+foldr(Fun, Acc, Type)->
     gen_server:call(?MODULE, {foldr, Fun, Type, Acc}).
 
 %% @doc Select `MatchSpec` for `Type` limit `N`
 %%
--spec select(type(), MatchSpec, non_neg_integer()) -> [type_record()] when
-      MatchSpec :: ets:match_spec().
-select(Type, MatchSpec, N)-> %  {{{1
+-spec select(table(), [MatchSpec], non_neg_integer()) -> [type_record()] when  % {{{1
+      MatchSpec :: {type_record(), [tuple()], [atom()]}.
+select(Type, MatchSpec, N)->
     gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
 
 %% @doc Matches `MatchSpec` for `Type` 
 %%
--spec match(type(), MatchSpec) -> [type_record()] when
-      MatchSpec :: ets:match_spec().
-match(Type, MatchSpec)-> %  {{{1
+-spec match(table(), type_record()) -> [type_record()].  %  {{{1
+match(Type, MatchSpec)->
     gen_server:call(?MODULE, {match, Type, MatchSpec}).
 
 %% @doc Deletes element w/`Id` from `Type` table
 %%
--spec delete(type(), term()) -> ok.
+-spec delete(table(), term()) -> ok.
 delete(Type, Id)-> %  {{{1
     gen_server:cast(?MODULE, {del, Type, Id}).
 
@@ -125,7 +129,8 @@ clear(Addr, Inv, PubKey) -> %  {{{1
 %% Selects messages w/o akc to resend
 %%
 %% Used by bm_clear_fsm ??? 
--spec ackselect(integer()) -> [#message{}].
+-spec ackselect(integer()) -> {atomic, [#message{}]} 
+                              | {error, string()}.
 ackselect(MinInvAge) -> %  {{{1
     gen_server:call(?MODULE, {ackselect, MinInvAge}).
 
@@ -215,7 +220,7 @@ handle_call({foldr, Fun,  Type, Acc}, _From, State) -> %  {{{1
     {reply, Data, State};
 handle_call({select, Type, MatchSpec, N}, _From, State) -> %  {{{1
      {atomic, Data} = mnesia:transaction(fun() ->
-                case mnesia:select(Type, MatchSpec, N, read) of %  {{{2
+                case mnesia:select(Type, MatchSpec, N, read) of
                     {D, C} ->
                         iterate(C, [ D ]);
                     '$end_of_table' ->
@@ -262,18 +267,52 @@ handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
                                Time= bm_types:timestamp(),
                                Len = mnesia:table_info(inventory, size),
                                if Len >= 5000 ->
-                                      Addrs = mnesia:select(addr, [{#network_address{time='$1', _='_'}, [{'<', '$1', (Time - Addr)}], ['$_']}]),
+                                      Addrs = mnesia:select(addr,
+                                                            [{#network_address{
+                                                                 time='$1',
+                                                                 _='_'},
+                                                              [{'<',
+                                                                '$1',
+                                                                (Time - Addr)}],
+                                                              ['$_']}]),
+
                                       lists:foreach(fun(A) -> 
                                                             mnesia:delete_object(A)
                                                     end, Addrs),
-                                      Invs = mnesia:select(inventory, [
-                                                                       {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - Inv)}, {'/=', '$2', <<"pubkey">>}], ['$_']},
-                                                                       {#inventory{time='$1', type='$2', _='_'}, [{'<', '$1', (Time - PubKey)}, {'==', '$2', <<"pubkey">>}], ['$_']}
-                                                                      ]),
+                                      Invs = mnesia:select(inventory,
+                                                           [
+                                                            {#inventory{time='$1',
+                                                                        type='$2',
+                                                                        _='_'},
+                                                             [{'<',
+                                                               '$1',
+                                                               (Time - Inv)},
+                                                              {'/=',
+                                                               '$2',
+                                                               <<"pubkey">>}],
+                                                             ['$_']},
+                                                            {#inventory{time='$1',
+                                                                        type='$2',
+                                                                        _='_'},
+                                                             [{'<',
+                                                               '$1',
+                                                               (Time - PubKey)},
+                                                              {'==',
+                                                               '$2',
+                                                               <<"pubkey">>}],
+                                                             ['$_']}
+                                                           ]),
                                       lists:foreach(fun(A) ->
                                                             mnesia:delete_object(A)
                                                     end, Invs),
-                                      PubKeys = mnesia:select(pubkey, [{#pubkey{time='$1', _='_'}, [{'<', '$1', (Time - PubKey)}], ['$_']}]),
+                                      PubKeys = mnesia:select(pubkey,
+                                                              [{#pubkey{time='$1',
+                                                                        _='_'},
+                                                                [{'<',
+                                                                  '$1',
+                                                                  (Time - PubKey)}],
+                                                                ['$_']}]),
+
                                       lists:foreach(fun(A) ->
                                                             mnesia:delete_object(A)
                                                     end, PubKeys);

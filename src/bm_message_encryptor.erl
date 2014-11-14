@@ -102,7 +102,7 @@ init(#message{hash=Id,
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
             {EK, SK, Pub};
         [] ->
-            error_logger:warning_warning("No addres ~n"),
+            error_logger:warning_msg("No addres ~n"),
             {stop, {shudown, "Not my address"}}
     end,
     

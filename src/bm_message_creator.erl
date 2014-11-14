@@ -25,7 +25,7 @@ create_message(Command, Payload) ->
 %%
 %% Creates object message looking inventory for `Hash`
 %% in database and creating `Message`
--spec create_obj([Hash]) -> message_bin() when   % {{{1
+-spec create_obj([Hash]) -> message_bin() | no_return() when   % {{{1 ???
       Hash ::binary().
 create_obj(Hash) ->
     case bm_db:lookup(inventory, Hash) of
@@ -49,7 +49,7 @@ create_inv(Hashes) ->
 %% Creates inv message finding data in db by `Stream` 
 %% TODO: make `Excludes` work to exclude already known invs
 %% Takes age parameters from config file
--spec create_big_inv(Stream, Exclude) -> message_bin() when  % {{{1
+-spec create_big_inv(Stream, Exclude) -> [message_bin()] when  % {{{1
       Stream :: integer(),
       Exclude :: list().
 create_big_inv(Stream, Exclude) ->
@@ -87,7 +87,7 @@ create_big_inv(Stream, Exclude) ->
 %% @doc Creates addr message
 %%
 %% Creates addr message for `Stream`
--spec create_addrs_for_stream(Stream) -> message_bin() when  % {{{1
+-spec create_addrs_for_stream(Stream) -> [message_bin()] when  % {{{1
       Stream :: integer().
 create_addrs_for_stream(Stream) ->
     {ok, NodeAge} = application:get_env(bitmessage, 'max_age_of_node'),
@@ -95,13 +95,43 @@ create_addrs_for_stream(Stream) ->
     Time = trunc(MSec * 1.0e6 + Sec),
     Old = Time - NodeAge,
     Hashes = bm_db:select(addr, [
-                {#network_address{stream=Stream, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
-                {#network_address{stream=Stream * 2, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']},
-                {#network_address{stream=Stream * 2 + 1, time='$2', ip='$3', port='$4'}, [{'>', '$2', Old}], ['$_']}
-                ], 1000),
-            lists:map(fun(Hash) ->  
-                    create_message(<<"addr">>, bm_types:encode_list(Hash, fun bm_types:encode_network/1))
-        end, Hashes).
+                {#network_address{stream=Stream,
+                                  time='$2',
+                                  ip='$3',
+                                  port='$4'},
+                 [{'>',
+                   '$2',
+                   Old}],
+                 ['$_']},
+
+                {#network_address{stream=Stream * 2,
+                                  time='$2',
+                                  ip='$3',
+                                  port='$4'},
+                 [{'>',
+                   '$2',
+                   Old}],
+                 ['$_']},
+
+                {#network_address{stream=Stream * 2 + 1,
+                                  time='$2',
+                                  ip='$3',
+                                  port='$4'},
+                 [{'>',
+                   '$2',
+                   Old}],
+                 ['$_']}
+                ],
+                          1000),
+            lists:map(
+              fun(Hash) ->  
+                    create_message(
+                      <<"addr">>,
+                      bm_types:encode_list(
+                        Hash,
+                        fun bm_types:encode_network/1))
+              end,
+              Hashes).
 
 %% @doc Creates pubkey inventory from privkey structure
 %%

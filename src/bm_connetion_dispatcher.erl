@@ -103,13 +103,8 @@ init([]) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_call(register, _From, #state{addr=Addr}=State) ->  % {{{1
-    case connect_peer(Addr) of
-        {ok, Socket, NAddr} ->
-            %gen_tcp:controlling_process(Socket, From),
-            {reply, {gen_tcp, Socket}, State#state{addr=NAddr}};
-         E -> 
-            {stop, E, State}
-    end;
+    {ok, Socket, NAddr} = connect_peer(Addr),
+    {reply, {gen_tcp, Socket}, State#state{addr=NAddr}};
 handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
@@ -172,13 +167,13 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %% @private
 %% @doc Peer cursor function
 %%
--spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when
+-spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when  % {{{1
       Ret :: {ok, gen_tcp:socket(), inet:ip4_address()}.
-connect_peer('$end_of_table') ->  % {{{1
+connect_peer('$end_of_table') ->
     error_logger:info_msg("Connecton list ended~n"),
     timer:sleep(500000),
     connect_peer(bm_db:first(addr));
-connect_peer(Addr) ->  % {{{1
+connect_peer(Addr) ->
     case bm_db:lookup(addr, Addr) of
         [ #network_address{ip=Ip, port=Port, stream=_Stream, time=_Time} ]  ->
             case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of

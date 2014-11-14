@@ -109,7 +109,8 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
                               XLength:16/big-integer, X:XLength/bytes, 
                               YLength:16/big-integer, Y:YLength/bytes, 
                               Data/bytes>> = Payload}, 
-            #privkey{address=Address, pek=PrivKey}=State) ->
+            #privkey{address=Address,
+                     pek=PrivKey}=State) ->
     MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     XPad = << <<0>> || _<- lists:seq(1, 32 - XLength)>>,

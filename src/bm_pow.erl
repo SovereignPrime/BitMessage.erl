@@ -155,14 +155,14 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec compute_pow(binary(), integer()) -> integer().  % {{{1
+-spec compute_pow(binary(), float()) -> {ok, non_neg_integer(), non_neg_integer()}.  % {{{1
 compute_pow(InitialHash, Target) ->
     compute_pow(InitialHash, Target, 99999999999999999999, 0).
 
--spec compute_pow(binary(), Target, TrialValue, Nonce) -> Nonce  when % {{{1
-      Target :: integer(),
-      TrialValue :: integer(),
-      Nonce :: integer().
+-spec compute_pow(binary(), Target, TrialValue, Nonce) -> {ok, Nonce, TrialValue}  when % {{{1
+      Target :: float(),
+      TrialValue :: non_neg_integer(),
+      Nonce :: non_neg_integer().
 compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target ->
     <<ResultHash:8/big-integer-unit:8, _/bytes>> = bm_auth:dual_sha(<<(Nonce + 1):64/big-integer, InitialHash/bytes>>),
     compute_pow(InitialHash, Target, ResultHash, Nonce + 1);

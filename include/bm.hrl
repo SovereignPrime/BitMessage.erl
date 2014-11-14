@@ -7,11 +7,11 @@
 %% @doc Network address storing structure
 -record(network_address,
         {
-         ip :: inet:ip_address(),
-         port ::inet:port_number(),
-         time :: bm_types:timestamp(),
-         stream=1 :: integer(),
-         services=1 :: integer()
+         ip :: inet:ip_address() | atom(),
+         port ::inet:port_number() | atom(),
+         time :: bm_types:timestamp() | atom(),
+         stream=1 :: integer() | atom(),
+         services=1 :: integer() | atom() 
         }).
 
 %% @doc Decoded bitmessage address structure
@@ -25,22 +25,22 @@
 %% Inventory structure
 -record(inventory,
         {
-         hash ::binary(),
-         stream=1 :: integer(),
-         payload :: binary(),
-         type :: binary(),
-         time :: bm_types:timestamp()
+         hash ::binary() | atom(),
+         stream=1 :: integer() | atom(),
+         payload :: binary() | atom(),
+         type :: binary() | atom(),
+         time :: bm_types:timestamp() | atom()
         }).
 
 %% Public Key storing structure
 -record(pubkey,
         {
-         hash :: binary(),
-         data :: binary(),
-         psk :: binary(),
-         pek :: binary(),
-         used=false :: boolean(),
-         time :: bm_types:timestamp()
+         hash :: binary() | atom(),
+         data :: binary() | atom(),
+         psk :: binary() | atom(),
+         pek :: binary() | atom(),
+         used=false :: boolean() | atom(),
+         time :: bm_types:timestamp() | atom()
         }).
 
 %% Private Keys storing structure
@@ -58,16 +58,16 @@
 %% Messages and broadcasts storing structure
 -record(message,
         {
-         hash :: binary(),
-         to :: binary(),
-         from :: binary(),
-         subject :: binary(),
-         enc=2 :: integer(),
-         folder :: string(),  % ???
-         text :: binary(),
-         status=new :: atom(),  % Variants
-         ackdata :: binary(),
-         payload :: binary(),
-         type :: binary()
+         hash :: binary() | atom(),
+         to :: binary() | atom(),
+         from :: binary() | atom(),
+         subject :: binary() | atom(),
+         enc=2 :: integer() | atom(),
+         folder :: string() | atom(),  % ???
+         text :: binary() | atom(),
+         status=new :: atom() | atom(),  % Variants
+         ackdata :: binary() | atom(),
+         payload :: binary() | atom(),
+         type :: binary() | atom()
         }).
 

@@ -9,7 +9,9 @@
 %% Application callbacks
 %% ===================================================================
 
--spec start(application:start_type(), term()) -> supervisor:start_ret().
+-spec start(application:start_type(), term()) -> {ok, pid()} 
+                                                 | {error, _} 
+                                                 | {ok, pid(), _}.
 start(_StartType, _StartArgs) ->
     application:start(sasl),
     application:start(crypto),
