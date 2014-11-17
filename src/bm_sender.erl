@@ -3,7 +3,10 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([
+         start_link/0,
+         start_link/1
+        ]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -32,7 +35,11 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, string()}.  % {{{1
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [gen_tcp], []).
+
+-spec start_link(atom()) -> {ok, pid()} | ignore | {error, string()}.  % {{{1
+start_link(Transport) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Transport], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -80,9 +87,9 @@ unregister_peer(Socket) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([Transport]) ->
     ets:new(addrs, [named_table, public]),
-    {ok, #state{}}.
+    {ok, #state{transport=Transport}}.
 
 %%--------------------------------------------------------------------
 %% @private
