@@ -117,37 +117,3 @@ point_mult(P, N) when N rem 2 == 1 ->
     point_add(P, point_mult(P, N - 1));
 point_mult(P, N) ->
     point_mult(point_double(P), N div 2).
-
-
-%%%
-%% Test cases
-%%%
-
-
-dual_sha_test_() ->
-    [
-        ?_assert("0592a10584ffabf96539f3d780d776828c67da1ab5b169e9e8aed838aaecc9ed36d49ff1423c55f019e050c66c6324f53588be88894fef4dcffdb74b98e2b200" == bm_types:binary_to_hexstring(dual_sha("hello")))
-        ].
-
-generate_ripe_test_() ->
-    [
-        ?_assert("79a324faeebcbf9849f310545ed531556882487e" == bm_types:binary_to_hexstring(generate_ripe("hello")))
-        ].
-
-encode_address_test_() ->
-    [
-        ?_assert(encode_address(#address{version=2, stream=1, ripe = <<"12345678901234567890">>}) == <<"BM-4ZVsZN4foCh82rehBbDkHvRWdtEJyvNMBce">>),
-        ?_assert(encode_address(2, 1, <<"12345678901234567890">>) == <<"BM-4ZVsZN4foCh82rehBbDkHvRWdtEJyvNMBce">>),
-        ?_assert(encode_address(2, 1, <<0, "1234567890123456789">>) == <<"BM-onWacauk6NKp6MmuF6cBdaCFFKsozCr5v">>),
-        ?_assert(encode_address(2, 1, <<0, 0, "123456789123456789">>) == <<"BM-BbnDboCVo5NwApkngoNwb2JZA1wSevkg">>)
-
-        ].
-
-decode_encode_address_test_() ->
-    [
-        ?_assert(decode_address(encode_address(#address{version=2, stream=1, ripe = <<"12345678901234567890">>})) == #address{version=2, stream=1, ripe = <<"12345678901234567890">>}),
-        ?_assert(decode_address(encode_address(2, 1, <<"12345678901234567890">>)) == #address{version=2, stream=1, ripe= <<"12345678901234567890">>}),
-        ?_assert(decode_address(encode_address(2, 1, <<0, "1234567890123456789">>)) == #address{version=2, stream=1, ripe= <<0, "1234567890123456789">>}),
-        ?_assert(decode_address(encode_address(2, 1, <<0, 0, "123456789123456789">>)) == #address{version=2, stream=1, ripe= <<0, 0, "123456789123456789">>})
-
-        ].
