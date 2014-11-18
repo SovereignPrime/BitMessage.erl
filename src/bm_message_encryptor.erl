@@ -65,7 +65,7 @@ pubkey(PubKey) ->
 %% @end
 %%--------------------------------------------------------------------
 
-%% Init for already packed messages  {{{2
+%% Init for already packed messages  {{{1
 init(#message{to=To,
               from=From,
               subject=Subject,
@@ -78,7 +78,7 @@ init(#message{to=To,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
 
-%% Init for new and resending messages  {{{2
+%% Init for new and resending messages  {{{1
 init(#message{hash=Id,
               to=To,
               from=From,
@@ -110,7 +110,9 @@ init(#message{hash=Id,
     A = crypto:rand_bytes(32),
     AckData = <<Time:64/big-integer, 1, A/bytes>>,
     POW = bm_pow:make_pow(AckData),
-    Ack = bm_message_creator:create_message(<<"msg">>, <<POW:64/big-integer, AckData/bytes>>),
+    Ack = bm_message_creator:create_message(<<"msg">>,
+                                            <<POW:64/big-integer,
+                                              AckData/bytes>>),
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<1, %MSG version
@@ -136,7 +138,7 @@ init(#message{hash=Id,
     bm_db:insert(sent, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
-%% TODO: Init for broadcasts  {{{2
+%% TODO: Init for broadcasts  {{{1
 %init([#message{to=To,
 %from=From,
 %subject=Subject,
@@ -246,7 +248,7 @@ wait_pubkey(Event, State) ->
       Reason :: term(),
       NewState :: atom().
 
-%% Decrypt % {{{2
+%% Encrypt % {{{2
 encrypt_message(timeout,
                 #state{pek=PEK,
                        psk=PSK,
@@ -299,6 +301,7 @@ make_inv(timeout,
         msg ->
             #address{stream=Stream} = bm_auth:decode_address(To),
             <<Time:64/big-integer, 
+              %2:32/big-integer, % Type message
               (bm_types:encode_varint(Stream))/bytes, % Reciever's stream
               Payload/bytes>>;
         broadcast ->
@@ -324,7 +327,7 @@ make_inv(timeout,
                                        }]),
     error_logger:info_msg("Msg sent to ~p~n", [To]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    {stop, {shutdown, "Ready"}, State};
+    {stop, normal, State};
 
 %% Default {{{2
 make_inv(_Event, State) ->
