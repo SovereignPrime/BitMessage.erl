@@ -60,6 +60,8 @@ end_per_testcase(_TestCase, _Config) ->
 %%%===================================================================
 
 test_make_check(_Config) ->
-    Data = crypto:rand_bytes(32),
+    RND = crypto:rand_bytes(32),
+    Time = bm_types:timestamp() + 1024,
+    Data = <<Time:64/big-integer, RND/bytes>>,
     POW = bm_pow:make_pow(Data),
-    true=bm_pow:check_pow(<<POW:64/big-integer, Data/bytes>>).
+    true=bm_pow:check_pow(POW).

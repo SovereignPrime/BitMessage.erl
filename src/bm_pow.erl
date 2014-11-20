@@ -2,6 +2,9 @@
 
 -behaviour(gen_server).
 
+-define(MIN_NTPB, 1000).
+-define(MIN_PLEB, 1000).
+
 %% API
 -export([start_link/0]).
 
@@ -15,6 +18,7 @@
 
 -export([
     make_pow/1,
+    make_pow/3,
     check_pow/1,
     check_pow/3
     ]).
@@ -41,9 +45,17 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec make_pow(binary()) -> integer().  % {{{1
+-spec make_pow(binary()) -> binary().  % {{{1
 make_pow(Payload) ->
-    gen_server:call(?MODULE, {make, Payload}, infinity).
+    make_pow(Payload, ?MIN_NTPB, ?MIN_PLEB).
+
+-spec make_pow(Payload, NTpB, PLEB) -> Payload when % {{{1
+      Payload :: binary(),
+      NTpB :: non_neg_integer(),
+      PLEB :: non_neg_integer().
+make_pow(Payload, NTpB, PLEB) ->
+    Target = compute_terget(Payload, NTpB, PLEB),
+    gen_server:call(?MODULE, {make, Payload, Target}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,10 +64,10 @@ make_pow(Payload) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_pow(binary()) -> boolean().  % {{{1
-check_pow(<<Nonce:64/big-integer, Payload/bytes>>) ->
-    check_pow(<<Nonce:64/big-integer, Payload/bytes>>, 320, 14000).
+check_pow(Payload) ->
+    check_pow(Payload, ?MIN_NTPB, ?MIN_PLEB).
 check_pow(<<Nonce:64/big-integer, Payload/bytes>>, NTpB, ExtraBytes) ->
-    Target = bm_types:pow(2 , 64) div ((size(Payload) + ExtraBytes)* NTpB),
+    Target = compute_terget(Payload, NTpB, ExtraBytes),
     InitialHash = crypto:hash(sha512, Payload),
     <<ResultHash:64/big-integer, _/bytes>> = bm_auth:dual_sha(<<Nonce:64/big-integer, InitialHash/bytes>>),  
     ( ResultHash =< Target ).
@@ -92,10 +104,10 @@ init([]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({make, Payload}, _From, State) ->  % {{{1
-    Target = bm_types:pow(2 , 64) / ((size(Payload) + 14000 + 8)* 320),
+handle_call({make, Payload, Target}, _From, State) ->  % {{{1
     InitialHash = crypto:hash(sha512, Payload),
-    {ok, Reply, _} = compute_pow(InitialHash, Target),
+    {ok, POW, _} = compute_pow(InitialHash, Target),
+    Reply = <<POW:64/big-integer, Payload/bytes>>,
     {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -169,3 +181,12 @@ compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target ->
 compute_pow(_InitialHash, _Target, TrialValue, Nonce) ->
     {ok, Nonce, TrialValue}.
     
+-spec compute_terget(Payload, NTpB, PLEB) -> integer() when  % {{{1
+      Payload :: binary(),
+      NTpB :: non_neg_integer(),
+      PLEB :: non_neg_integer().
+compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
+    TTL = Time - bm_types:timestamp(),
+    PayloadLength = size(Payload) + 8,
+    PLPEB = PayloadLength + PLEB,
+    bm_types:pow(2 , 64) div (NTpB * (PLPEB + TTL * PLPEB div bm_types:pow(2, 16))).
