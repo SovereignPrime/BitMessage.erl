@@ -31,7 +31,7 @@ all() ->
     ].
 
 suite() ->
-    [{timetrap, {seconds, 160}}].
+    [{timetrap, {seconds, 1600}}].
 
 groups() ->
     [].
@@ -116,8 +116,8 @@ init_per_testcase(_TestCase, Config) ->
                  [PubKey]),
     bm_decryptor_sup:start_link(),
     meck:new(bm_pow),
-    meck:expect(bm_pow, make_pow, fun(_) ->
-                                          1024
+    meck:expect(bm_pow, make_pow, fun(Payload) ->
+                                          <<1024:64/big-integer, Payload/bytes>>
                                   end),
     meck:expect(bm_pow, check_pow, fun(<<POW:64/big-integer, _/bytes>>) ->
                                           POW == 1024
@@ -149,9 +149,13 @@ encode_decode_test(_Config) ->
                    text = <<"Just test text">>,
                    status=new,
                    type=msg},
-    meck:expect(bm_dispatcher, message_arrived, fun(DMSG, <<"TEST">>, Addr) ->
-                                                        ok
-                                                end),
+    meck:expect(bm_dispatcher,
+                message_arrived,
+                fun(DMSG,
+                    <<"TEST">>,
+                    Addr) ->
+                        ok
+                end),
     meck:expect(bm_sender,
                 send_broadcast,
                 fun(<<_:24/bytes, 
@@ -173,5 +177,6 @@ encode_decode_test(_Config) ->
                   bm_message_encryptor:start_link(MSG)
           end),
 
-    meck:wait(bm_sender, send_broadcast, '_', 160),
-    meck:wait(bm_dispatcher, message_arrived, '_', 160).
+    meck:wait(bm_pow, make_pow, '_', 1600),
+    meck:wait(bm_sender, send_broadcast, '_', 1600),
+    meck:wait(bm_dispatcher, message_arrived, '_', 1600).

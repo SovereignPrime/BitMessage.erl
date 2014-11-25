@@ -1,14 +1,18 @@
 -define(MAGIC, 16#e9, 16#be, 16#b4, 16#d9).
 -define(ADDR_PREFIX, "BM-").
 
+%% POW constants
+-define(MIN_NTPB, 1000).
+-define(MIN_PLEB, 1000).
+
 %% @doc Binary message type
 -type message_bin() :: binary().
 
 %% @doc Network address storing structure
 -record(network_address,
         {
-         ip :: inet:ip_address() | atom(),
-         port ::inet:port_number() | atom(),
+         ip={127, 0, 0, 1} :: inet:ip_address() | atom(),
+         port=8444 ::inet:port_number() | atom(),
          time :: bm_types:timestamp() | atom(),
          stream=1 :: integer() | atom(),
          services=1 :: integer() | atom() 

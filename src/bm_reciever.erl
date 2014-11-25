@@ -28,6 +28,7 @@
          remote_addr :: #network_address{}
         }).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
@@ -208,7 +209,7 @@ analyse_packet(<<"version",
                  Data/bytes>>,
               #state{stream=Stream,
                      init_stage=InitStage}=State) when Length > 83,
-                                                       Version > 1 ->
+                                                       Version >= 3 ->
     {_UA, StremsL} = bm_types:decode_varstr(Data),
     {Streams, _} = bm_types:decode_list(StremsL, fun bm_types:decode_varint/1),
     #state{transport=Transport, socket=Socket} = State,
@@ -232,6 +233,20 @@ analyse_packet(<<"version",
     end,
     OState;
 
+analyse_packet(<<"version",
+                 _/bytes>>,
+               Length,
+               <<Version:32/big-integer,
+                 1:64/big-integer, % 'services' field of protocol
+                 _Time:64/big-integer,
+                 _AddrRecv:26/bytes,
+                 _AddrFrom:26/bytes,
+                 _Nonce:8/bytes,
+                 _Data/bytes>>,
+              #state{transport=Transport,
+                     socket=Socket}=State) when Version < 3 ->
+    Transport:close(Socket),
+    State;
 %% Verack maessage  {{{3
 analyse_packet(<<"verack", _/bytes>>, 0, <<>>, State) ->
     OState = State#state{
@@ -279,7 +294,7 @@ analyse_packet(<<"getdata", _/bytes>>,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
 
-    MsgToSeend = lists:map(fun bm_message_creator:create_obj/1, ObjToSend),
+    MsgToSeend = lists:map(fun create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
 
@@ -307,131 +322,31 @@ analyse_packet(<<"ping", _>>,
 %% Objects  {{{2
 %%%
 
-%% GetPubKey {{{3
-analyse_packet(<<"getpubkey", _/bytes>>,
-               Length,
+%% Object for v3
+analyse_packet(<<"object", _/bytes>>,
+               _Length,
                <<PNonce:64/big-integer,
-                 Time:32/big-integer,
-                 AVer:8/big-integer,
+                 Time:64/big-integer,
+                 Type:32/big-integer,
                  Packet/bytes>>=Payload,
                #state{transport=Transport,
                       socket=Socket,
                       init_stage=#init_stage{
                                     verack_recv=true,
                                     verack_sent=true
-                                   }} = State) when Time /= 0,
-                                                    AVer >= 2->
-   Fun = get_pubkey_fun_generator(Packet, State),
-   process_object(<<"getpubkey">>, Payload, State, Fun);
-
-analyse_packet(<<"getpubkey", _/bytes>>,
-               Length,
-               <<PNonce:64/big-integer,
-                 Time:64/big-integer,
-                 AVer:8/big-integer,
-                 Packet/bytes>>=Payload,
-               #state{transport=Transport,
-                      socket=Socket,
-                      init_stage=#init_stage{
-                                    verack_recv=true,
-                                    verack_sent=true
-                                   }} = State) when  Time /= 0,
-                                                     AVer >= 2->
-    Fun = get_pubkey_fun_generator(Packet, State),
-    process_object(<<"getpubkey">>, Payload, State, Fun);
-
-%% PubKey messsage  {{{3
-analyse_packet(<<"pubkey", _/bytes>>,
-               Length,
-               <<PNonce:64/big-integer,
-                 Time:32/big-integer,
-                 AVer:8/big-integer,
-                 Packet/bytes>> = Payload,
-                 #state{init_stage=#init_stage{
-                                      verack_recv=true,
-                                      verack_sent=true
-                                     }} = State) when Time /= 0,
-                                                      AVer >= 2 ->
-    Fun = pubkey_fun_generator(Payload, Packet, Time, State),
-    process_object(<<"pubkey">>, Payload, State, Fun);
-
-analyse_packet(<<"pubkey", _/bytes>>,
-               Length,
-               <<PNonce:64/big-integer,
-                 Time:64/big-integer,
-                 AVer:8/big-integer,
-                 Packet/bytes>> = Payload,
-               #state{init_stage=#init_stage{
-                                    verack_recv=true,
-                                    verack_sent=true
-                                   }} = State) when Time /= 0,
-                                                    AVer >= 2 ->
-    Fun = pubkey_fun_generator(Payload, Packet, Time, State),
-    process_object(<<"pubkey">>, Payload, State, Fun);
-
-%% Msg message  {{{3
-analyse_packet(<<"msg", _/bytes>>,
-               _Length,
-               <<_POW:8/bytes, 
-                 Time:32/big-integer,
-                 Stream:8/integer, 
-                 EMessage/bytes>> = Payload,
-                 #state{init_stage=#init_stage{
-                                      verack_recv=true,
-                                      verack_sent=true
-                                     }} = State) when Time /= 0 ->
-    Fun = msg_fun_generator(EMessage, State),  
-    process_object(<<"msg">>, Payload, State, Fun);
-
-analyse_packet(<<"msg", _/bytes>>,
-               _Length,
-               <<_POW:8/bytes, 
-                 Time:64/big-integer,
-                 Stream:8/integer, 
-                 EMessage/bytes>> = Payload,
-               #state{init_stage=#init_stage{
-                                    verack_recv=true,
-                                    verack_sent=true
-                                   }} = State) when Time /= 0 ->
-    Fun = msg_fun_generator(EMessage, State),  
-    process_object(<<"msg">>, Payload, State, Fun);
-
-
-%% Broadcast message {{{3
-analyse_packet(<<"broadcast", _/bytes>>,
-               _Length,
-               <<_POW:8/bytes, 
-                 Time:32/big-integer,
-                 BVer:8/big-integer,
-                 _Stream:8/integer, 
-                 EMessage/bytes>> = Payload,
-               #state{init_stage=#init_stage{
-                                    verack_recv=true,
-                                    verack_sent=true
-                                   }} = State) when Time /= 0,
-                                                    BVer >= 2 ->
-
-    Fun =  broadcast_fun_generator(BVer, EMessage, State), 
-    process_object(<<"broadcast">>, Payload, State, Fun);
-
-analyse_packet(<<"broadcast", _/bytes>>,
-               _Length,
-               <<_POW:8/bytes, 
-                 Time:64/big-integer,
-                 BVer:8/big-integer, 
-                 _Stream:8/integer, 
-                 EMessage/bytes>> = Payload,
-                 #state{init_stage=#init_stage{
-                                      verack_recv=true,
-                                      verack_sent=true
-                                     }} = State) when Time /= 0,
-                                                      BVer >= 2 ->
-
-    %error_logger:info_msg("MSG = ~p~n", [Payload]),
-    %file:write_file("./test/data/broadcast.bin", Payload),
-    Fun =  broadcast_fun_generator(BVer, EMessage, State), 
-    process_object(<<"broadcast">>, Payload, State, Fun);
-    
+                                   }} = State) ->
+    POW = bm_pow:check_pow(Payload),
+    TTL = Time - bm_types:timestamp(),
+    error_logger:info_msg("POW: ~p TTL: ~p~n", [POW, TTL]),
+    if 
+        not POW; 
+          TTL > 28 * 24 * 60 * 60 + 10800;
+          TTL < -3600 -> 
+            State;
+        true ->
+            bm_reciever:analyse_object(Type, Packet, State)
+    end;
+           
 %% Unexpected message {{{3
 analyse_packet(Command,
                _,
@@ -440,6 +355,32 @@ analyse_packet(Command,
     error_logger:warning_msg("Other packet recieved.~n Command: ~p~nPayload: ~p~n State: ~p~n", [Command, Payload, State]),
     State.
                
+%--------------------------------------------------------------------
+%% @doc
+%% Analyses objects
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec analyse_object(Payload, State) -> State when % {{{1
+      Payload :: binary(),
+      State :: #state{}.
+analyse_object(0, Data, State) when size(Data) > 22,
+                                    size(Data) < 180 ->
+    {Version, R} = bm_types:decode_varint(Data),
+    {Stream, R1} = bm_types:decode_varint(R),
+analyse_object(1, Data, State) when size(Data) > 125,
+                                    size(Data) < 421 ->
+    {Version, R} = bm_types:decode_varint(Data),
+    {Stream, R1} = bm_types:decode_varint(R),
+analyse_object(2, Data, State) ->
+    %{Version, R} = bm_types:decode_varint(Data),
+    R = Data,
+    {Stream, R1} = bm_types:decode_varint(R),
+analyse_object(3, Data, State) when size(Data) > 160 ->
+    {Version, R} = bm_types:decode_varint(Data),
+    {Stream, R1} = bm_types:decode_varint(R),
+analyse_object(_, Payload, State) ->
+    State.
 %%%
 %% Responce sending routines
 %%%
@@ -470,7 +411,7 @@ send_version(Transport, Socket, Stream, RAddr) ->
                                                                   port=Port}),
     Nonce = crypto:rand_bytes(8),
     Streams = bm_types:encode_list([Stream], fun bm_types:encode_varint/1),
-    Message = <<2:32/big-integer,
+    Message = <<3:32/big-integer,
                 1:64/big-integer, % 'services' field of protocol
                 Time:64/big-integer,
                 AddrRecv:26/bytes,
@@ -725,3 +666,19 @@ check_ackdata(Payload) ->
             bm_db:insert(sent, [Message#message{status=ok}]),
             true
     end.
+
+%% @private
+%% @doc Creates object message by inventory hash
+%%
+%% Creates object message looking inventory for `Hash`
+%% in database and creating `Message`
+-spec create_obj([Hash]) -> message_bin() | no_return() when   % {{{1 ???
+      Hash ::binary().
+create_obj(Hash) ->
+    case bm_db:lookup(inventory, Hash) of
+            [#inventory{type=Type, payload=Payload}] -> 
+            bm_message_creator:create_message(Type, Payload);
+        [] ->
+            error_logger:warning_msg("Can't find inv ~p~n", [Hash])
+    end.
+

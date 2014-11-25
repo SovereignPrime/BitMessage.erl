@@ -87,7 +87,7 @@ unregister_peer(Socket) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Transport]) ->
+init([Transport]) ->  % {{{1
     ets:new(addrs, [named_table, public]),
     {ok, #state{transport=Transport}}.
 
@@ -105,7 +105,7 @@ init([Transport]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
 
@@ -119,18 +119,21 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({send, Message}, #state{sockets=Sockets1, transport=Transport}=State) ->
+handle_cast({send,  % {{{1
+             Message},
+            #state{sockets=Sockets1,
+                   transport=Transport}=State) ->
     Sockets = ets:select(addrs, [{{'$1', '_'}, [], ['$1']}]),
     broadcast(Message, Sockets, Transport),
     {noreply, State};
-handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->
+handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->  % {{{1
     Time = bm_types:timestamp(),
     ets:insert(addrs, {Socket, Time}), 
     {noreply, State#state{sockets=[Socket|Sockets]}};
-handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->
+handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->  % {{{1
     ets:delete(addrs, Socket), 
     {noreply, State#state{sockets=lists:delete( Socket, Sockets )}};
-handle_cast(_Msg, State) ->
+handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -143,7 +146,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -157,7 +160,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -168,7 +171,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================

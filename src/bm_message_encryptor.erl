@@ -106,7 +106,7 @@ init(#message{hash=Id,
             {stop, {shudown, "Not my address"}}
     end,
     
-    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    Time = bm_types:timestamp() + 86400 * 2, %crypto:rand_uniform(-300, 300),
     A = crypto:rand_bytes(32),
     AckData = <<Time:64/big-integer, 1, A/bytes>>,
     Ack = bm_message_creator:create_message(<<"msg">>,
@@ -118,8 +118,8 @@ init(#message{hash=Id,
                  1, %Stream number
                  1:32/big-integer, %Bitfield
                  PubKey:128/bytes,
-                 (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
-                 (bm_types:encode_varint(14000))/bytes, % ExtraBytes
+                 (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
+                 (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
                  Ripe/bytes,
                  Enc, % Message encoding
                  (bm_types:encode_varint(byte_size(MSG)))/bytes,
@@ -294,14 +294,20 @@ make_inv(timeout,
                                   payload = Payload,
                                   to=To,
                                   from=From}=Message}=State) ->
-    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    %Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    Time = bm_types:timestamp() + 86400 * 2, %crypto:rand_uniform(-300, 300),
     TPayload = case Type of 
         msg ->
             #address{stream=Stream} = bm_auth:decode_address(To),
-            <<Time:64/big-integer, 
-              %2:32/big-integer, % Type message
-              (bm_types:encode_varint(Stream))/bytes, % Reciever's stream
-              Payload/bytes>>;
+            bm_message_creator:create_obj(<<"msg">>, 
+                                          1,
+                                          Stream,
+                                          Payload);
+
+            %<<Time:64/big-integer, 
+            %  %2:32/big-integer, % Type message
+            %  (bm_types:encode_varint(Stream))/bytes, % Reciever's stream
+            %  Payload/bytes>>;
         broadcast ->
             #address{stream=Stream} = bm_auth:decode_address(From),
             <<Time:64/big-integer, 
@@ -322,7 +328,11 @@ make_inv(timeout,
                                         payload = PPayload,
                                         time = Time
                                        }]),
-    error_logger:info_msg("Msg sent to ~p~n", [To]),
+    error_logger:info_msg("Msg ~p sent to ~p~n",
+                          [
+                           bm_types:binary_to_hexstring(Hash),
+                           To
+                          ]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     {stop, normal, State};
 

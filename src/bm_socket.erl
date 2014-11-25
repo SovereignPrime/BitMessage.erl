@@ -1,23 +1,31 @@
--module(bm_connetion_dispatcher).
+-module(bm_socket).
 
 -behaviour(gen_server).
 
 -include("../include/bm.hrl").
 
 %% API
--export([start_link/0]).
+-export([
+         start_link/2,
+         start_link/1
+        ]).
 
 %% gen_server callbacks
--export([init/1,  % {{{1
+-export([init/1,
          handle_call/3,
          handle_cast/2,
          handle_info/2,
          terminate/2,
-         code_change/3]).  % }}}
+         code_change/3]).
 
--export([get_socket/0]).
-
--record(state, {addr}).
+-record(state,
+        {
+         id :: non_neg_integer(),
+         socket :: gen_tcp:socket(),
+         transport :: module(),
+         remote_addr :: #network_address{},
+         buffer = <<>> :: binary()
+        }).
 
 %%%===================================================================
 %%% API
@@ -30,20 +38,18 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->  % {{{1
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(Id) ->  % {{{1
+    start_link(Id, gen_tcp).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets next socket from cursor OBSOLATED
+%% Starts the server w/`Transport`
 %%
+%% @spec start_link(Transport) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
--spec get_socket() -> {gen_tcp, gen_tcp:socket()}.
-get_socket() ->  % {{{1
-    bm_db:wait_db(),
-    gen_server:call(?MODULE, register, infinity).
-
+start_link(Id, Transport) ->  % {{{1
+    gen_server:start_link({local, {?MODULE, Id}}, ?MODULE, [Id, Transport], []).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -59,34 +65,31 @@ get_socket() ->  % {{{1
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->  % {{{1
+init([Id, Transport]) ->  % {{{1
     bm_db:wait_db(),
-    NAddr = case bm_db:first(addr) of
-        '$end_of_table' ->
-            {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
-            
-            %Ips= [{192,168,24,112}],
-            ConfAddrs = lists:map(fun({I, P, S}) ->
-                                         #network_address{ip=I,
-                                                          port=P,
-                                                          stream=S,
-                                                          time=bm_types:timestamp()}
-                                 end, 
-                                 application:get_env(bitmessage, peers, [])),
-            error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips, ConfAddrs]),
-            Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
-                            {_MSec, Sec, MiSec} = now(),
-                            Time = trunc( Sec*1.0e6 + MiSec),
-                            #network_address{
-                                time=Time, stream=1, ip=Ip, port=8444}
-                    end, Ips),
-            bm_db:insert(addr, Addrs),
-            bm_db:insert(addr, ConfAddrs),
-            bm_db:first(addr);
-        Addr ->
-            Addr
-    end,
-    {ok, #state{addr=NAddr}}.
+    #network_address{ip=Ip,
+                      port=Port} = RAddr = bm_db:get_net(),
+    case Transport:connect(Ip,
+                         Port,
+                         [
+                          inet,
+                          binary,
+                          {active,true},
+                          {reuseaddr, true},
+                          {packet, raw}
+                         ],
+                         1000) of
+        {ok, Socket} ->
+            Transport:send(Socket, bm_protocol:connect(Id, RAddr)),
+            {ok, #state{
+                    id=Id,
+                    socket=Socket,
+                    transport=Transport
+                   }};
+        {error, Reason} ->
+            error_logger:warning_msg("Error connecting to ~p:~p~nReason: ~p~n", [Ip, Port, Reason]),
+            init([Transport])
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,9 +105,6 @@ init([]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(register, _From, #state{addr=Addr}=State) ->  % {{{1
-    {ok, Socket, NAddr} = connect_peer(Addr),
-    {reply, {gen_tcp, Socket}, State#state{addr=NAddr}};
 handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
@@ -132,6 +132,22 @@ handle_cast(_Msg, State) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({tcp,
+             Socket,
+             Data},
+            #state{transport=Transport,
+                   socket=Socket}=State) ->  % {{{1
+    {noreply, check_packet(Data, State)};
+handle_info({tcp_closed,
+             Socket},
+            #state{socket=Socket}=State) ->  % {{{1
+    {stop, normal, State};
+handle_info({tcp_error,
+             Socket,
+             _Data},
+            #state{transport=Transport,
+                   socket=Socket}=State) ->  % {{{1
+    {stop, normal, State};
 handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
@@ -164,25 +180,62 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
 %% @private
-%% @doc Peer cursor function
+%% @doc
+%% Check packet correctnes
 %%
--spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when  % {{{1
-      Ret :: {ok, gen_tcp:socket(), inet:ip4_address()}.
-connect_peer('$end_of_table') ->
-    error_logger:info_msg("Connecton list ended~n"),
-    timer:sleep(500000),
-    connect_peer(bm_db:first(addr));
-connect_peer(Addr) ->
-    case bm_db:lookup(addr, Addr) of
-        [ #network_address{ip=Ip,
-                           port=Port,
-                           stream=_Stream,
-                           time=_Time} ]  ->
-            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of
-                {ok, Socket} ->
-                    {ok, Socket, bm_db:next(addr, Addr)};
-                {error, _Reason} ->
-                    connect_peer(bm_db:next(addr, Addr))
-            end
-    end.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_packet(binary(), #state{}) -> #state{}.  % {{{1
+
+%% Packet has full message and more  {{{2
+check_packet(<<?MAGIC,
+               Command:12/bytes,
+               Length:32,
+               Check:4/bytes,
+               Packet/bytes>>,
+             State) when size(Packet) > Length ->
+    <<NPacket:Length/bytes, Rest/bytes>> = Packet,
+    bm_protocol:message(Command, Length, NPacket),
+    check_packet(Rest, State);
+
+%% Packet has only full message  {{{2
+check_packet(<<?MAGIC,
+               Command:12/bytes,
+               Length:32,
+               Check:4/bytes,
+               Packet/bytes>>,
+             State) when size(Packet) == Length ->
+    case crypto:hash(sha512, Packet) of
+        <<Check:32/bits, _/bits>> ->
+            %update_peer_time(State),
+            bm_protocol:message(Command, Length, Packet),
+            State#state{buffer = <<>>};
+        _ ->
+            State#state{buffer = <<>>}
+    end;
+
+%% Packet doesn't have full message  {{{2
+check_packet(<<?MAGIC,
+               _Command:12/bytes,
+               Length:32,
+               _Check:4/bytes,
+               Packet/bytes>>,
+             State) when size(Packet) < Length ->
+    State;
+
+%% Default  % {{{2
+check_packet(_, State) ->
+    State.
+
+%%% Updates timestamp peer was active
+%-spec update_peer_time(#state{}) -> any().  % {{{1  ???
+%update_peer_time(#state{socket=Socket, stream=Stream}) ->
+%    Time = bm_types:timestamp(),
+%    {ok, {Ip, Port}} = inet:peername(Socket),
+%    bm_db:insert(addr,
+%                 [#network_address{time=Time,
+%                                   ip=Ip,
+%                                   port=Port,
+%                                   stream=Stream}]).

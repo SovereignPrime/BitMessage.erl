@@ -2,8 +2,7 @@
 
 -behaviour(gen_server).
 
--define(MIN_NTPB, 1000).
--define(MIN_PLEB, 1000).
+-include("../include/bm.hrl").
 
 %% API
 -export([start_link/0]).

@@ -21,19 +21,36 @@ create_message(Command, Payload) ->
       Check:4/bytes,
       Payload/bytes>>.
 
-%% @doc Creates object message by inventory hash
+
+%% @doc Creates object message
 %%
 %% Creates object message looking inventory for `Hash`
 %% in database and creating `Message`
--spec create_obj([Hash]) -> message_bin() | no_return() when   % {{{1 ???
-      Hash ::binary().
-create_obj(Hash) ->
-    case bm_db:lookup(inventory, Hash) of
-            [#inventory{type=Type, payload=Payload}] -> 
-            create_message(Type, Payload);
-        [] ->
-            error_logger:warning_msg("Can't find inv ~p~n", [Hash])
-    end.
+-spec create_obj(Type, Version, Stream, Payload) -> message_bin()    % {{{1 ???
+                                                    | no_return() when
+      Type :: binary(),
+      Version :: non_neg_integer(),
+      Stream :: non_neg_integer(),
+      Payload :: binary().
+create_obj(Type, Version, Stream, Payload) ->
+    Time = bm_types:timestamp() + 86400 * 2,
+    OType = case Type of
+                <<"getpubkey">> -> 0;
+                <<"pubkey">> -> 1;
+                <<"msg">> -> 2;
+                <<"broadcast">> -> 3
+            end,
+    VVersion = bm_types:encode_varint(Version),
+    VStream = bm_types:encode_varint(Stream),
+    NoPOW = <<Time:64/big-integer,
+              OType:32/big-integer,
+              %VVersion/bytes,
+              VStream/bytes,
+              Payload/bytes>>,
+
+    Object = bm_pow:make_pow(NoPOW),
+    create_message(Type, Object).
+
 
 %% @doc Creates inv message from inventory hash list
 %%
@@ -148,8 +165,8 @@ create_pubkey(#privkey{hash=RIPE,
                 Stream,
                 1:32/big-integer,
                 Pub:128/bytes,
-                (bm_types:encode_varint(320))/bytes,
-                (bm_types:encode_varint(14000))/bytes>>,
+                (bm_types:encode_varint(?MIN_NTPB))/bytes,
+                (bm_types:encode_varint(?MIN_PLEB))/bytes>>,
     Sig = crypto:sign(ecdsa, sha, Payload, [PSK, secp256k1]),
     NPayload = <<Payload/bytes, (bm_types:encode_varint(size(Sig)))/bytes, Sig/bytes>>,
     PPayload = bm_pow:make_pow(NPayload),

@@ -62,6 +62,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2
+    meck:unload(),
     ok.
 
 %%%===================================================================

@@ -24,7 +24,8 @@
     delete/2,
     clear/3,
     ackselect/1,
-    wait_db/0
+    wait_db/0,
+    get_net/0
     ]). %}}}
 
 -record(state, {addr}).
@@ -113,6 +114,12 @@ match(Type, MatchSpec)->
 delete(Type, Id)-> %  {{{1
     gen_server:cast(?MODULE, {del, Type, Id}).
 
+%% @doc Get next peer to connect
+%%
+-spec get_net() -> #network_address{}. %  {{{1
+get_net()->
+    gen_server:call(?MODULE, net).
+
 %% @doc 
 %% Clears DB from outdated data
 %%
@@ -198,6 +205,20 @@ init([]) -> %  {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(net, _From, #state{addr=Addr} = State) -> %  {{{1
+    {atomic,
+     [#network_address{ip=Ip}=Data]} = mnesia:transaction(
+               fun() ->
+                       Id = case Addr of
+                           A when A == 'undefined';
+                                  A == '$end_of_table' ->
+                                    mnesia:first(addr);
+                                A ->
+                                    mnesia:next(addr, A)
+                            end,
+                       NA = mnesia:read(addr, Id)
+               end),
+    {reply, Data, State#state{addr=Ip}};
 handle_call({first, Type}, _From, State) -> %  {{{1
     {atomic, Data} = mnesia:transaction(fun() ->
                     mnesia:first(Type)
