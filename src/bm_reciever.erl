@@ -11,6 +11,17 @@
         ]).
 %}}}
 
+-define(GET_PUBKEY, 0).
+-define(PUBKEY, 1).
+-define(MSG, 2).
+-define(BROADCAST, 3).
+
+-type object_type() :: ?GET_PUBKEY
+                  | ?PUBKEY
+                  | ?MSG
+                  | ?BROADCAST
+                  | non_neg_integer().
+
 -record(init_stage,
         {
          verack_sent=false ::boolean(),
@@ -331,20 +342,48 @@ analyse_packet(<<"object", _/bytes>>,
                  Packet/bytes>>=Payload,
                #state{transport=Transport,
                       socket=Socket,
+                      stream=Stream,
                       init_stage=#init_stage{
                                     verack_recv=true,
                                     verack_sent=true
                                    }} = State) ->
     POW = bm_pow:check_pow(Payload),
     TTL = Time - bm_types:timestamp(),
-    error_logger:info_msg("POW: ~p TTL: ~p~n", [POW, TTL]),
+    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
+    error_logger:info_msg("Received object: ~p~n", [bm_types:binary_to_hexstring( Hash )]),
     if 
         not POW; 
           TTL > 28 * 24 * 60 * 60 + 10800;
           TTL < -3600 -> 
             State;
         true ->
-            bm_reciever:analyse_object(Type, Packet, State)
+            {Version, R} = if Type /= 2 ->
+                                  bm_types:decode_varint(Packet);
+                              true ->
+                                  {undefined, Packet}
+                           end,
+            case bm_types:decode_varint(R) of
+                 {Stream, R1} ->
+                    case bm_db:lookup(inventory, Hash) of
+                        [_] ->
+                            State;
+                        [] ->
+                            bm_db:insert(inventory,
+                                         [ #inventory{hash=Hash,
+                                                      payload=Payload,
+                                                      type=Type,
+                                                      time=Time,
+                                                      stream=Stream} ]),
+                            bm_sender:send_broadcast(
+                              bm_message_creator:create_inv([ Hash ])),
+                            error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R1)]),
+
+                            bm_reciever:analyse_object(Type, Version, Hash, R1, State)
+                    end;
+
+                _ ->
+                    State
+            end
     end;
            
 %% Unexpected message {{{3
@@ -361,25 +400,47 @@ analyse_packet(Command,
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec analyse_object(Payload, State) -> State when % {{{1
+-spec analyse_object(Type, Version, InvHash, Payload, State) -> State when % {{{1
+      Type :: object_type(),
+      Version :: non_neg_integer(),
+      InvHash :: binary(),
       Payload :: binary(),
       State :: #state{}.
-analyse_object(0, Data, State) when size(Data) > 22,
-                                    size(Data) < 180 ->
-    {Version, R} = bm_types:decode_varint(Data),
-    {Stream, R1} = bm_types:decode_varint(R),
-analyse_object(1, Data, State) when size(Data) > 125,
-                                    size(Data) < 421 ->
-    {Version, R} = bm_types:decode_varint(Data),
-    {Stream, R1} = bm_types:decode_varint(R),
-analyse_object(2, Data, State) ->
-    %{Version, R} = bm_types:decode_varint(Data),
-    R = Data,
-    {Stream, R1} = bm_types:decode_varint(R),
-analyse_object(3, Data, State) when size(Data) > 160 ->
-    {Version, R} = bm_types:decode_varint(Data),
-    {Stream, R1} = bm_types:decode_varint(R),
-analyse_object(_, Payload, State) ->
+analyse_object(?GET_PUBKEY, 3, InvHash, Data, State) when size(Data) == 20 ->
+    error_logger:info_msg("Requested AVer: 3~n"),
+    RIPE = case Data of
+               <<0, 0, R/bytes>> when size(R) == 18 ->
+                   R;
+               <<0, R/bytes>> when size(R) == 19 ->
+                   R;
+               R ->
+                   R
+           end,
+    case bm_db:lookup(privkey, RIPE) of
+        [#privkey{hash=RIPE,
+                  address=Addr,
+                  enabled=true}=PrKey] ->
+            #address{version=Version,
+                     stream=Stream,
+                     ripe=Ripe} = bm_auth:decode_address(Addr),
+            error_logger:info_msg("It's my address - sending pubkey~n"),
+            bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
+            State;
+        [] ->
+            State
+    end;
+analyse_object(?GET_PUBKEY, 4, InvHash, Data, State) when size(Data) /= 32 ->
+    error_logger:info_msg("Requested AVer: 4~n"),
+    State;
+
+analyse_object(?PUBKEY, Version, InvHash, Data, State) when size(Data) > 125,
+                                                            size(Data) < 421 ->
+    State;
+analyse_object(?MSG, _Version, InvHash, Data, State) ->
+    State;
+analyse_object(?BROADCAST, _Version, InvHash, Data, State) when size(Data) > 160 ->
+    State;
+analyse_object(_, _Data, _InvHash, _Payload, State) ->
     State.
 %%%
 %% Responce sending routines
