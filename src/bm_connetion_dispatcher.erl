@@ -63,16 +63,16 @@ init([]) ->  % {{{1
     bm_db:wait_db(),
     NAddr = case bm_db:first(addr) of
         '$end_of_table' ->
-            {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
+            %{ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
             
-            %Ips= [{192,168,24,112}],
+            Ips= [{192,168,24,112}],
             ConfAddrs = lists:map(fun({I, P, S}) ->
                                          #network_address{ip=I,
                                                           port=P,
                                                           stream=S,
                                                           time=bm_types:timestamp()}
                                  end, 
-                                 application:get_env(bitmessage, peers, [])),
+                                 []), %application:get_env(bitmessage, peers, [])),
             error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips, ConfAddrs]),
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),
@@ -170,8 +170,8 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 -spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when  % {{{1
       Ret :: {ok, gen_tcp:socket(), inet:ip4_address()}.
 connect_peer('$end_of_table') ->
-    error_logger:info_msg("Connecton list ended~n"),
-    timer:sleep(500000),
+    %error_logger:info_msg("Connecton list ended~n"),
+    timer:sleep(5000),
     connect_peer(bm_db:first(addr));
 connect_peer(Addr) ->
     case bm_db:lookup(addr, Addr) of

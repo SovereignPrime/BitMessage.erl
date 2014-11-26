@@ -33,7 +33,7 @@ create_message(Command, Payload) ->
       Stream :: non_neg_integer(),
       Payload :: binary().
 create_obj(Type, Version, Stream, Payload) ->
-    Time = bm_types:timestamp() + 86400 * 2,
+    Time = bm_types:timestamp() + 28 * 24 * 60 * 60,
     OType = case Type of
                 <<"getpubkey">> -> 0;
                 <<"pubkey">> -> 1;
@@ -158,24 +158,34 @@ create_pubkey(#privkey{hash=RIPE,
                        pek=PEK,
                        public=Pub,
                        address=Addr}) ->
-    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
+    Time = bm_types:timestamp(),
     #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
-    Payload = <<Time:64/big-integer,
-                AVer,
+    error_logger:info_msg("Creating PubKey"),
+    Payload = <<AVer,
                 Stream,
                 1:32/big-integer,
                 Pub:128/bytes,
                 (bm_types:encode_varint(?MIN_NTPB))/bytes,
                 (bm_types:encode_varint(?MIN_PLEB))/bytes>>,
-    Sig = crypto:sign(ecdsa, sha, Payload, [PSK, secp256k1]),
-    NPayload = <<Payload/bytes, (bm_types:encode_varint(size(Sig)))/bytes, Sig/bytes>>,
+    SPayload = <<Time:64/big-integer,
+                Payload/bytes>>,
+    error_logger:info_msg("Signing PubKey"),
+    Sig = crypto:sign(ecdsa, sha, SPayload, [PSK, secp256k1]),
+    ETime = Time + 28 * 24 * 60 * 60,
+    NPayload = <<ETime:64/big-integer,
+                 Payload/bytes,
+                 (bm_types:encode_varint(size(Sig)))/bytes,
+                 Sig/bytes>>,
+    error_logger:info_msg("Creating object for PubKey"),
     PPayload = bm_pow:make_pow(NPayload),
-    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, PPayload),
+    <<Hash:32/bytes, _/bytes>> = bm_types:dual_sha(PPayload),
+    error_logger:info_msg("Pow ready for PubKey"),
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = PPayload,
-                                       type = <<"pubkey">>,
+                                       type = 1,
                                        time=Time,
                                         stream=Stream}]),
+    error_logger:info_msg("Advertising pubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
     create_inv([ Hash ]).
                                        
 %% @doc Creates getpubkey object and inv message for it

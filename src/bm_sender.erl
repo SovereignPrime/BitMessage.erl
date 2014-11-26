@@ -195,7 +195,8 @@ broadcast(Message, [Socket| Rest], Transport) ->
             broadcast(Message, Rest, Transport);
         {error, timeout} ->
             broadcast(Message, Rest, Transport);
-        {error, _} ->
+        {error, R} ->
+            error_logger:info_msg("Send error: ~p~n", [R]),
             error_logger:warning_msg("Deleting socket: ~p~n", [Socket]),
             ets:delete(addrs, Socket),
             broadcast(Message, Rest, Transport)

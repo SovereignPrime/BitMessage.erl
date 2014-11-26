@@ -8,6 +8,18 @@
 %% @doc Binary message type
 -type message_bin() :: binary().
 
+%% @doc object types
+-define(GET_PUBKEY, 0).
+-define(PUBKEY, 1).
+-define(MSG, 2).
+-define(BROADCAST, 3).
+
+-type object_type() :: ?GET_PUBKEY
+                  | ?PUBKEY
+                  | ?MSG
+                  | ?BROADCAST
+                  | non_neg_integer().
+
 %% @doc Network address storing structure
 -record(network_address,
         {
@@ -32,7 +44,7 @@
          hash ::binary() | atom(),
          stream=1 :: integer() | atom(),
          payload :: binary() | atom(),
-         type :: binary() | atom(),
+         type :: object_type() | atom(),
          time :: bm_types:timestamp() | atom()
         }).
 
@@ -40,11 +52,13 @@
 -record(pubkey,
         {
          hash :: binary() | atom(),
-         data :: binary() | atom(),
+         data :: binary() | atom(), % Seems useless
          psk :: binary() | atom(),
          pek :: binary() | atom(),
          used=false :: boolean() | atom(),
-         time :: bm_types:timestamp() | atom()
+         time :: bm_types:timestamp() | atom(),
+         ntpb=1000 :: non_neg_integer(),
+         pleb=1000 :: non_neg_integer()
         }).
 
 %% Private Keys storing structure

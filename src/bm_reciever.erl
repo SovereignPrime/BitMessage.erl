@@ -11,16 +11,6 @@
         ]).
 %}}}
 
--define(GET_PUBKEY, 0).
--define(PUBKEY, 1).
--define(MSG, 2).
--define(BROADCAST, 3).
-
--type object_type() :: ?GET_PUBKEY
-                  | ?PUBKEY
-                  | ?MSG
-                  | ?BROADCAST
-                  | non_neg_integer().
 
 -record(init_stage,
         {
@@ -99,6 +89,7 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
         {error, timeout} ->
             loop(IState);
         {error, R} ->
+            error_logger:info_msg("Socket error: ~p~n", [R]),
             bm_sender:unregister_peer(Socket),
             Transport:close(Socket),
             {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
@@ -378,7 +369,7 @@ analyse_packet(<<"object", _/bytes>>,
                               bm_message_creator:create_inv([ Hash ])),
                             error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R1)]),
 
-                            bm_reciever:analyse_object(Type, Version, Hash, R1, State)
+                            bm_reciever:analyse_object(Type, Version, Time, Hash, R1, State)
                     end;
 
                 _ ->
@@ -400,13 +391,14 @@ analyse_packet(Command,
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec analyse_object(Type, Version, InvHash, Payload, State) -> State when % {{{1
+-spec analyse_object(Type, Version, Time, InvHash, Payload, State) -> State when % {{{1
       Type :: object_type(),
+      Time :: non_neg_integer(),
       Version :: non_neg_integer(),
       InvHash :: binary(),
       Payload :: binary(),
       State :: #state{}.
-analyse_object(?GET_PUBKEY, 3, InvHash, Data, State) when size(Data) == 20 ->
+analyse_object(?GET_PUBKEY, 3, _Time, InvHash, Data, State) when size(Data) == 20 ->  % {{{2
     error_logger:info_msg("Requested AVer: 3~n"),
     RIPE = case Data of
                <<0, 0, R/bytes>> when size(R) == 18 ->
@@ -430,7 +422,7 @@ analyse_object(?GET_PUBKEY, 3, InvHash, Data, State) when size(Data) == 20 ->
         [] ->
             State
     end;
-analyse_object(?GET_PUBKEY, 4, InvHash, Data, State) when size(Data) /= 32 ->
+analyse_object(?GET_PUBKEY, 4, _Time, InvHash, Data, State) when size(Data) /= 32 ->  % {{{2
     error_logger:info_msg("Requested AVer: 4~n"),
     case bm_db:lookup(privkey, Data) of
         [#privkey{hash=RIPE,
@@ -445,14 +437,32 @@ analyse_object(?GET_PUBKEY, 4, InvHash, Data, State) when size(Data) /= 32 ->
         [] ->
             State
     end;
-analyse_object(?PUBKEY, Version, InvHash, Data, State) when size(Data) > 125,
-                                                            size(Data) < 421 ->
+analyse_object(?PUBKEY, 3, Time, InvHash, Data, State) when size(Data) >= 170 ->  % {{{2
+    <<_BBitField:32/big-integer,
+      PSK:64/bytes,
+      PEK:64/bytes,
+      Rest/bytes>> = Data,
+    Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
+    {NTpB, R} = bm_types:decode_varint(Rest),
+    {PLEB, _R1} = bm_types:decode_varint(Rest),
+    Pubkey = #pubkey{hash=Ripe,
+                     data=Data, % Seems useless ???
+                     time=Time,
+                     ntpb=NTpB,
+                     pleb=PLEB,
+                     psk=PSK,
+                     pek=PEK},
+    bm_db:insert(pubkey, [Pubkey]),
+    bm_message_encryptor:pubkey(Pubkey),
     State;
-analyse_object(?MSG, _Version, InvHash, Data, State) ->
+analyse_object(?PUBKEY, 4, Time, InvHash, Data, State) when size(Data) >= 350 ->  % {{{2
+    %% TODO
     State;
-analyse_object(?BROADCAST, _Version, InvHash, Data, State) when size(Data) > 160 ->
+analyse_object(?MSG, _Version, Time, InvHash, Data, State) ->  % {{{2
     State;
-analyse_object(_, _Data, _InvHash, _Payload, State) ->
+analyse_object(?BROADCAST, _Version, Time,  InvHash, Data, State) when size(Data) > 160 ->  % {{{2
+    State;
+analyse_object(_, _Data, _Time, _InvHash, _Payload, State) ->  % {{{2
     State.
 %%%
 %% Responce sending routines
