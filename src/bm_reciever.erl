@@ -416,11 +416,12 @@ analyse_object(?GET_PUBKEY, 3, InvHash, Data, State) when size(Data) == 20 ->
                R ->
                    R
            end,
+    Stream = State#state.stream,
     case bm_db:lookup(privkey, RIPE) of
         [#privkey{hash=RIPE,
                   address=Addr,
                   enabled=true}=PrKey] ->
-            #address{version=Version,
+            #address{version=3,
                      stream=Stream,
                      ripe=Ripe} = bm_auth:decode_address(Addr),
             error_logger:info_msg("It's my address - sending pubkey~n"),
@@ -431,8 +432,19 @@ analyse_object(?GET_PUBKEY, 3, InvHash, Data, State) when size(Data) == 20 ->
     end;
 analyse_object(?GET_PUBKEY, 4, InvHash, Data, State) when size(Data) /= 32 ->
     error_logger:info_msg("Requested AVer: 4~n"),
-    State;
-
+    case bm_db:lookup(privkey, Data) of
+        [#privkey{hash=RIPE,
+                  address=Addr,
+                  enabled=true}=PrKey] ->
+            #address{version=4,
+                     stream=Stream,
+                     ripe=Ripe} = bm_auth:decode_address(Addr),
+            error_logger:info_msg("It's my address - sending pubkey~n"),
+            bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
+            State;
+        [] ->
+            State
+    end;
 analyse_object(?PUBKEY, Version, InvHash, Data, State) when size(Data) > 125,
                                                             size(Data) < 421 ->
     State;
@@ -640,32 +652,6 @@ pubkey_fun_generator(Payload, Packet, Time, State) ->
             State 
     end.
 
--spec get_pubkey_fun_generator(binary(),  %% {{{2
-                              #state{}) -> fun((binary()) -> #state{}).
-get_pubkey_fun_generator(Packet, State) ->
-    fun(_) ->
-            {_, Ripe} = bm_types:decode_varint(Packet),
-            RIPE = case Ripe of
-                <<0, 0, R/bytes>> when size(R) == 18 ->
-                    R;
-                <<0, R/bytes>> when size(R) == 19 ->
-                    R;
-                R ->
-                    R
-            end,
-            case bm_db:lookup(privkey, RIPE) of
-                [#privkey{hash=RIPE,
-                          address=Addr,
-                          enabled=true}=PrKey] ->
-                    #address{version=Version,
-                             stream=Stream,
-                             ripe=Ripe} = bm_auth:decode_address(Addr),
-                    bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
-                    State;
-                [] ->
-                    State
-            end
-    end.
 
 -spec msg_fun_generator(binary(), State) -> fun((binary()) -> State) when  %  {{{2
  State :: #state{}.
