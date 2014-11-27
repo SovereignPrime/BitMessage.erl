@@ -26,30 +26,23 @@ create_message(Command, Payload) ->
 %%
 %% Creates object message looking inventory for `Hash`
 %% in database and creating `Message`
--spec create_obj(Type, Version, Stream, Payload) -> message_bin()    % {{{1 ???
+-spec create_obj(Type, Version, Stream, Payload) -> binary()    % {{{1 ???
                                                     | no_return() when
-      Type :: binary(),
+      Type :: object_type(),
       Version :: non_neg_integer(),
       Stream :: non_neg_integer(),
       Payload :: binary().
 create_obj(Type, Version, Stream, Payload) ->
     Time = bm_types:timestamp() + 28 * 24 * 60 * 60,
-    OType = case Type of
-                <<"getpubkey">> -> 0;
-                <<"pubkey">> -> 1;
-                <<"msg">> -> 2;
-                <<"broadcast">> -> 3
-            end,
     VVersion = bm_types:encode_varint(Version),
     VStream = bm_types:encode_varint(Stream),
     NoPOW = <<Time:64/big-integer,
-              OType:32/big-integer,
-              %VVersion/bytes,
+              Type:32/big-integer,
+              VVersion/bytes,
               VStream/bytes,
               Payload/bytes>>,
 
-    Object = bm_pow:make_pow(NoPOW),
-    create_message(Type, Object).
+    bm_pow:make_pow(NoPOW).
 
 
 %% @doc Creates inv message from inventory hash list
@@ -159,27 +152,26 @@ create_pubkey(#privkey{hash=RIPE,
                        public=Pub,
                        address=Addr}) ->
     Time = bm_types:timestamp(),
+    ETime = Time + 28 * 24 * 60 * 60,
     #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
     error_logger:info_msg("Creating PubKey"),
-    Payload = <<AVer,
+    Payload = <<ETime:64/big-integer,
+                ?PUBKEY:32/big-integer,
+                AVer,
                 Stream,
                 1:32/big-integer,
                 Pub:128/bytes,
                 (bm_types:encode_varint(?MIN_NTPB))/bytes,
                 (bm_types:encode_varint(?MIN_PLEB))/bytes>>,
-    SPayload = <<Time:64/big-integer,
-                Payload/bytes>>,
     error_logger:info_msg("Signing PubKey"),
-    Sig = crypto:sign(ecdsa, sha, SPayload, [PSK, secp256k1]),
-    ETime = Time + 28 * 24 * 60 * 60,
-    NPayload = <<ETime:64/big-integer,
-                 Payload/bytes,
+    Sig = crypto:sign(ecdsa, sha, Payload, [PSK, secp256k1]),
+    NPayload = <<Payload/bytes,
                  (bm_types:encode_varint(size(Sig)))/bytes,
                  Sig/bytes>>,
     error_logger:info_msg("Creating object for PubKey"),
     PPayload = bm_pow:make_pow(NPayload),
-    <<Hash:32/bytes, _/bytes>> = bm_types:dual_sha(PPayload),
     error_logger:info_msg("Pow ready for PubKey"),
+    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = PPayload,
                                        type = 1,
@@ -196,18 +188,28 @@ create_pubkey(#privkey{hash=RIPE,
 create_getpubkey(#address{ripe=RIPE,
                           version=Version,
                           stream=Stream}) ->
-    Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
-    UPayload = <<(bm_types:timestamp() + crypto:rand_uniform(-300, 300)):64/big-integer,
-                 (bm_types:encode_varint(Version))/bytes,
-                 (bm_types:encode_varint(Stream))/bytes,
-                 RIPE:20/bytes>>,
-    Payload = bm_pow:make_pow(UPayload),
+    <<_:64/bits,
+      Time:64/big-integer,
+      _/bytes>> = Payload = case Version of
+                                3 ->
+                                    create_obj(0, Version, Stream, RIPE);
+                                4 ->
+                                    <<_:32/bytes,
+                                      TAG:32/bytes>> = 
+                                        bm_auth:dual_sha(
+                                          <<(bm_types:encode_varint(Version))/bytes,
+                                            (bm_types:encode_varint(Stream))/bytes,
+                                            RIPE/bytes>>),
+
+                                    create_obj(0, Version, Stream, TAG)
+                            end,
     <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = Payload,
-                                       type = <<"getpubkey">>,
+                                       type = 0,
                                        time=Time,
-                                        stream=Stream}]),
+                                       stream=Stream}]),
+    error_logger:info_msg("Advertising GetPubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
     create_inv([ Hash ]).
 
 %% @doc Creates ack message object and inv message for it

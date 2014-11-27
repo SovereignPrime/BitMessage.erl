@@ -57,8 +57,8 @@
          pek :: binary() | atom(),
          used=false :: boolean() | atom(),
          time :: bm_types:timestamp() | atom(),
-         ntpb=1000 :: non_neg_integer(),
-         pleb=1000 :: non_neg_integer()
+         ntpb=1000 :: non_neg_integer() | atom(),
+         pleb=1000 :: non_neg_integer() | atom()
         }).
 
 %% Private Keys storing structure

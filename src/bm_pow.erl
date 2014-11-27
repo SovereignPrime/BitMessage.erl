@@ -54,6 +54,7 @@ make_pow(Payload) ->
       PLEB :: non_neg_integer().
 make_pow(Payload, NTpB, PLEB) ->
     Target = compute_terget(Payload, NTpB, PLEB),
+    error_logger:info_msg("Computing POW target = ~p~n", [Target]),
     gen_server:call(?MODULE, {make, Payload, Target}, infinity).
 
 %%--------------------------------------------------------------------
@@ -188,4 +189,4 @@ compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
     TTL = Time - bm_types:timestamp(),
     PayloadLength = size(Payload) + 8,
     PLPEB = PayloadLength + PLEB,
-    bm_types:pow(2 , 64) div (NTpB * (PLPEB + TTL * PLPEB div bm_types:pow(2, 16))).
+    bm_types:pow(2 , 64) div (NTpB * (PLPEB + (TTL * PLPEB) div bm_types:pow(2, 16))).
