@@ -459,7 +459,15 @@ analyse_object(?PUBKEY, 4, Time, InvHash, Data, State) when size(Data) >= 350 ->
     %% TODO
     State;
 analyse_object(?MSG, _Version, Time, InvHash, Data, State) ->  % {{{2
-    State;
+    case check_ackdata(Data) of
+        true ->
+            error_logger:info_msg("This is ACK for me"),
+            State;
+        false ->
+            error_logger:info_msg("This is not ACK for me, trying to decrypt"),
+            bm_message_decryptor:decrypt_message(Data, InvHash),
+            State
+    end;
 analyse_object(?BROADCAST, _Version, Time,  InvHash, Data, State) when size(Data) > 160 ->  % {{{2
     State;
 analyse_object(_, _Data, _Time, _InvHash, _Payload, State) ->  % {{{2
@@ -646,38 +654,6 @@ process_object(_Type, _Payload, State, _Fun, false) ->
     State.
 
 %% Fun generators for different objects  {{{1
--spec pubkey_fun_generator(binary(),  % {{{2
-                           binary(),
-                           integer(),
-                           #state{}) -> fun((binary()) -> #state{}).
-pubkey_fun_generator(Payload, Packet, Time, State) ->
-    fun(_) ->
-            {_, Data} = bm_types:decode_varint(Packet),
-            <<_BBitField:32/big-integer, PSK:64/bytes, PEK:64/bytes, _/bytes>> = Data,
-            Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-            Pubkey = #pubkey{hash=Ripe,
-                             data=Payload,
-                             time=Time,
-                             psk=PSK,
-                             pek=PEK},
-            bm_db:insert(pubkey, [Pubkey]),
-            bm_message_encryptor:pubkey(Pubkey),
-            State 
-    end.
-
-
--spec msg_fun_generator(binary(), State) -> fun((binary()) -> State) when  %  {{{2
- State :: #state{}.
-msg_fun_generator(EMessage, State) ->
-    fun(Hash) ->
-            case check_ackdata(EMessage) of
-                true ->
-                    State;
-                false ->
-                    bm_message_decryptor:decrypt_message(EMessage, Hash),
-                    State
-            end
-    end. 
 
 -spec broadcast_fun_generator(integer(),  % {{{2
                               binary(),

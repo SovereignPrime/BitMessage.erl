@@ -44,6 +44,7 @@ start_link(Init) ->  % {{{1
 -spec decrypt_message(binary(), binary()) -> ok. % {{{1
 decrypt_message(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
+    error_logger:info_msg("Trying to decrypt w/decryptors: ~p~n", [Pids]),
     send_all(Pids, {decrypt, message, Hash, Data}).
 
 
@@ -111,6 +112,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
                               Data/bytes>> = Payload}, 
             #privkey{address=Address,
                      pek=PrivKey}=State) ->
+    error_logger:info_msg("Starting ~p decrypting", [Type]),
     MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     XPad = << <<0>> || _<- lists:seq(1, 32 - XLength)>>,
@@ -133,7 +135,8 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
     end,
     {noreply, State};
 
-handle_cast(_Msg, State) ->  % {{{1
+handle_cast(Msg, State) ->  % {{{1
+    error_logger:warning_msg("Decryptor wrong cast ~p~n ~p~n", [Msg, State]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

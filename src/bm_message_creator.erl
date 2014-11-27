@@ -65,8 +65,7 @@ create_inv(Hashes) ->
 create_big_inv(Stream, Exclude) ->
     {ok, PubKeyAge} = application:get_env(bitmessage, 'max_age_of_public_key'),
     {ok, InvAge} = application:get_env(bitmessage, 'max_age_of_inventory'),
-    {MSec, Sec, _} = now(),
-    Time = trunc(MSec * 1.0e6 + Sec),
+    Time = bm_types:timestamp(),
     PubOld = Time - PubKeyAge,
     Old = Time - InvAge,
     InvList =  bm_db:select(inventory,
@@ -74,7 +73,7 @@ create_big_inv(Stream, Exclude) ->
                              {#inventory{stream=Stream,
                                          hash='$1',
                                          time='$2',
-                                         type = <<"pubkey">>,
+                                         type = 1,
                                          _='_'},
                               [{'>', '$2', PubOld}], ['$1']},
                              {#inventory{stream=Stream,
@@ -83,7 +82,7 @@ create_big_inv(Stream, Exclude) ->
                                          type='$3',
                                          _='_'},
                               [{'>', '$2', Old},
-                               {'/=', '$3', <<"pubkey">>}],
+                               {'/=', '$3', 1}],
                               ['$1']}
                             ],
                             5000),
@@ -224,7 +223,7 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
     <<_:8/bytes, Time:64/big-integer, Stream, _/bytes>> = PPayload,
     bm_db:insert(inventory, [#inventory{hash=Hash,
                                        payload = PPayload,
-                                       type = <<"msg">>,
+                                       type = 2,
                                        time=Time,
                                        stream=Stream}]),
     create_inv([ Hash ]).
