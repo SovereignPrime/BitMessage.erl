@@ -296,7 +296,7 @@ analyse_packet(<<"getdata", _/bytes>>,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
 
-    MsgToSeend = lists:map(fun create_obj/1, ObjToSend),
+    MsgToSeend = lists:map(fun bm_reciever:create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
 

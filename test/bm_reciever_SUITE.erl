@@ -113,6 +113,7 @@ init_per_testcase(TestCase, Config) ->  % {{{2
 
     meck:new(bm_sender),
     meck:new(bm_reciever, [passthrough]),
+    meck:new(bm_pow),
     meck:expect(bm_sender, send_broadcast, fun(_) ->
                                                    ok
                                                 end),
@@ -232,7 +233,7 @@ getdata_packet(_Config) ->  % {{{2
                                                  <<"TEST_MSG">>
                                          end),
     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}),
-    ?assertEqual(1, meck:num_calls(bm_message_creator,
+    ?assertEqual(1, meck:num_calls(bm_reciever,
                                    create_obj,
                                    [<<165,40,135,49,43,249,18,255,
                                      174,139,155,56,33,113,234,
@@ -247,35 +248,24 @@ object_packet_test() ->  % {{{2
     [].
 
 object_packet_test(_Config) ->  % {{{2
-    {ok, MSG} = file:read_file("../../test/data/msg3.bin"),
-    SZ = size(MSG),
-    meck:expect(bm_types, timestamp, fun() ->
-                                             1416904806
-                                     end),
+    Data = crypto:rand_bytes(256),
+    meck:expect(bm_pow, make_pow, fun(Test) ->
+                                          <<2048:64/big-integer, Test/bytes>>
+                                  end),
+    meck:expect(bm_pow, check_pow, fun(<<2048:64/big-integer, _Test/bytes>>) ->
+                                          true
+                                  end),
+    MSG = bm_message_creator:create_obj(0, 1, 1, Data),
     meck:expect(bm_reciever,
                 analyse_object,
-                fun(_, _) ->
-                        ok
+                fun(0, 1, _Time, Inv, D, S) when D == Data ->
+                        #state{};
+                   (Type, Version, Time, Inv, D, S) ->
+                        io:format("Wrong call of analyse_object: ~p ~p ~p ~p ~p~n",
+                                  [Type, Version, Time, Inv, D]),
+                        #state{}
                 end),
-    bm_reciever:analyse_packet(<<"object", 0:(12 - 9)/unit:8>>, SZ, MSG, #state{}),
-    ?assert(meck:called(bm_reciever, analyse_object, '_')).
-
-%    ?assert(meck:called(bm_db, 
-%                        lookup,
-%                        [inventory, <<195,91,41,65,161,132,186,147,163,5,38,21,
-%                                      67,135,249,10,88,34,210,104,128,69,
-%                                      237,92,137,78,44,167,138,191,151,170>>])),
-%    ?assert(meck:called(bm_db, 
-%                        insert,
-%                        [inventory,
-%                         [#inventory{
-%                             hash= <<195,91,41,65,161,132,186,147,163,5,38,21,
-%                                     67,135,249,10,88,34,210,104,128,69,
-%                                     237,92,137,78,44,167,138,191,151,170>>,
-%                             payload=MSG,
-%                             type= <<"broadcast">>,
-%                             stream=1,
-%                             _='_'} ]])),
-%    ?assert(meck:called(bm_message_creator, create_inv, '_')),
-%    ?assert(meck:called(bm_sender, send_broadcast, '_')),
-%    ?assert(meck:called(bm_message_decryptor, decrypt_broadcast, '_')).
+    bm_reciever:analyse_packet(<<"object">>, size(MSG), MSG, #state{}),
+    ?assert(meck:called(bm_reciever, analyse_object, [0, 1, '_', '_', Data, #state{}])),
+    ?assert(meck:called(bm_pow, make_pow, '_')),
+    ?assert(meck:called(bm_pow, check_pow, '_')).
