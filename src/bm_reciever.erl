@@ -509,7 +509,9 @@ send_getdata(Objs,
              #state{socket=Socket,
                     transport=Transport} = _State) ->
     Payload = bm_types:encode_list(lists:flatten(Objs), fun(O) -> <<O/bytes>> end),
-    Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload)).
+    Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload));
+send_getdata([], State) ->
+    State.
 
 
 
@@ -556,6 +558,7 @@ conection_fully_established(State) ->
 invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
     case bm_db:lookup(inventory, Inv) of
         [] ->
+            error_logger:info_msg("Sending get_data for: ~p~n", [bm_types:binary_to_hexstring(Inv)]),
             {Inv , Rest};
         _ ->
 
@@ -733,8 +736,8 @@ check_ackdata(Payload) ->
       Hash ::binary().
 create_obj(Hash) ->
     case bm_db:lookup(inventory, Hash) of
-            [#inventory{type=Type, payload=Payload}] -> 
-            bm_message_creator:create_message(Type, Payload);
+            [#inventory{payload=Payload}] -> 
+            bm_message_creator:create_message(<<"object">>, Payload);
         [] ->
             error_logger:warning_msg("Can't find inv ~p~n", [Hash])
     end.
