@@ -110,8 +110,10 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
                               XLength:16/big-integer, X:XLength/bytes, 
                               YLength:16/big-integer, Y:YLength/bytes, 
                               Data/bytes>> = Payload}, 
-            #privkey{address=Address,
-                     pek=PrivKey}=State) ->
+            #privkey{
+               address=Address,
+               pek=PrivKey
+              }=State) ->
     error_logger:info_msg("Starting ~p decrypting", [Type]),
     MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
@@ -120,17 +122,22 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
     R = <<4, XPad/bytes, X/bytes, YPad/bytes, Y/bytes>>,
     XP = crypto:compute_key(ecdh, R, PrivKey, secp256k1),
     <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    case crypto:hmac(sha256, M, EMessage) of
+    error_logger:info_msg("Verifying HMAC"),
+    MACSize = size(Payload) - 32,
+    <<MACData:MACSize/bytes, _:32/bytes>> = Payload,
+    case crypto:hmac(sha256, M, MACData) of
         HMAC ->
+            error_logger:info_msg("Decrypting"),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
                 message ->
+                    file:write_file("test/data/msg_decr.bin", DMessage),
                     bm_dispatcher:message_arrived(DMessage, Hash, Address);
                 broadcast ->
                     bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
             end;
-        _ ->
+        H ->
             not_for_me
     end,
     {noreply, State};

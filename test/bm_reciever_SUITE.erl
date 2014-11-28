@@ -62,7 +62,7 @@ all() ->  % {{{2
     ].
 
 suite() ->  % {{{2
-    [{timestamp, {seconds, 300}}].
+    [{timestamp, {seconds, 500}}].
 
 groups() ->  % {{{2
     [].
@@ -113,7 +113,8 @@ init_per_testcase(TestCase, Config) ->  % {{{2
 
     meck:new(bm_sender),
     meck:new(bm_reciever, [passthrough]),
-    meck:new(bm_pow),
+    meck:new(bm_dispatcher, [passthrough]),
+    meck:new(bm_pow, [passthrough]),
     meck:expect(bm_sender, send_broadcast, fun(_) ->
                                                    ok
                                                 end),
@@ -269,3 +270,4 @@ object_packet_test(_Config) ->  % {{{2
     ?assert(meck:called(bm_reciever, analyse_object, [0, 1, '_', '_', Data, #state{}])),
     ?assert(meck:called(bm_pow, make_pow, '_')),
     ?assert(meck:called(bm_pow, check_pow, '_')).
+

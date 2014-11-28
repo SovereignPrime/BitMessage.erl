@@ -348,11 +348,7 @@ analyse_packet(<<"object", _/bytes>>,
           TTL < -3600 -> 
             State;
         true ->
-            {Version, R} = if Type /= 2 ->
-                                  bm_types:decode_varint(Packet);
-                              true ->
-                                  {undefined, Packet}
-                           end,
+            {Version, R} = bm_types:decode_varint(Packet),
             case bm_types:decode_varint(R) of
                  {Stream, R1} ->
                     case bm_db:lookup(inventory, Hash) of

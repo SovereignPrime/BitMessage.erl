@@ -190,17 +190,33 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
 
     {Message, R6} = bm_types:decode_varbin(R5),
     {AckData, R7} = if Type == message ->
-            bm_types:decode_varbin(R6);
-        true -> 
-            {ok, R6}
+                           bm_types:decode_varbin(R6);
+                       true -> 
+                           {ok, R6}
     end,
     error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", ["MsgVer", Message, AckData]),
     {Sig, R8} = bm_types:decode_varbin(R7),
     SLen = size(Data) - size(R7),
     <<DataSig:SLen/bytes, _/bytes>> = Data,
     PuSK = <<4, PSK/bytes>>,
-    SigOK = crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]),
-    error_logger:info_msg("~p ~p ~p~n", [RecOK, SigOK, AddrVer]),
+    SigOK = case crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]) of
+                true -> true;
+                false ->
+                    [#inventory{payload=D}] = bm_db:lookup(inventory, Hash),
+                    file:write_file("test/data/msg_encr.bin", D),
+                    <<_:64/integer, TT:12/bytes, _/bytes>> = D,
+                    DS = <<TT:12/bytes,
+                           1,
+                           (bm_types:encode_varint(Stream))/bytes,
+                           DataSig/bytes>>,
+                    crypto:verify(ecdsa,
+                                  sha,
+                                  DS,
+                                  Sig,
+                                  [PuSK,
+                                   secp256k1])
+            end,
+    error_logger:info_msg("Receiver: ~p Signature: ~p AddrVer ~p~n", [RecOK, SigOK, AddrVer]),
     if RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
             {Subject, Text} = case MsgEnc of
                 1 ->
@@ -235,7 +251,6 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             Callback:received(Hash),
             {noreply, State};
         true ->
-            error_logger:info_msg("test~n"),
             {noreply, State}
     end;
 handle_cast({send, Type, Message}, State) ->  % {{{1
