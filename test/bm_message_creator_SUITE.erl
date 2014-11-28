@@ -83,25 +83,21 @@ create_message(_Config) ->  % {{{2
    <<233,190,180,217,77,83,71,0,0,0,0,0,0,0,0,0,0,0,0,4,123,250,149,166,84,69,83,
   84>> = bm_message_creator:create_message(<<"MSG">>, <<"TEST">>).
 
-create_obj_test() ->
+create_obj_test() ->  % {{{2
     [].
 
-create_obj_test(_Config) ->
+create_obj_test(_Config) ->  % {{{2
     meck:expect(bm_pow, make_pow, fun(Test) ->
                                           <<2048:64/big-integer, Test/bytes>>
                                   end),
     meck:expect(bm_pow, check_pow, fun(<<2048:64/big-integer, _Test/bytes>>) ->
                                           true
                                   end),
-    MSG = bm_message_creator:create_obj(<<"msg">>,
+    MSG = bm_message_creator:create_obj(2,
                                         1,
                                         1,
                                         <<"Test Msg">>),
-    <<233,190,180,217, % MAGIC
-      109,115,103,0,0,0,0,0,0,0,0,0, % Command
-      0,0,0,30, % Length
-      _Check:32/big-integer,
-      0,0,0,0,0,0,8,0, % POW
+      <<0,0,0,0,0,0,8,0, % POW
       Time:64/big-integer,
       0,0,0,2, % Obj Type
       1, % Version
