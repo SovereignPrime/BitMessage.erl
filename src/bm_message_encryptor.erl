@@ -271,9 +271,20 @@ encrypt_message(timeout,
     PLength = 16 - (size(Payload) rem 16),
     Pad = << <<4>> || _<-lists:seq(1, PLength)>>,
     EMessage = crypto:block_encrypt(aes_cbc256, E, IV, <<Payload/bytes, Pad/bytes>>),
-    HMAC = crypto:hmac(sha256, M, EMessage),
     <<4, X:32/bytes, Y:32/bytes>> = KeyR,
-    {next_state, make_inv, State#state{message = Message#message{payload = <<IV:16/bytes, 16#02ca:16/big-integer, 32:16/big-integer,X:32/bytes, 32:16/big-integer, Y:32/bytes, EMessage/bytes, HMAC/bytes>> }}, 0};
+    HPayload = <<IV:16/bytes,
+                16#02ca:16/big-integer,
+                32:16/big-integer,
+                X:32/bytes,
+                32:16/big-integer,
+                Y:32/bytes,
+                EMessage/bytes>>,
+    HMAC = crypto:hmac(sha256, M, HPayload),
+    {next_state,
+     make_inv,
+     State#state{message = Message#message{payload = <<HPayload/bytes,
+                                                       HMAC/bytes>> }},
+     0};
 
 %% Default {{{2
 encrypt_message(Event, State) ->

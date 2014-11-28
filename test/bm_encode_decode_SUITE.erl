@@ -164,8 +164,8 @@ encode_decode_test(_Config) ->
                         [#inventory{
                             payload = <<1024:64/big-integer,
                                       _:64/big-integer,
-                                      %2:32/big-integer,
-                                      %1:8/integer,
+                                      2:32/big-integer,
+                                      1:8/integer,
                                       1:8/integer,
                                       Payload/bytes>>
                            }] = bm_db:lookup(inventory, Hash),

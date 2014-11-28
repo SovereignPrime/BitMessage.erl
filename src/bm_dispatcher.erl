@@ -203,7 +203,6 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                 true -> true;
                 false ->
                     [#inventory{payload=D}] = bm_db:lookup(inventory, Hash),
-                    file:write_file("test/data/msg_encr.bin", D),
                     <<_:64/integer, TT:12/bytes, _/bytes>> = D,
                     DS = <<TT:12/bytes,
                            1,

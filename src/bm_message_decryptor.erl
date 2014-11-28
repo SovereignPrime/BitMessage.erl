@@ -132,7 +132,6 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
             case Type of 
                 message ->
-                    file:write_file("test/data/msg_decr.bin", DMessage),
                     bm_dispatcher:message_arrived(DMessage, Hash, Address);
                 broadcast ->
                     bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
