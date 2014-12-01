@@ -19,8 +19,6 @@
 -record(state,
         {
          max_addr_age :: integer(),
-         max_inv_age :: integer(),
-         max_pubkey_age :: integer(),
          timeout :: integer()
         }).
 
@@ -66,8 +64,6 @@ init([]) ->  % {{{1
     {ok,
      clear,
      #state{timeout=Timeout,
-            max_pubkey_age=PubKey,
-            max_inv_age=Inv,
             max_addr_age=Addr},
      TT}.
 
@@ -86,9 +82,11 @@ init([]) ->  % {{{1
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-clear(timeout, #state{timeout=Timeout, max_addr_age=Addr, max_inv_age=Inv, max_pubkey_age=PubKey} = State) ->  % {{{1
-    bm_db:clear(Addr, Inv, PubKey),
-    {atomic, Messages} = bm_db:ackselect(Inv),
+clear(timeout,
+      #state{timeout=Timeout,
+             max_addr_age=Addr} = State) ->  % {{{1
+    bm_db:clear(Addr),
+    {atomic, Messages} = bm_db:ackselect(),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
     lists:foreach(fun(#message{hash=MID} = M) ->
                           bm_db:delete(sent, MID),

@@ -22,8 +22,8 @@
     select/3,
     match/2,
     delete/2,
-    clear/3,
-    ackselect/1,
+    clear/1,
+    ackselect/0,
     wait_db/0,
     get_net/0
     ]). %}}}
@@ -125,21 +125,19 @@ get_net()->
 %%
 %% Used by bm_clear_fsm
 %% @end
--spec clear(MaxAddrAge, MaxInvAge, MaxPubKeyAge) -> ok when
-      MaxAddrAge :: integer(),
-      MaxInvAge :: integer(),
-      MaxPubKeyAge :: integer().
-clear(Addr, Inv, PubKey) -> %  {{{1
-    gen_server:cast(?MODULE, {clear, Addr, Inv, PubKey}).
+-spec clear(MaxAddrAge) -> ok when  % {{{1
+      MaxAddrAge :: integer().
+clear(Addr) ->
+    gen_server:cast(?MODULE, {clear, Addr}).
 
 %% @doc 
 %% Selects messages w/o akc to resend
 %%
 %% Used by bm_clear_fsm ??? 
--spec ackselect(integer()) -> {atomic, [#message{}]} 
-                              | {error, string()}.
-ackselect(MinInvAge) -> %  {{{1
-    gen_server:call(?MODULE, {ackselect, MinInvAge}).
+-spec ackselect() -> {atomic, [#message{}]} 
+                     | {error, string()}.
+ackselect() -> %  {{{1
+    gen_server:call(?MODULE, ackselect).
 
 %% @doc
 %% Waits for DB to initialize
@@ -259,12 +257,12 @@ handle_call({insert, Type, Data}, _From, State) -> %  {{{1
                 insert_obj(Type, Data)
         end),
     {reply, R, State};
-handle_call({ackselect, Inv}, _From, State) -> %  {{{1
+handle_call(ackselect, _From, State) -> %  {{{1
     R = mnesia:transaction(fun() -> 
                                    A = mnesia:select(sent, [{#message{status=ackwait, _='_'}, [], ['$_']}]),
                                    CTime = bm_types:timestamp(),
-                                   lists:filter(fun(#message{payload = <<_:64/bits, Time:64/big-integer, _/bytes>>}) -> %  {{{2
-                                                        CTime -Time > Inv
+                                   lists:filter(fun(#message{payload = <<_:64/bits, Time:64/big-integer, _/bytes>>}) ->
+                                                        CTime > Time
                                                 end, A)
 
                            end),
@@ -283,7 +281,7 @@ handle_call(_Request, _From, State) -> %  {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
+handle_cast({clear, Addr}, State) -> %  {{{1
     mnesia:transaction(fun() -> 
                                Time= bm_types:timestamp(),
                                Len = mnesia:table_info(inventory, size),
@@ -307,20 +305,7 @@ handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
                                                                         _='_'},
                                                              [{'<',
                                                                '$1',
-                                                               (Time - Inv)},
-                                                              {'/=',
-                                                               '$2',
-                                                               <<"pubkey">>}],
-                                                             ['$_']},
-                                                            {#inventory{time='$1',
-                                                                        type='$2',
-                                                                        _='_'},
-                                                             [{'<',
-                                                               '$1',
-                                                               (Time - PubKey)},
-                                                              {'==',
-                                                               '$2',
-                                                               <<"pubkey">>}],
+                                                               Time}],
                                                              ['$_']}
                                                            ]),
                                       lists:foreach(fun(A) ->
@@ -331,7 +316,7 @@ handle_cast({clear, Addr, Inv, PubKey}, State) -> %  {{{1
                                                                         _='_'},
                                                                 [{'<',
                                                                   '$1',
-                                                                  (Time - PubKey)}],
+                                                                  Time}],
                                                                 ['$_']}]),
 
                                       lists:foreach(fun(A) ->
