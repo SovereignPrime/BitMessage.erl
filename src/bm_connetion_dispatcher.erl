@@ -64,6 +64,7 @@ init([]) ->  % {{{1
     NAddr = case bm_db:first(addr) of
         '$end_of_table' ->
             {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
+            {ok, Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org", inet),
             
             %Ips= [{192,168,24,112}],
             ConfAddrs = lists:map(fun({I, P, S}) ->
@@ -73,13 +74,13 @@ init([]) ->  % {{{1
                                                           time=bm_types:timestamp()}
                                  end, 
                                  application:get_env(bitmessage, peers, [])),
-            error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips, ConfAddrs]),
+            error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips ++ Ips1, ConfAddrs]),
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
                             {_MSec, Sec, MiSec} = now(),
                             Time = trunc( Sec*1.0e6 + MiSec),
                             #network_address{
                                 time=Time, stream=1, ip=Ip, port=8444}
-                    end, Ips),
+                    end, Ips ++ Ips1),
             bm_db:insert(addr, Addrs),
             bm_db:insert(addr, ConfAddrs),
             bm_db:first(addr);
