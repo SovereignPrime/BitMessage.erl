@@ -2,7 +2,7 @@
 
 -behaviour(gen_server).
 -include("../include/bm.hrl").
--define(R(Type), #Type{}).
+%%
 %% API
 -export([start_link/0]).
 
@@ -37,8 +37,6 @@
              | network_address.
 
 -type table() :: type() 
-                | 'incoming' 
-                | 'sent' 
                 | 'addr'.
 
 -type type_record() :: #message{}
@@ -146,7 +144,7 @@ ackselect() -> %  {{{1
 -spec wait_db() -> ok.
 wait_db() -> %  {{{1
     Timeout = application:get_env(bitmessage, table_wait, 65536),
-    OK = mnesia:wait_for_tables([privkey, addr, inventory, sent], Timeout),
+    OK = mnesia:wait_for_tables([privkey, addr, inventory, message], Timeout),
     if OK == ok -> %  {{{2
             ok;
         true ->
@@ -178,8 +176,7 @@ init([]) -> %  {{{1
             {atomic, ok} = mnesia:create_table(pubkey, [{disc_copies, [node()]}, {attributes, record_info(fields, pubkey)}, {type, set}]),
             {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, [node()]}, {attributes, record_info(fields, privkey)}, {type, set}]),
             {atomic, ok} = mnesia:create_table(addr, [{disc_copies, [node()]}, {attributes, record_info(fields, network_address)}, {type, set}, {record_name, network_address}]),
-            {atomic, ok} = mnesia:create_table(incoming, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]),
-            {atomic, ok} = mnesia:create_table(sent, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]);
+            {atomic, ok} = mnesia:create_table(message, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]);
         {timeout, _} ->
             timer:sleep(5000);
          ok ->
@@ -259,9 +256,15 @@ handle_call({insert, Type, Data}, _From, State) -> %  {{{1
     {reply, R, State};
 handle_call(ackselect, _From, State) -> %  {{{1
     R = mnesia:transaction(fun() -> 
-                                   A = mnesia:select(sent, [{#message{status=ackwait, _='_'}, [], ['$_']}]),
+                                   A = mnesia:select(message, [{#message{folder=sent,
+                                                                         status=ackwait,
+                                                                         _='_'},
+                                                                [],
+                                                                ['$_']}]),
                                    CTime = bm_types:timestamp(),
-                                   lists:filter(fun(#message{payload = <<_:64/bits, Time:64/big-integer, _/bytes>>}) ->
+                                   lists:filter(fun(#message{payload = <<_:64/bits,
+                                                                         Time:64/big-integer,
+                                                                         _/bytes>>}) ->
                                                         CTime > Time
                                                 end, A)
 

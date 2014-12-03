@@ -113,7 +113,7 @@ init(#message{hash=Id,
                                             bm_pow:make_pow(AckData)),
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
-    UPayload = <<1, %MSG version
+    UPayload = <<%1, %MSG version
                  3, %Address version
                  1, %Stream number
                  1:32/big-integer, %Bitfield
@@ -130,10 +130,14 @@ init(#message{hash=Id,
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
-    NMessage = Message#message{payload=Payload, hash=Hash, ackdata=A, status=wait_pubkey},
+    NMessage = Message#message{payload=Payload,
+                               hash=Hash,
+                               folder=sent,
+                               ackdata=A,
+                               status=wait_pubkey},
     io:format("Deleting: ~p~n", [Message]),
-    mnesia:dirty_delete(sent, Id),
-    bm_db:insert(sent, [NMessage]),
+    mnesia:dirty_delete(message, Id),
+    bm_db:insert(message, [NMessage]),
     {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
 
 %% TODO: Init for broadcasts  {{{1
@@ -203,7 +207,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                  hash=Ripe}] ->
                     NMessage = Message#message{status=encrypt_message,
                                                folder=sent},
-                    bm_db:insert(sent, [NMessage]),
+                    bm_db:insert(message, [NMessage]),
             {next_state,
              encrypt_message,
              State#state{type=msg,
@@ -218,7 +222,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                 bm_auth:decode_address(To))),
             NMessage = Message#message{status=wait_pubkey,
                                        folder=sent},
-            bm_db:insert(sent, [NMessage]),
+            bm_db:insert(message, [NMessage]),
             Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
             {next_state, wait_pubkey, State#state{type=msg, message=NMessage}, Timeout}
     end;
@@ -231,7 +235,7 @@ wait_pubkey({pubkey,
             #state{hash=Ripe,
                    message=Message}=State) ->
             NMessage = Message#message{status=encrypt_message},
-            bm_db:insert(sent, [NMessage]),
+            bm_db:insert(message, [NMessage]),
     {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 0};
 
 %% Default {{{2
@@ -336,8 +340,8 @@ make_inv(timeout,
     NMessage = Message#message{status=ackwait,
                                hash=Hash,
                                payload=PPayload},
-    bm_db:delete(sent, MID),
-    bm_db:insert(sent, [NMessage]),
+    bm_db:delete(message, MID),
+    bm_db:insert(message, [NMessage]),
     bm_db:insert(inventory, [#inventory{hash = Hash,
                                         type = case Type of
                                                    msg -> 2;

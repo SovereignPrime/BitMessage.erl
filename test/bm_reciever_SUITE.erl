@@ -16,7 +16,9 @@
          stream = 1,
          init_stage = #init_stage{},
          remote_streams,
-         remote_addr}).
+         remote_addr,
+         timeout
+        }).
 
 %% API  {{{1
 -export([all/0,

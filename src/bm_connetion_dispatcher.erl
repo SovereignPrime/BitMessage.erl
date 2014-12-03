@@ -67,12 +67,14 @@ init([]) ->  % {{{1
             {ok, Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org", inet),
             
             %Ips= [{192,168,24,112}],
+            %Ips1=[],
             ConfAddrs = lists:map(fun({I, P, S}) ->
                                          #network_address{ip=I,
                                                           port=P,
                                                           stream=S,
                                                           time=bm_types:timestamp()}
                                  end, 
+                                  %[]),
                                  application:get_env(bitmessage, peers, [])),
             error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips ++ Ips1, ConfAddrs]),
             Addrs = lists:map(fun({Ip1, Ip2, Ip3, Ip4} = Ip) ->
@@ -180,7 +182,7 @@ connect_peer(Addr) ->
                            port=Port,
                            stream=_Stream,
                            time=_Time} ]  ->
-            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 1000) of
+            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 10000) of
                 {ok, Socket} ->
                     {ok, Socket, bm_db:next(addr, Addr)};
                 {error, _Reason} ->

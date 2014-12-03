@@ -91,5 +91,5 @@ start_link(Module) ->
 %%
 -spec get_message(binary()) -> {ok, #message{}}.  % {{{1
 get_message(Hash) ->
-    [Msg] = bm_db:lookup(incoming, Hash),
+    [Msg] = bm_db:lookup(message, Hash),
     {ok, Msg}.

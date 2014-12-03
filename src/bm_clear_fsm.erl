@@ -89,7 +89,7 @@ clear(timeout,
     {atomic, Messages} = bm_db:ackselect(),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
     lists:foreach(fun(#message{hash=MID} = M) ->
-                          bm_db:delete(sent, MID),
+                          bm_db:delete(message, MID),
                           bm_encryptor_sup:add_encryptor(M)
                   end, Messages),
     {next_state, clear, State, Timeout * 1000};

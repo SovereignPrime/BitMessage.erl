@@ -74,9 +74,10 @@ broadcast_arrived(Data, Hash, Address) ->
 -spec send_message(#message{}) ->  ok. % {{{1
 send_message(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
-                              type=msg},
+                               folder=sent,
+                               type=msg},
     mnesia:transaction(fun() ->
-                               mnesia:write(sent, NMessage, write)
+                               mnesia:write(message, NMessage, write)
                        end),
     gen_server:cast(?MODULE, {send, msg, NMessage}).
 
@@ -89,9 +90,10 @@ send_message(Message) ->
 -spec send_broadcast(#message{}) ->  ok. % {{{1
 send_broadcast(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
-                              type=msg},
+                               folder=sent,
+                               type=msg},
     mnesia:transaction(fun() ->
-                               mnesia:write(sent, NMessage, write)
+                               mnesia:write(message, NMessage, write)
                        end),
     gen_server:cast(?MODULE, {send, broadcast, Message}).
 
@@ -119,10 +121,22 @@ register_receiver(Callback) ->
 -spec init([]) -> {ok, #state{}}.  % {{{1
 init([]) ->
     bm_db:wait_db(),
-    Messages = bm_db:select(sent,
-                            [{#message{status='new', _='_'}, [], ['$_']},
-                             {#message{status='wait_pubkey', _='_'}, [], ['$_']},
-                             {#message{status='encrypt_message', _='_'}, [], ['$_']}],
+    Messages = bm_db:select(message,
+                            [{#message{folder=sent,
+                                       status='new',
+                                       _='_'},
+                              [],
+                              ['$_']},
+                             {#message{folder=sent,
+                                       status='wait_pubkey',
+                                       _='_'},
+                              [],
+                              ['$_']},
+                             {#message{folder=sent,
+                                       status='encrypt_message',
+                                       _='_'},
+                              [],
+                              ['$_']}],
                             10000),
     lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
     {ok, #state{}}.
@@ -238,10 +252,11 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                           to=Address, 
                           subject=Subject,
                           folder=incoming,
+                          time=calendar:local_time(),
                           ackdata=AckData,
                           status=unread,
                           text=Text},
-            bm_db:insert(incoming, [MR]),
+            bm_db:insert(message, [MR]),
             if AckData /= ok ->
                     bm_sender:send_broadcast(bm_message_creator:create_ack(MR));
                 true ->

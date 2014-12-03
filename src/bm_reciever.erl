@@ -26,7 +26,8 @@
          stream=1 :: integer(),
          init_stage = #init_stage{} :: #init_stage{},
          remote_streams :: [integer()],
-         remote_addr :: #network_address{}
+         remote_addr :: #network_address{},
+         timeout=10000 :: non_neg_integer()
         }).
 
 
@@ -77,15 +78,21 @@ init(Parent) ->  % {{{1
 %%--------------------------------------------------------------------
 -spec loop(#state{}) -> no_return().
 loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
-    case Transport:recv(Socket,0, 50000) of
+    case Transport:recv(Socket,0, 600000) of
         {ok, Packet} ->
             State = check_packet(Packet, IState),
             loop(State);
         {error, closed} ->
             bm_sender:unregister_peer(Socket),
             {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(IState#state{socket=NSocket, transport=NTransport});
+            send_version(#state{socket=NSocket,
+                                transport=NTransport,
+                                remote_addr=#network_address{ip={127,0,0,1},
+                                                             port=8444,
+                                                             time=bm_types:timestamp(),
+                                                             stream=1}}),
+            loop(IState#state{socket=NSocket,
+                              transport=NTransport});
         {error, timeout} ->
             loop(IState);
         {error, R} ->
@@ -93,8 +100,16 @@ loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
             bm_sender:unregister_peer(Socket),
             Transport:close(Socket),
             {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket, transport=NTransport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-            loop(#state{socket=NSocket, transport=NTransport, init_stage=#init_stage{}})
+            send_version(#state{socket=NSocket,
+                                transport=NTransport,
+                                remote_addr=#network_address{ip={127,0,0,1},
+                                                             port=8444,
+                                                             time=bm_types:timestamp(),
+                                                             stream=1}}),
+
+            loop(#state{socket=NSocket,
+                        transport=NTransport,
+                        init_stage=#init_stage{}})
     end.
 %%--------------------------------------------------------------------
 %% @private
@@ -351,23 +366,9 @@ analyse_packet(<<"object", _/bytes>>,
             {Version, R} = bm_types:decode_varint(Packet),
             case bm_types:decode_varint(R) of
                  {Stream, R1} ->
-                    case bm_db:lookup(inventory, Hash) of
-                        [_] ->
-                            State;
-                        [] ->
-                            bm_db:insert(inventory,
-                                         [ #inventory{hash=Hash,
-                                                      payload=Payload,
-                                                      type=Type,
-                                                      time=Time,
-                                                      stream=Stream} ]),
-                            bm_sender:send_broadcast(
-                              bm_message_creator:create_inv([ Hash ])),
-                            error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R1)]),
-
-                            bm_reciever:analyse_object(Type, Version, Time, Hash, R1, State)
-                    end;
-
+                    process_object(Hash, Payload, State);
+                _ when Stream == 1, Version == 1; Type == 2 ->
+                    process_object(Hash, Payload, State);
                 _ ->
                     State
             end
@@ -528,6 +529,7 @@ conection_fully_established(#state{socket=Socket,
                                                  verack_recv=true
                                                 }}=State) ->
     bm_sender:register_peer(Socket),
+    %inet:setopts(Socket, [
     {ok, { Ip, Port }} = inet:peername(Socket),
     Time = bm_types:timestamp(),
     % Check after here
@@ -568,87 +570,42 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
 
             {[], Rest}
     end.
-
 %% Process object
--spec process_object(Type, Object, State, Fun) -> #state{} when  % {{{1
-      Type :: binary(),
-      Object :: binary(),
-      State :: #state{},
-      Fun :: fun((binary()) -> #state{}).
-
-%% Process object w/32 bit time {{{2
-process_object(Type,
-               <<POW:64/bits,
-                 Time:32/big-integer,
-                 AVer:8,
-                 Stream:8,
-                 Data/bytes>> = Payload,
-               State,
-               Fun) when Time /= 0 -> %Fix for 4 bytes time
-    process_object(Type, <<POW:64/bits, Time:64/big-integer, AVer:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
-
-%% Process msg object w/o address version {{{2
-process_object(<<"msg">>=Type,
-               <<POW:64/bits,
-                 Time:64/big-integer,
-                 Stream:8,
-                 Data/bytes>> = Payload,
-               State,
-               Fun) when Time /= 0,
-                         Stream /= 0 -> %Fix for Msg w/o Addr Version
-    process_object(Type, <<POW:64/bits, Time:64/big-integer, 0:8, Stream:8, Data/bytes>>, State, Fun, bm_pow:check_pow(Payload));
-
-%% Process default object  {{{2
-process_object(Type, Payload, State, Fun) ->
-    process_object(Type, Payload, State, Fun, bm_pow:check_pow(Payload)).
-
--spec process_object(Type, Object, State, Fun, POW) -> #state{} when  % {{{1
-      Type :: binary(),
-      Object :: binary(),
-      State :: #state{},
-      POW :: boolean(),
-      Fun :: fun((binary()) -> #state{}).
-
-%% Process object  {{{2
-process_object(Type,
-               <<_:64/bits,
-                 Time:64/big-integer,
-                 _:8,
-                 Stream:8/big-integer,
-                 _Data/bytes>> = Payload,
-               #state{stream=OStream}=State,
-               Fun,
-               true) ->
-    CTime = bm_types:timestamp(),
-    if 
-        Type == <<"pubkey">>, Time =< CTime - 30 * 24 * 3600 ->
+-spec process_object(Hash, Payload, State) -> State when  % {{{2
+      Hash :: binary(),
+      Payload :: binary(),
+      State :: #state{}.
+process_object(Hash,
+                     <<_POW:64/big-integer,
+                       Time:64/big-integer,
+                       Type:32/big-integer,
+                       Packet/bytes>>=Payload,
+                     #state{
+                        stream=Stream
+                       } = State) ->
+    {Version, R1} = bm_types:decode_varint(Packet),
+     R = case bm_types:decode_varint(R1) of
+         {Stream, R2} ->
+             R2;
+         R2 ->
+             R2
+     end,
+    case bm_db:lookup(inventory, Hash) of
+        [_] ->
             State;
-        Type /= <<"pubkey">>, Time =< CTime - 48 * 3600 -> 
-            State;
-        Time > CTime + 10800 ->
-            State;
-        Stream == OStream ->
-            <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-            case bm_db:lookup(inventory, Hash) of
-                [_] ->
-                    State;
-                [] ->
-                    bm_db:insert(inventory,
-                                 [ #inventory{hash=Hash,
-                                              payload=Payload,
-                                              type=Type,
-                                              time=Time,
-                                              stream=Stream} ]),
-                    bm_sender:send_broadcast(bm_message_creator:create_inv([ Hash ])),
-                    Fun(Hash)
-            end;
-        true ->
-            State
-    end;
-%% Process object w/o POW  {{{2
-process_object(_Type, _Payload, State, _Fun, false) ->
-    State.
+        [] ->
+            bm_db:insert(inventory,
+                         [ #inventory{hash=Hash,
+                                      payload=Payload,
+                                      type=Type,
+                                      time=Time,
+                                      stream=Stream} ]),
+            bm_sender:send_broadcast(
+              bm_message_creator:create_inv([ Hash ])),
+            error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R)]),
 
+            bm_reciever:analyse_object(Type, Version, Time, Hash, R, State)
+    end.
 %% Fun generators for different objects  {{{1
 
 -spec broadcast_fun_generator(integer(),  % {{{2
@@ -688,14 +645,15 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
 
 -spec check_ackdata(binary()) -> boolean().  % {{{1
 check_ackdata(Payload) ->
-    case bm_db:match(sent, #message{ackdata=Payload,
-                                    status=ackwait,
-                                    _='_'}) of
+    case bm_db:match(message, #message{ackdata=Payload,
+                                       folder=sent,
+                                       status=ackwait,
+                                       _='_'}) of
         [] ->
             false;
         [Message] ->
             error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
-            bm_db:insert(sent, [Message#message{status=ok}]),
+            bm_db:insert(message, [Message#message{status=ok}]),
             true
     end.
 

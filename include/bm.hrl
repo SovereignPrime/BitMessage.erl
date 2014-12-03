@@ -86,6 +86,7 @@
          status=new :: atom() | atom(),  % Variants
          ackdata :: binary() | atom(),
          payload :: binary() | atom(),
-         type :: binary() | atom()
+         type :: binary() | atom(),
+         time :: calendar:date_time()
         }).
 
