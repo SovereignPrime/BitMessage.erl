@@ -173,7 +173,7 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 -spec connect_peer(inet:ip4_address() | '$end_of_table') -> Ret when  % {{{1
       Ret :: {ok, gen_tcp:socket(), inet:ip4_address()}.
 connect_peer('$end_of_table') ->
-    %error_logger:info_msg("Connecton list ended~n"),
+    error_logger:info_msg("Connecton list ended~n"),
     timer:sleep(5000),
     connect_peer(bm_db:first(addr));
 connect_peer(Addr) ->

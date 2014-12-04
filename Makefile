@@ -30,8 +30,11 @@ doc:
 clean: 
 	@$(REBAR) -C rebar.config skip_deps=true clean
 
-test: get-deps compile
-	@$(REBAR) -C rebar.config skip_deps=true ct
+test: get-deps 
+	@$(REBAR) -C rebar.config -DTEST skip_deps=true compile ct
+
+xref: get-deps compile
+	@$(REBAR) -C rebar.config skip_deps=true xref
 
 $(PLTFILE): 
 	- dialyzer --build_plt --apps $(APP_DEPS) $(PLT_INC) --output_plt $(PLTFILE)

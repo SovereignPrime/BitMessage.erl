@@ -1,16 +1,18 @@
 -module(bm_reciever).
 -include("../include/bm.hrl").
 
--compile([export_all]).
 %% API {{{1
+-ifdef(TEST).
+-compile([export_all]).
+-else.
 -export([
          start_link/4,
          start_link/0,
          init/1,
          init/4
         ]).
+-endif.
 %}}}
-
 
 -record(init_stage,
         {
