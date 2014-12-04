@@ -187,5 +187,7 @@ connect_peer(Addr) ->
                     {ok, Socket, bm_db:next(addr, Addr)};
                 {error, _Reason} ->
                     connect_peer(bm_db:next(addr, Addr))
-            end
+            end;
+        _ ->
+            connect_peer(bm_db:next(addr, Addr))
     end.

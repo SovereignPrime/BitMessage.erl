@@ -76,9 +76,11 @@ init(Parent) ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec loop(#state{}) -> no_return().
-loop(#state{socket = Socket, transport = Transport}=IState) ->  % {{{1
-    case Transport:recv(Socket,0, 600000) of
+-spec loop(#state{}) -> no_return().  % {{{1
+loop(#state{socket = Socket,
+            transport = Transport,
+            timeout=Timeout}=IState) ->
+    case Transport:recv(Socket,0, Timeout) of
         {ok, Packet} ->
             State = check_packet(Packet, IState),
             loop(State);
@@ -529,7 +531,6 @@ conection_fully_established(#state{socket=Socket,
                                                  verack_recv=true
                                                 }}=State) ->
     bm_sender:register_peer(Socket),
-    %inet:setopts(Socket, [
     {ok, { Ip, Port }} = inet:peername(Socket),
     Time = bm_types:timestamp(),
     % Check after here
@@ -554,7 +555,7 @@ conection_fully_established(#state{socket=Socket,
                           ok 
                   end,
                   Invs), %TODO: aware objects excluding
-    State;
+    State#state{timeout=600000};
 conection_fully_established(State) ->
     State.
 
