@@ -1,5 +1,7 @@
 -module(base58).
+
 -include_lib("eunit/include/eunit.hrl").
+
 -export([
         encode/2,
         encode/1,

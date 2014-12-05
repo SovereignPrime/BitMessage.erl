@@ -34,7 +34,7 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec add_encryptor(#message{}) -> supervisor:startchild_ret().
+-spec add_encryptor(#message{}) -> supervisor:startchild_ret().  % {{{1
 add_encryptor(DMessage) ->
     supervisor:start_child(?MODULE, [DMessage]).
 

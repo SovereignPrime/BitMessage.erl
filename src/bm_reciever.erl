@@ -10,7 +10,7 @@
 -export([
          start_link/4,
          start_link/0,
-         init/1,
+         init/0,
          init/4
         ]).
 -endif.
@@ -48,11 +48,12 @@
       Opts :: [Opt],
       Opt :: term(),
       Pid :: pid().
-start_link(Ref, Socket, Transport, Opts) ->  % {{{1
+start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts], 10000).
 
-start_link() ->  % {{{1
-    proc_lib:start_link(?MODULE, init, [self()]).
+-spec start_link() -> {ok, pid()} | {error, Reason :: term()}.  % {{{1
+start_link() ->
+    proc_lib:start_link(?MODULE, init, []).
 
 %%%===================================================================
 %%% callbacks
@@ -65,15 +66,20 @@ start_link() ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
-init(Ref, Socket, Transport, _Opts) ->  % {{{1
-    error_logger:info_msg("Incoming connection ~n"),
+-spec init(Ref, Socket, Transport, Opts) -> no_return() when  % {{{1
+      Ref :: ranch:ref(),
+      Socket :: inet:socket(),
+      Transport :: module(),
+      Opts :: [Opt],
+      Opt :: term().
+init(Ref, Socket, Transport, _Opts) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    error_logger:info_msg("Incoming connection ack ~n"),
     loop(#state{socket=Socket, transport=Transport}).
 
-init(Parent) ->  % {{{1
-    ok = proc_lib:init_ack(Parent, {ok, self()}),
+-spec init() ->  no_return(). % {{{1
+init() ->
+    ok = proc_lib:init_ack({ok, self()}),
     timer:sleep(1000),
     {Transport, Socket} =  bm_connetion_dispatcher:get_socket(),
     send_version(#state{socket=Socket, transport=Transport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
@@ -327,7 +333,7 @@ analyse_packet(<<"getdata", _/bytes>>,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
 
-    MsgToSeend = lists:map(fun create_obj/1, ObjToSend),
+    MsgToSeend = lists:map(fun bm_reciever:create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
 
@@ -481,8 +487,19 @@ analyse_object(?MSG, _Version, Time, InvHash, Data, State) ->  % {{{2
             bm_message_decryptor:decrypt_message(Data, InvHash),
             State
     end;
-analyse_object(?BROADCAST, _Version, Time,  InvHash, Data, State) when size(Data) > 160 ->  % {{{2
-    State;
+analyse_object(?BROADCAST,  % {{{2
+               Version,
+               _Time,
+               InvHash,
+               Data,
+               State) when size(Data) > 160 ->
+            case Version of
+                2 ->
+                    bm_message_decryptor:decrypt_broadcast(Data, InvHash),
+                    State;
+                _ ->
+                    State
+            end;
 analyse_object(_, _Data, _Time, _InvHash, _Payload, State) ->  % {{{2
     State.
 %%%
@@ -530,9 +547,7 @@ send_getdata(Objs,
              #state{socket=Socket,
                     transport=Transport} = _State) ->
     Payload = bm_types:encode_list(lists:flatten(Objs), fun(O) -> <<O/bytes>> end),
-    Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload));
-send_getdata([], State) ->
-    State.
+    Transport:send(Socket, bm_message_creator:create_message(<<"getdata">>, Payload)).
 
 
 
@@ -586,7 +601,7 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
             {[], Rest}
     end.
 %% Process object
--spec process_object(Hash, Payload, State) -> State when  % {{{2
+-spec process_object(Hash, Payload, State) -> State when  % {{{1
       Hash :: binary(),
       Payload :: binary(),
       State :: #state{}.
@@ -619,28 +634,7 @@ process_object(Hash,
               bm_message_creator:create_inv([ Hash ])),
             error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R)]),
 
-            analyse_object(Type, Version, Time, Hash, R, State)
-    end.
-%% Fun generators for different objects  {{{1
-
--spec broadcast_fun_generator(integer(),  % {{{2
-                              binary(),
-                              State) ->  fun((binary()) -> State) when
-      State :: #state{}.
-broadcast_fun_generator(BVer, EMessage, State) ->
-    fun(Hash) ->
-            case BVer of
-                1 ->
-                    bm_dispatcher:broadcast_arrived(EMessage,
-                                                    Hash,
-                                                    <<"broadcast">>), %% DEPRECATED
-                    State;
-                2 ->
-                    bm_message_decryptor:decrypt_broadcast(EMessage, Hash),
-                    State;
-                _ ->
-                    State
-            end
+            bm_reciever:analyse_object(Type, Version, Time, Hash, R, State)
     end.
 
 %%%
@@ -681,9 +675,9 @@ check_ackdata(Payload) ->
       Hash ::binary().
 create_obj(Hash) ->
     case bm_db:lookup(inventory, Hash) of
-            [#inventory{payload=Payload}] -> 
+        [#inventory{payload=Payload}] -> 
             bm_message_creator:create_message(<<"object">>, Payload);
-        [] ->
+        _ ->
             error_logger:warning_msg("Can't find inv ~p~n", [Hash])
     end.
 
