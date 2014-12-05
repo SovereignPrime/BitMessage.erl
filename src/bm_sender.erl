@@ -189,11 +189,13 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 broadcast(_, [], _) ->
     ok;
 broadcast(Message, [Socket| Rest], Transport) ->
-    inet:setopts(Socket, [{send_timeout, 100}]),
+    %inet:setopts(Socket, [{send_timeout, 100}]),
     case Transport:send(Socket, Message) of
         ok ->
+            %error_logger:info_msg("Sent: ~p~n", [Socket]),
             broadcast(Message, Rest, Transport);
         {error, timeout} ->
+            %error_logger:info_msg("Send timeout: ~p~n", [Socket]),
             broadcast(Message, Rest, Transport);
         {error, R} ->
             error_logger:info_msg("Send error: ~p~n", [R]),
