@@ -1,6 +1,8 @@
 -module(bm_reciever).
 -include("../include/bm.hrl").
 
+-behaviour(ranch_protocol).
+
 %% API {{{1
 -ifdef(TEST).
 -compile([export_all]).
@@ -22,8 +24,8 @@
 
 -record(state,
         {
-         socket :: gen_tcp:socket(),
-         transport :: atom(),
+         socket :: inet:socket(),
+         transport :: module(),
          version :: integer(),
          stream=1 :: integer(),
          init_stage = #init_stage{} :: #init_stage{},
@@ -39,8 +41,15 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link(Ref, Socket, Transport, Opts) ->  {ok, Pid} when % {{{1
+      Ref :: ranch:ref(),
+      Socket :: inet:socket(),
+      Transport :: module(),
+      Opts :: [Opt],
+      Opt :: term(),
+      Pid :: pid().
 start_link(Ref, Socket, Transport, Opts) ->  % {{{1
-    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts], 10000).
 
 start_link() ->  % {{{1
     proc_lib:start_link(?MODULE, init, [self()]).
@@ -57,7 +66,10 @@ start_link() ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 init(Ref, Socket, Transport, _Opts) ->  % {{{1
+    error_logger:info_msg("Incoming connection ~n"),
+    ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
+    error_logger:info_msg("Incoming connection ack ~n"),
     loop(#state{socket=Socket, transport=Transport}).
 
 init(Parent) ->  % {{{1
@@ -315,7 +327,7 @@ analyse_packet(<<"getdata", _/bytes>>,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
 
-    MsgToSeend = lists:map(fun bm_reciever:create_obj/1, ObjToSend),
+    MsgToSeend = lists:map(fun create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
 
@@ -607,7 +619,7 @@ process_object(Hash,
               bm_message_creator:create_inv([ Hash ])),
             error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R)]),
 
-            bm_reciever:analyse_object(Type, Version, Time, Hash, R, State)
+            analyse_object(Type, Version, Time, Hash, R, State)
     end.
 %% Fun generators for different objects  {{{1
 

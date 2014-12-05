@@ -72,6 +72,7 @@ init(#message{to=To,
               enc=Enc,
               text=Text,
               type=Type,
+              folder=sent,
               status=Status}=Message) 
   when Status == encrypt_message;
        Status == wait_pubkey ->
@@ -86,6 +87,7 @@ init(#message{hash=Id,
               enc=Enc,
               text=Text,
               status=Status,
+              folder=sent,
               type=msg} = Message) 
   when Status == new;
        Status == ackwait->
@@ -106,7 +108,7 @@ init(#message{hash=Id,
             {stop, {shudown, "Not my address"}}
     end,
     
-    Time = bm_types:timestamp() + 86400 * 2, %crypto:rand_uniform(-300, 300),
+    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
     A = crypto:rand_bytes(32),
     AckData = <<Time:64/big-integer, 1, A/bytes>>,
     Ack = bm_message_creator:create_message(<<"msg">>,

@@ -18,7 +18,7 @@ start(_StartType, _StartArgs) ->
     application:start(ranch),
     application:start(mnesia),
     Port = application:get_env(bitmessage, listen_port, 8444),
-    {ok, _} = ranch:start_listener(bitmessage_listener, 100, ranch_tcp, [{port, Port}], bm_listener, []),
+    {ok, _} = ranch:start_listener(bitmessage_listener, 100, ranch_tcp, [{port, Port}], bm_reciever, []),
     bitmessage_sup:start_link().
 
 -spec stop(term()) -> ok.
