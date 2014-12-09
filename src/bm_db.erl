@@ -25,7 +25,8 @@
     clear/1,
     ackselect/0,
     wait_db/0,
-    get_net/0
+    get_net/0,
+    bootstrap_network/0
     ]). %}}}
 
 -record(state, {addr}).
@@ -200,10 +201,8 @@ init([]) -> %  {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(net, _From, #state{addr=Addr} = State) -> %  {{{1
-    {atomic,
-     [#network_address{ip=Ip}=Data]} = 
-    mnesia:transaction(
+handle_call(net, From, #state{addr=Addr} = State) -> %  {{{1
+    case mnesia:transaction(
       fun() ->
               Id = case Addr of
                        'undefined' ->
@@ -217,8 +216,14 @@ handle_call(net, _From, #state{addr=Addr} = State) -> %  {{{1
                            end
                    end,
               mnesia:read(addr, Id)
-      end),
-    {reply, Data, State#state{addr=Ip}};
+      end) of
+        {atomic,
+         [#network_address{ip=Ip}=Data]} ->
+            {reply, Data, State#state{addr=Ip}};
+        {atomic, []} ->
+            bootstrap_network(),
+            handle_call(net, From, State)
+    end;
 handle_call({first, Type}, _From, State) -> %  {{{1
     {atomic, Data} = mnesia:transaction(fun() ->
                     mnesia:first(Type)
@@ -401,3 +406,53 @@ iterate(C, Acc) -> %  {{{1
         '$end_of_table' -> 
             Acc
     end.
+
+bootstrap_network() ->  % {{{1
+    {ok,
+     Ips} = inet:getaddrs("bootstrap8444.bitmessage.org",
+                          inet),
+    {ok,
+     Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org",
+                           inet),
+
+    %Ips= [], %[{192,168,24,112}],
+    %Ips1=[],
+    error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips , Ips1]),
+    mnesia:transaction(fun() ->
+                               lists:foreach(fun({I,
+                                                  P,
+                                                  S}) ->
+                                                     mnesia:write(addr,
+                                                                  #network_address{ip=I,
+                                                                                   port=P,
+                                                                                   stream=S,
+                                                                                   time=bm_types:timestamp()},
+                                                                  write)
+                                             end, 
+                                             %[]),
+                                             application:get_env(bitmessage, peers, [])),
+                               lists:foreach(fun({Ip1,
+                                                  Ip2,
+                                                  Ip3,
+                                                  Ip4} = Ip) ->
+                                                     mnesia:write(addr, #network_address{
+                                                                           time=bm_types:timestamp(),
+                                                                           stream=1,
+                                                                           ip=Ip,
+                                                                           port=8444},
+                                                                  write)
+                                             end,
+                                             Ips),
+                               lists:foreach(fun({Ip1,
+                                                  Ip2,
+                                                  Ip3,
+                                                  Ip4} = Ip) ->
+                                                     mnesia:write(addr, #network_address{
+                                                                           time=bm_types:timestamp(),
+                                                                           stream=1,
+                                                                           ip=Ip,
+                                                                           port=8080},
+                                                                  write)
+                                             end,
+                                             Ips1)
+                       end).

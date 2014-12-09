@@ -491,7 +491,7 @@ send_version(#state{transport=Transport,
 -spec send_version(Transport, Socket, Stream, Addr) -> ok   % {{{1
                                                        | {error, atom()} when
       Transport :: atom(),
-      Socket :: gen_tcp:socket(),
+      Socket :: inet:socket(),
       Stream :: integer(),
       Addr :: #network_address{}.
 send_version(Transport, Socket, Stream, RAddr) ->

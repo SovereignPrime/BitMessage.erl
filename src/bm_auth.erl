@@ -13,9 +13,12 @@
 %%
 -spec encode_address(#address{}) -> binary().
 encode_address(#address{version=Version, stream=Stream, ripe = Ripe}) ->
-    Data = <<(bm_types:encode_varint(Version))/bitstring, (bm_types:encode_varint(Stream))/bitstring, Ripe/bitstring>>,
+    Data = <<(bm_types:encode_varint(Version))/bitstring,
+             (bm_types:encode_varint(Stream))/bitstring,
+             Ripe/bitstring>>,
     Check = dual_sha(Data),
-    OData = crypto:bytes_to_integer(<<Data/bitstring, Check:32/bitstring>>),
+    OData = crypto:bytes_to_integer(<<Data/bitstring,
+                                      Check:32/bitstring>>),
     <<"BM-", (list_to_binary(base58:encode(OData)))/bytes>>.
 
 %% @doc Encode address from separate fields
