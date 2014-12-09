@@ -108,8 +108,8 @@ match(Type, MatchSpec)->
 
 %% @doc Deletes element w/`Id` from `Type` table
 %%
--spec delete(table(), term()) -> ok.
-delete(Type, Id)-> %  {{{1
+-spec delete(table(), term()) -> ok. %  {{{1
+delete(Type, Id)->
     gen_server:cast(?MODULE, {del, Type, Id}).
 
 %% @doc Get next peer to connect
@@ -202,17 +202,22 @@ init([]) -> %  {{{1
 %%--------------------------------------------------------------------
 handle_call(net, _From, #state{addr=Addr} = State) -> %  {{{1
     {atomic,
-     [#network_address{ip=Ip}=Data]} = mnesia:transaction(
-               fun() ->
-                       Id = case Addr of
-                           A when A == 'undefined';
-                                  A == '$end_of_table' ->
-                                    mnesia:first(addr);
-                                A ->
-                                    mnesia:next(addr, A)
-                            end,
-                       NA = mnesia:read(addr, Id)
-               end),
+     [#network_address{ip=Ip}=Data]} = 
+    mnesia:transaction(
+      fun() ->
+              Id = case Addr of
+                       'undefined' ->
+                           mnesia:first(addr);
+                       A ->
+                           case mnesia:next(addr, A) of
+                               '$end_of_table' ->
+                                   mnesia:first(addr);
+                               O ->
+                                   O
+                           end
+                   end,
+              mnesia:read(addr, Id)
+      end),
     {reply, Data, State#state{addr=Ip}};
 handle_call({first, Type}, _From, State) -> %  {{{1
     {atomic, Data} = mnesia:transaction(fun() ->

@@ -25,7 +25,7 @@
 -record(state,
         {
          socket :: inet:socket(),
-         transport :: module(),
+         transport=gen_tcp :: module(),
          version :: integer(),
          stream=1 :: integer(),
          init_stage = #init_stage{} :: #init_stage{},
@@ -80,10 +80,15 @@ init(Ref, Socket, Transport, _Opts) ->
 -spec init() ->  no_return(). % {{{1
 init() ->
     ok = proc_lib:init_ack({ok, self()}),
-    timer:sleep(1000),
-    {Transport, Socket} =  bm_connetion_dispatcher:get_socket(),
-    send_version(#state{socket=Socket, transport=Transport, remote_addr=#network_address{ip={127,0,0,1}, port=8444, time=bm_types:timestamp(), stream=1}}),
-    loop(#state{socket=Socket, transport=Transport}).
+    bm_db:wait_db(),
+    Socket =  connect_peer(),
+    error_logger:info_msg("Connected ~p~n", [Socket]),
+    send_version(#state{socket=Socket,
+                        remote_addr=#network_address{ip={127,0,0,1},
+                                                     port=8444,
+                                                     time=bm_types:timestamp(),
+                                                     stream=1}}),
+    loop(#state{socket=Socket}).
 
 %%%===================================================================
 %%% Internal functions TODO: refactor to 2 mod
@@ -105,33 +110,24 @@ loop(#state{socket = Socket,
             State = check_packet(Packet, IState),
             loop(State);
         {error, closed} ->
+            error_logger:info_msg("Socket ~p closed~n", [Socket]),
             bm_sender:unregister_peer(Socket),
-            {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
+            NSocket =  connect_peer(),
+            error_logger:info_msg("NConnected ~p~n", [Socket]),
             send_version(#state{socket=NSocket,
-                                transport=NTransport,
+                                transport=Transport,
                                 remote_addr=#network_address{ip={127,0,0,1},
                                                              port=8444,
                                                              time=bm_types:timestamp(),
                                                              stream=1}}),
             loop(IState#state{socket=NSocket,
-                              transport=NTransport});
+                             init_stage=#init_stage{}});
         {error, timeout} ->
             loop(IState);
         {error, R} ->
-            error_logger:info_msg("Socket error: ~p~n", [R]),
-            bm_sender:unregister_peer(Socket),
+            error_logger:warning_msg("Socket ~p error: ~p~n", [Socket, R]),
             Transport:close(Socket),
-            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            send_version(#state{socket=NSocket,
-                                transport=NTransport,
-                                remote_addr=#network_address{ip={127,0,0,1},
-                                                             port=8444,
-                                                             time=bm_types:timestamp(),
-                                                             stream=1}}),
-
-            loop(#state{socket=NSocket,
-                        transport=NTransport,
-                        init_stage=#init_stage{}})
+            loop(IState)
     end.
 %%--------------------------------------------------------------------
 %% @private
@@ -180,41 +176,19 @@ check_packet(<<?MAGIC,
                _Check:4/bytes,
                Packet/bytes>>=IPacket,
              #state{socket=Socket,
+                    timeout=Timeout,
                     transport=Transport}=State) when size(Packet) < Length ->
 
-     case Transport:recv(Socket, Length - size(Packet), 5000) of
+     case Transport:recv(Socket, Length - size(Packet), Timeout) of
         {ok, Data} ->
                 check_packet(<<IPacket/bytes, Data/bytes>>, State);
         {error, timeout} ->
                 check_packet(IPacket, State);
         {error, close} ->
-            bm_sender:unregister_peer(Socket),
-            {NTransport, NSocket} =  bm_connetion_dispatcher:get_socket(),
-            send_version(#state{
-                            socket=NSocket,
-                            transport=NTransport,
-                            remote_addr=#network_address{
-                                           ip={127,0,0,1},
-                                           port=8444,
-                                           time=bm_types:timestamp(),
-                                           stream=1}}),
-            loop(State#state{socket=NSocket,
-                             transport=NTransport});
+            loop(State#state{socket=Socket,
+                             transport=Transport});
         {error, R} ->
-            bm_sender:unregister_peer(Socket),
-            Transport:close(Socket),
-            {NTransport, NSocket} = bm_connetion_dispatcher:get_socket(),
-            send_version(#state{
-                            socket=NSocket,
-                            transport=NTransport,
-                            remote_addr=#network_address{
-                                           ip={127,0,0,1},
-                                           port=8444,
-                                           time=bm_types:timestamp(),
-                                           stream=1}}),
-            loop(State#state{socket=NSocket,
-                             transport=NTransport,
-                             init_stage=#init_stage{}})
+            loop(State)
     end;
 
 %% Default  % {{{2
@@ -333,7 +307,7 @@ analyse_packet(<<"getdata", _/bytes>>,
                                           fun(<<I:32/bytes,
                                                 R/bytes>>) -> {I, R} end),
 
-    MsgToSeend = lists:map(fun bm_reciever:create_obj/1, ObjToSend),
+    MsgToSeend = lists:map(fun create_obj/1, ObjToSend),
     lists:foreach(fun(Msg) -> Transport:send(Socket, Msg) end, MsgToSeend),
     State;
 
@@ -634,7 +608,7 @@ process_object(Hash,
               bm_message_creator:create_inv([ Hash ])),
             error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R)]),
 
-            bm_reciever:analyse_object(Type, Version, Time, Hash, R, State)
+            analyse_object(Type, Version, Time, Hash, R, State)
     end.
 
 %%%
@@ -681,3 +655,24 @@ create_obj(Hash) ->
             error_logger:warning_msg("Can't find inv ~p~n", [Hash])
     end.
 
+-spec connect_peer() -> Ret when  % {{{1
+      Ret :: inet:socket().
+connect_peer() ->
+    #network_address{ip=Ip,
+                     port=Port,
+                     stream=_Stream,
+                     time=_Time} = bm_db:get_net(), 
+
+    case gen_tcp:connect(Ip,
+                         Port,
+                         [inet,
+                          binary,
+                          {active,false},
+                          {reuseaddr, true},
+                          {packet, raw}],
+                         10000) of
+        {ok, Socket} ->
+            Socket;
+        {error, _Reason} ->
+            connect_peer()
+    end.

@@ -66,7 +66,7 @@ init([]) ->  % {{{1
             {ok, Ips} = inet:getaddrs("bootstrap8444.bitmessage.org", inet),
             {ok, Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org", inet),
             
-            %Ips= [{192,168,24,112}],
+            %Ips= [], %[{192,168,24,112}],
             %Ips1=[],
             ConfAddrs = lists:map(fun({I, P, S}) ->
                                          #network_address{ip=I,
@@ -182,7 +182,14 @@ connect_peer(Addr) ->
                            port=Port,
                            stream=_Stream,
                            time=_Time} ]  ->
-            case gen_tcp:connect(Ip, Port, [inet,  binary, {active,false}, {reuseaddr, true}, {packet, raw}], 10000) of
+            case gen_tcp:connect(Ip,
+                                 Port,
+                                 [inet,
+                                  binary,
+                                  {active,false},
+                                  {reuseaddr, true},
+                                  {packet, raw}],
+                                 10000) of
                 {ok, Socket} ->
                     {ok, Socket, bm_db:next(addr, Addr)};
                 {error, _Reason} ->

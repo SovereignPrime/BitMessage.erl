@@ -21,7 +21,12 @@
     send_broadcast/1
     ]).
 
--record(state, {transport=gen_tcp, sockets=[]}).
+%% For spawning 
+-export([
+         broadcast/3
+        ]).
+
+-record(state, {transport=gen_tcp, messages=[]}).
 
 %%%===================================================================
 %%% API
@@ -121,18 +126,22 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%--------------------------------------------------------------------
 handle_cast({send,  % {{{1
              Message},
-            #state{sockets=Sockets1,
-                   transport=Transport}=State) ->
+            #state{transport=Transport,
+                   messages=Messages}=State) ->
     Sockets = ets:select(addrs, [{{'$1', '_'}, [], ['$1']}]),
-    broadcast(Message, Sockets, Transport),
-    {noreply, State};
-handle_cast({register, Socket}, #state{sockets=Sockets}=State) ->  % {{{1
+    if length(Sockets) > 0 ->
+           spawn_link(bm_sender, broadcast, [ Message, Sockets, Transport ]),
+           {noreply, State};
+       true ->
+           {noreply, State#state{messages=[Message | Messages]}, 10000}
+    end;
+handle_cast({register, Socket}, State) ->  % {{{1
     Time = bm_types:timestamp(),
     ets:insert(addrs, {Socket, Time}), 
-    {noreply, State#state{sockets=[Socket|Sockets]}};
-handle_cast({unregister, Socket}, #state{sockets=Sockets}=State) ->  % {{{1
+    {noreply, State};
+handle_cast({unregister, Socket}, State) ->  % {{{1
     ets:delete(addrs, Socket), 
-    {noreply, State#state{sockets=lists:delete( Socket, Sockets )}};
+    {noreply, State};
 handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.
 
@@ -146,6 +155,12 @@ handle_cast(_Msg, State) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(timeout, #state{messages=Messages}=State) ->  % {{{1
+    lists:foreach(fun(Message) ->
+                          gen_server:cast(?MODULE, {send, Message})
+                  end,
+                 Messages),
+    {noreply, State#state{messages=[]}};
 handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
@@ -189,7 +204,7 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 broadcast(_, [], _) ->
     ok;
 broadcast(Message, [Socket| Rest], Transport) ->
-    %inet:setopts(Socket, [{send_timeout, 100}]),
+    inet:setopts(Socket, [{send_timeout, 10000}]),
     case Transport:send(Socket, Message) of
         ok ->
             %error_logger:info_msg("Sent: ~p~n", [Socket]),

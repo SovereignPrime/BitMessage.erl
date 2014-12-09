@@ -47,11 +47,9 @@ init([]) ->
     ChildSpec = [ ?CHILD({peer, C}, bm_reciever, worker, []) || C <- lists:seq(1, ConNum)],
     %ChildSpec = [ ?CHILD({socket, 1}, bm_socket, worker, [1]),
     %              ?CHILD({protocol, 1}, bm_protocol, worker, [1]) ],
-    {ok, {{one_for_all, 15, 100}, 
-          [
-           ?CHILD(connection_dispatcher, bm_connetion_dispatcher, worker, []) | 
+    {ok, {{one_for_one, 15, 100}, 
+          %?CHILD(connection_dispatcher, bm_connetion_dispatcher, worker, []) | 
            ChildSpec
-          ]
 }}.
 
 %%%===================================================================
