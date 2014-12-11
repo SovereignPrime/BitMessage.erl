@@ -95,7 +95,7 @@ encode_network(#network_address{time=Time,
       Ip1, Ip2, Ip3, Ip4,
       Port:16/big-integer>>.
 
--spec decode_network(binary()) -> {#network_address{}, binary()}.
+-spec decode_network(binary()) -> {#network_address{} | [], binary()}.
 decode_network(<<Time:64/big-integer,
                  Stream:32/big-integer,
                  1:64/big-integer,
@@ -109,6 +109,17 @@ decode_network(<<Time:64/big-integer,
                       ip={Ip1,Ip2,Ip3,Ip4},
                       port=Port,
                       services=1},
+     R};
+% Skip IP6 at the moment
+decode_network(<<Time:64/big-integer,
+                 Stream:32/big-integer,
+                 _:64/big-integer,
+                 _:10/unit:8-integer,
+                 _,_,
+                 _Ip1, _Ip2, _Ip3, _Ip4, % Ip address octets
+                 _Port:16/big-integer,
+                 R/bytes>>) ->
+    {[],
      R}.
 
 %%%

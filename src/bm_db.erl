@@ -408,15 +408,15 @@ iterate(C, Acc) -> %  {{{1
     end.
 
 bootstrap_network() ->  % {{{1
-    {ok,
-     Ips} = inet:getaddrs("bootstrap8444.bitmessage.org",
-                          inet),
-    {ok,
-     Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org",
-                           inet),
+    %{ok,
+    % Ips} = inet:getaddrs("bootstrap8444.bitmessage.org",
+    %                      inet),
+    %{ok,
+    % Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org",
+    %                       inet),
 
-    %Ips= [], %[{192,168,24,112}],
-    %Ips1=[],
+    Ips= [], %[{192,168,24,112}],
+    Ips1=[],
     error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips , Ips1]),
     mnesia:transaction(fun() ->
                                lists:foreach(fun({I,
@@ -429,8 +429,8 @@ bootstrap_network() ->  % {{{1
                                                                                    time=bm_types:timestamp()},
                                                                   write)
                                              end, 
-                                             %[]),
-                                             application:get_env(bitmessage, peers, [])),
+                                             []),
+                                             %application:get_env(bitmessage, peers, [])),
                                lists:foreach(fun({Ip1,
                                                   Ip2,
                                                   Ip3,

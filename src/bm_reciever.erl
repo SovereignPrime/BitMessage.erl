@@ -279,7 +279,7 @@ analyse_packet(<<"addr", _/bytes>>,
                                 verack_sent=true
                                }} = State) ->
     {Addrs, _} = bm_types:decode_list(Data, fun bm_types:decode_network/1),
-    bm_db:insert(addr, Addrs),
+    bm_db:insert(addr, lists:flatten(Addrs)),
     State;
 
 %% Inv message  {{{3
@@ -448,10 +448,20 @@ analyse_object(?PUBKEY, 3, Time, InvHash, Data, State) when size(Data) >= 170 ->
     bm_db:insert(pubkey, [Pubkey]),
     bm_message_encryptor:pubkey(Pubkey),
     State;
-analyse_object(?PUBKEY, 4, Time, InvHash, Data, State) when size(Data) >= 350 ->  % {{{2
+analyse_object(?PUBKEY,  % {{{2
+               4,
+               Time,
+               InvHash,
+               Data,
+               State) when size(Data) >= 350 ->
     %% TODO
     State;
-analyse_object(?MSG, _Version, Time, InvHash, Data, State) ->  % {{{2
+analyse_object(?MSG,  % {{{2
+               _Version,
+               Time,
+               InvHash,
+               Data,
+               State) ->
     case check_ackdata(Data) of
         true ->
             error_logger:info_msg("This is ACK for me"),
@@ -606,7 +616,7 @@ process_object(Hash,
                                       stream=Stream} ]),
             bm_sender:send_broadcast(
               bm_message_creator:create_inv([ Hash ])),
-            error_logger:info_msg("Requested Ver: ~p Size: ~p~n", [Version, size(R)]),
+            error_logger:info_msg("Requested Type: ~p Ver: ~p Size: ~p~n", [Type, Version, size(R)]),
 
             analyse_object(Type, Version, Time, Hash, R, State)
     end.
@@ -628,14 +638,16 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
 
 -spec check_ackdata(binary()) -> boolean().  % {{{1
 check_ackdata(Payload) ->
-    case bm_db:match(message, #message{ackdata=Payload,
-                                       folder=sent,
-                                       status=ackwait,
-                                       _='_'}) of
+    error_logger:info_msg("Recv msg check: ~p~n", [Payload]),
+    case bm_db:match(message,
+                     #message{ackdata=Payload,
+                              folder=sent,
+                              status=ackwait,
+                              _='_'}) of
         [] ->
             false;
-        [Message] ->
-            error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
+        [ Message ] ->
+            error_logger:info_msg("Recv ack: ~p~n", [Message]),
             bm_db:insert(message, [Message#message{status=ok}]),
             true
     end.

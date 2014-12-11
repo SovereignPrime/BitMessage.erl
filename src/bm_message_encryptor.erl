@@ -110,9 +110,9 @@ init(#message{hash=Id,
     
     Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
     A = crypto:rand_bytes(32),
-    AckData = <<Time:64/big-integer, 1, A/bytes>>,
-    Ack = bm_message_creator:create_message(<<"msg">>,
-                                            bm_pow:make_pow(AckData)),
+    AckData = bm_message_creator:create_obj(2, 1, 1, A),
+    Ack = bm_message_creator:create_message(<<"object">>,
+                                            AckData),
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<%1, %MSG version
