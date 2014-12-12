@@ -638,7 +638,6 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
 
 -spec check_ackdata(binary()) -> boolean().  % {{{1
 check_ackdata(Payload) ->
-    error_logger:info_msg("Recv msg check: ~p~n", [Payload]),
     case bm_db:match(message,
                      #message{ackdata=Payload,
                               folder=sent,
@@ -647,7 +646,7 @@ check_ackdata(Payload) ->
         [] ->
             false;
         [ Message ] ->
-            error_logger:info_msg("Recv ack: ~p~n", [Message]),
+            error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
             bm_db:insert(message, [Message#message{status=ok}]),
             true
     end.
