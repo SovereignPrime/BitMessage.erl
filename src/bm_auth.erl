@@ -70,9 +70,16 @@ generate_ripe(Str) ->
 pubkey(PrKey) when is_binary(PrKey) ->
     pubkey(crypto:bytes_to_integer(PrKey));
 pubkey(PrKey) when is_integer(PrKey) ->
-    G = {55066263022277343669578718895168534326250603453777594175500187360389116729240,
-         32670510020758816978083085130507043184471273380659243275938904335757337482424},
-    point_mult(G, PrKey).
+    {{prime_field,
+      <<Prime:256/integer>>},
+     _PP,
+     <<4, GX:256, GY:256>>,
+     _Order,
+     _CoFactor} = crypto:ec_curve(secp256k1),
+    G = {GX, GY},
+    {X, Y} = point_mult(G, PrKey, Prime, G),
+    io:format("X: ~p Y: ~p~n", [X, Y]),
+    <<4, X:256/little-integer, Y:256/integer>>.
 
 
 %%%
@@ -86,37 +93,60 @@ dual_sha(Data) ->
     crypto:hash(sha512, crypto:hash(sha512, Data)).
 
 %%%
-%% Private functions
+%% Private functions {{{1
 %%%
 -type point(Num) :: {Num, Num}.
 
 %% @private
-%% @doc Point add
+%% @doc Point add {{{1
 %%
--spec point_add(point(integer()), point(integer())) -> point(integer()).
-point_add({Px, Py}, {Qx, Qy}) ->
-    Lambda = (Qy -Py) div (Qx -Px),
-    X = bm_types:pow(Lambda, 2) -Px -Qx,
-    Y = Lambda * (Px - X) - Py,
+-spec point_add(point(integer()), point(integer()), integer()) -> point(integer()).
+point_add(A, A, Prime) ->
+    point_double(A, Prime);
+point_add({Px, Py}, {Qx, Qy}, Prime) ->
+    Lambda = mod(((Qy - Py) * inv(Qx - Px, Prime)), Prime),
+    X = mod((bm_types:pow(Lambda, 2) - Px - Qx), Prime),
+    Y = mod((Lambda * (Px - X) - Py), Prime),
     {X, Y}. 
 
 %% @private
-%% @doc Point double
+%% @doc Point double {{{1
 %%
--spec point_double(point(integer())) -> point(integer()).
-point_double({Px, Py}) ->
-    Lambda = 3 * bm_types:pow(Px, 2) div (2 * Py),
-    X = bm_types:pow(Lambda, 2) - 2 * Px,
-    Y = Lambda * (Px -X) - Py,
+-spec point_double(point(integer()), integer()) -> point(integer()).
+point_double({Px, Py}, Prime) ->
+    Lambda = mod(3 * bm_types:pow(Px, 2) * inv(2 * Py, Prime), Prime),
+    X = mod(bm_types:pow(Lambda, 2) - 2 * Px, Prime),
+    Y = mod(Lambda * (Px -X) - Py, Prime),
     {X, Y}.
 
 %% @private
-%% @doc Point multiply
+%% @doc Point multiply {{{1
 %%
--spec point_mult(point(integer()), integer()) -> point(integer()).
-point_mult(_, 0) -> 0;
-point_mult(P, 1) -> P;
-point_mult(P, N) when N rem 2 == 1 ->
-    point_add(P, point_mult(P, N - 1));
-point_mult(P, N) ->
-    point_mult(point_double(P), N div 2).
+-spec point_mult(point(integer()), integer(), integer(), point(integer())) -> point(integer()).
+point_mult(_, 0, _, G) -> G; % 0 in WiKi ???
+point_mult(P, 1, _, _) -> P;
+point_mult(P, N, Prime, G) when N rem 2 == 1 ->
+    point_add(P, point_double(point_mult(P, N div 2, Prime, G), Prime), Prime);
+point_mult(P, N, Prime, G) ->
+    point_double(point_mult(P, N div 2, Prime, G), Prime).
+
+-spec inv(integer(), integer()) -> integer().
+inv(N, Prime) ->
+    mod(inv(N rem Prime, Prime, 1, 0), Prime).
+
+-spec inv(integer(), integer(), integer(), integer()) -> integer().
+inv(Low, Hight, L, H) when Low > 1 ->
+    R = Hight div Low,
+    NM = H - L * R,
+    New = Hight - Low * R,
+    inv(New, Low, NM, L);
+inv(_Low, _Hight, L, _H) ->
+    L.
+
+-spec mod(integer(), integer()) -> non_neg_integer().
+mod(0, _B) ->
+    0;
+mod(A, B) when A > 0 ->
+    A rem B;
+mod(A, B) when A < 0 ->
+    B + (A rem B).
