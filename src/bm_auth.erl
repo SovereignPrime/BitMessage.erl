@@ -11,7 +11,7 @@
 
 %% @doc Encode address from structure
 %%
--spec encode_address(#address{}) -> binary().
+-spec encode_address(#address{}) -> binary().  % {{{2
 encode_address(#address{version=Version, stream=Stream, ripe = Ripe}) ->
     Data = <<(bm_types:encode_varint(Version))/bitstring,
              (bm_types:encode_varint(Stream))/bitstring,
@@ -23,7 +23,7 @@ encode_address(#address{version=Version, stream=Stream, ripe = Ripe}) ->
 
 %% @doc Encode address from separate fields
 %%
--spec encode_address(Version, Stream, Ripe) -> binary() when 
+-spec encode_address(Version, Stream, Ripe) -> binary() when  % {{{2
       Version :: integer(),
       Stream :: integer(),
       Ripe :: binary().
@@ -38,7 +38,7 @@ encode_address(_, _, _) ->
 
 %% @doc Decodes address structure from address
 %%
--spec decode_address(binary() | string()) -> #address{}.
+-spec decode_address(binary() | string()) -> #address{}. % {{{2
 decode_address(Data) when is_list(Data) ->
     decode_address(list_to_binary(Data));
 decode_address(<<"BM-",Data/bytes>>) ->
@@ -60,13 +60,13 @@ decode_address(<<"BM-",Data/bytes>>) ->
 
 %% @doc Generates ripe from data
 %%
--spec generate_ripe(iolist() | binary()) -> binary().
+-spec generate_ripe(iolist() | binary()) -> binary(). % {{{2
 generate_ripe(Str) ->
     crypto:hash(ripemd160, crypto:hash(sha512, Str)).
 
 %% @doc TODO: Generates PubKey from Private
 %%
--spec pubkey(integer() | binary()) -> point(integer()). % ???
+-spec pubkey(integer() | binary()) -> binary(). % ??? % {{{2
 pubkey(PrKey) when is_binary(PrKey) ->
     pubkey(crypto:bytes_to_integer(PrKey));
 pubkey(PrKey) when is_integer(PrKey) ->
@@ -79,7 +79,7 @@ pubkey(PrKey) when is_integer(PrKey) ->
     G = {GX, GY},
     {X, Y} = point_mult(G, PrKey, Prime, G),
     io:format("X: ~p Y: ~p~n", [X, Y]),
-    <<4, X:256/little-integer, Y:256/integer>>.
+    <<4, X:256/integer, Y:256/integer>>.
 
 
 %%%
@@ -104,7 +104,7 @@ dual_sha(Data) ->
 point_add(A, A, Prime) ->
     point_double(A, Prime);
 point_add({Px, Py}, {Qx, Qy}, Prime) ->
-    Lambda = mod(((Qy - Py) * inv(Qx - Px, Prime)), Prime),
+    Lambda = mod((Qy - Py) * inv(Qx - Px, Prime), Prime),
     X = mod((bm_types:pow(Lambda, 2) - Px - Qx), Prime),
     Y = mod((Lambda * (Px - X) - Py), Prime),
     {X, Y}. 
@@ -132,7 +132,7 @@ point_mult(P, N, Prime, G) ->
 
 -spec inv(integer(), integer()) -> integer().
 inv(N, Prime) ->
-    mod(inv(N rem Prime, Prime, 1, 0), Prime).
+    mod(inv(mod(N, Prime), Prime, 1, 0), Prime).
 
 -spec inv(integer(), integer(), integer(), integer()) -> integer().
 inv(Low, Hight, L, H) when Low > 1 ->
