@@ -53,4 +53,4 @@ clean-deps:
 
 distclean: clean clean-plt clean-deps
 	
-travis: dialyzer
+travis: clean dialyzer test

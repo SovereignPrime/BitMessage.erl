@@ -7,7 +7,11 @@
 -spec behaviour_info(atom()) -> list(tuple()) | undefined.  % {{{1
 behaviour_info(callbacks) ->
     [
-     {received, 1}
+     {received, 1},
+     {key_ready, 1},
+     {sent, 1},
+     {connected, 1}, 
+     {disconnected, 1}
     ];
 behaviour_info(_) ->
     undefined.

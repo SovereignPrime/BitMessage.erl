@@ -230,22 +230,21 @@ getdata_packet(_Config) ->  % {{{2
     SZ = size(MSG),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
                                        io:format("~p~n", [I]),
-                                       [ok]
+                                       [#inventory{hash = I, 
+                                                  payload = <<"TEST_MSG">>
+                                                  }]
                             end),
-    meck:expect(bm_reciever, create_obj, fun(_) ->
-                                                 <<"TEST_MSG">>
-                                         end),
     bm_reciever:analyse_packet(<<"getdata", 0:(12 - 7)/unit:8>>, SZ, MSG, #state{}),
-    ?assertEqual(1, meck:num_calls(bm_reciever,
-                                   create_obj,
-                                   [<<165,40,135,49,43,249,18,255,
+    ?assertEqual(1, meck:num_calls(bm_db,
+                                   lookup,
+                                   [inventory, <<165,40,135,49,43,249,18,255,
                                      174,139,155,56,33,113,234,
                                      186,244,19,94,208,251,208,
                                      84,75,224,222,99,93,143,239,
                                      10,190>>])),
     ?assertEqual(1, meck:num_calls(test, 
                                    send,
-                                   ['_', <<"TEST_MSG">>])).
+                                   '_')).
 
 object_packet_test() ->  % {{{2
     [].
@@ -259,17 +258,7 @@ object_packet_test(_Config) ->  % {{{2
                                           true
                                   end),
     MSG = bm_message_creator:create_obj(0, 1, 1, Data),
-    meck:expect(bm_reciever,
-                analyse_object,
-                fun(0, 1, _Time, Inv, D, S) when D == Data ->
-                        #state{};
-                   (Type, Version, Time, Inv, D, S) ->
-                        io:format("Wrong call of analyse_object: ~p ~p ~p ~p ~p~n",
-                                  [Type, Version, Time, Inv, D]),
-                        #state{}
-                end),
-    bm_reciever:analyse_packet(<<"object">>, size(MSG), MSG, #state{}),
-    ?assert(meck:called(bm_reciever, analyse_object, [0, 1, '_', '_', Data, #state{}])),
+    #state{} = bm_reciever:analyse_packet(<<"object">>, size(MSG), MSG, #state{}),
     ?assert(meck:called(bm_pow, make_pow, '_')),
     ?assert(meck:called(bm_pow, check_pow, '_')).
 
