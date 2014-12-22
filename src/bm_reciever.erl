@@ -31,7 +31,8 @@
          init_stage = #init_stage{} :: #init_stage{},
          remote_streams :: [integer()],
          remote_addr :: #network_address{},
-         timeout=10000 :: non_neg_integer()
+         timeout=10000 :: non_neg_integer(),
+         callback=bitmessage
         }).
 
 
@@ -104,6 +105,7 @@ init() ->
 -spec loop(#state{}) -> no_return().  % {{{1
 loop(#state{socket = Socket,
             transport = Transport,
+            callback=Callback,
             timeout=Timeout}=IState) ->
     case Transport:recv(Socket,0, Timeout) of
         {ok, Packet} ->
@@ -112,6 +114,8 @@ loop(#state{socket = Socket,
         {error, closed} ->
             error_logger:info_msg("Socket ~p closed~n", [Socket]),
             bm_sender:unregister_peer(Socket),
+            {ok, Number} = ets:tabfile_info(size),
+            Callback:disconnected(Number),
             NSocket =  connect_peer(),
             error_logger:info_msg("NConnected ~p~n", [Socket]),
             send_version(#state{socket=NSocket,
@@ -539,6 +543,7 @@ send_getdata(Objs,
 conection_fully_established(#state{socket=Socket,
                                    transport=Transport,
                                    stream=Stream,
+                                   callback=Callback,
                                    init_stage=#init_stage{
                                                  verack_sent=true,
                                                  verack_recv=true
@@ -563,6 +568,8 @@ conection_fully_established(#state{socket=Socket,
                           ok
             end, Addrs),
     Invs = bm_message_creator:create_big_inv(Stream, []),
+    {ok, Number} = ets:tabfile_info(size),
+    Callback:connected(Number),
     lists:foreach(fun(I) ->
                           Transport:send(Socket, I),
                           ok 

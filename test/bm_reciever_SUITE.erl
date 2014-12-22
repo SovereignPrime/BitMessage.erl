@@ -17,7 +17,8 @@
          init_stage = #init_stage{},
          remote_streams,
          remote_addr,
-         timeout
+         timeout,
+         callback=bitmessage
         }).
 
 %% API  {{{1
