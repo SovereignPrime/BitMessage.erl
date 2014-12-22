@@ -142,3 +142,33 @@ start_link(Module) ->
 get_message(Hash) ->
     [Msg] = bm_db:lookup(message, Hash),
     {ok, Msg}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Callback examples  % {{{1
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec received(hash()) -> ok.
+received(Hash) ->  % {{{1
+    error_logger:info_msg("Received message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+    ok.
+
+-spec sent(hash()) -> ok.
+sent(Hash) ->  % {{{1
+    error_logger:info_msg("Sent message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+    ok.
+-spec key_ready(binary()) -> ok.
+key_ready(Address) ->  % {{{1
+    error_logger:info_msg("New address generated: ~p~n", [Address]),
+    ok.
+-spec connected(non_neg_integer()) -> ok.
+connected(N) ->  % {{{1
+    error_logger:info_msg("New peer. Number of peers: ~p~n",
+                          [N]),
+    ok.
+-spec disconnected(non_neg_integer()) -> ok.
+disconnected(N) ->  % {{{1
+    error_logger:info_msg("Peer disconnected. Number of peers: ~p~n",
+                          [N]),
+    ok.
