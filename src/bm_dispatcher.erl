@@ -10,8 +10,7 @@
          broadcast_arrived/3,
          register_receiver/1,
          send_message/1,
-         send_broadcast/1,
-         received/1
+         send_broadcast/1
 ]).
 
 %% gen_server callbacks
@@ -23,7 +22,7 @@
          code_change/3]).
 % }}}
 
--record(state, {callback=?MODULE}).
+-record(state, {callback=bitmessage}).
 
 %%%===================================================================
 %%% API
@@ -267,7 +266,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
         true ->
             {noreply, State}
     end;
-handle_cast({send, Type, Message}, State) ->  % {{{1
+handle_cast({send, Type, Message}, #state{callback=Callback}=State) ->  % {{{1
     error_logger:info_msg("Sending message ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
     {noreply, State};
@@ -277,11 +276,6 @@ handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.
 
-%% @doc Default callback
-%%
--spec received(any()) -> ok.
-received(_) ->  % {{{1
-    ok.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc

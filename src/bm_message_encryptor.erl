@@ -4,7 +4,7 @@
 
 -include("../include/bm.hrl").
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 
 %% gen_fsm callbacks
 -export([init/1, % {{{1
@@ -18,7 +18,7 @@
          code_change/4]). %}}}
 -export([pubkey/1]).
 
--record(state, {type, message, pek, psk, hash}).
+-record(state, {type, message, pek, psk, hash, callback}).
 
 %%%===================================================================
 %%% API
@@ -33,9 +33,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage) ->  % {{{1
+start_link(DMessage, Callback) ->  % {{{1
     io:format("~p~n", [DMessage]),
-    gen_fsm:start_link(?MODULE, DMessage, []).
+    gen_fsm:start_link(?MODULE, [DMessage, Callback], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,21 +66,31 @@ pubkey(PubKey) ->
 %%--------------------------------------------------------------------
 
 %% Init for already packed messages  {{{1
-init(#message{to=To,
+init([
+      #message{to=To,
               from=From,
               subject=Subject,
               enc=Enc,
               text=Text,
               type=Type,
               folder=sent,
-              status=Status}=Message) 
-  when Status == encrypt_message;
-       Status == wait_pubkey ->
+              status=Status}=Message,
+     Callback
+     ]) when 
+      Status == encrypt_message;
+      Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    {ok, wait_pubkey, #state{type=msg, message=Message, hash=Ripe}, 0};
+    {ok,
+     wait_pubkey,
+     #state{type=msg,
+            message=Message,
+            hash=Ripe,
+            callback=Callback},
+     0};
 
 %% Init for new and resending messages  {{{1
-init(#message{hash=Id,
+init([
+      #message{hash=Id,
               to=To,
               from=From,
               subject=Subject,
@@ -88,9 +98,12 @@ init(#message{hash=Id,
               text=Text,
               status=Status,
               folder=sent,
-              type=msg} = Message) 
-  when Status == new;
-       Status == ackwait->
+              type=msg} = Message,
+      Callback
+     ]) when 
+      Status == new;
+      Status == ackwait->
+
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
             R;
@@ -140,7 +153,13 @@ init(#message{hash=Id,
     io:format("Deleting: ~p~n", [Message]),
     mnesia:dirty_delete(message, Id),
     bm_db:insert(message, [NMessage]),
-    {ok, wait_pubkey, #state{type=msg, hash=Ripe, message=NMessage}, 0}.
+    {ok,
+     wait_pubkey,
+     #state{type=msg,
+            hash=Ripe,
+            message=NMessage,
+            callback=Callback},
+     0}.
 
 %% TODO: Init for broadcasts  {{{1
 %init([#message{to=To,
@@ -317,11 +336,11 @@ encrypt_message(Event, State) ->
 %% Work cycle {{{2
 make_inv(timeout,
          #state{type=Type,
+                callback=Callback,
                 message= #message{hash=MID,
                                   payload = Payload,
                                   to=To,
                                   from=From}=Message}=State) ->
-    %Time = bm_types:timestamp() + crypto:rand_uniform(-300, 300),
     Time = bm_types:timestamp() + 86400 * 2, %crypto:rand_uniform(-300, 300),
     PPayload = case Type of 
         msg ->
@@ -359,6 +378,7 @@ make_inv(timeout,
                            To
                           ]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+    Callback:sent(Hash),
     {stop, normal, State};
 
 %% Default {{{2

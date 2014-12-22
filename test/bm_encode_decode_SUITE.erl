@@ -171,7 +171,7 @@ encode_decode_test(_Config) ->
                         meck:exception(error, "Wrong hash")
                 end),
     spawn(fun() ->
-                  bm_message_encryptor:start_link(MSG)
+                  bm_message_encryptor:start_link(MSG, bitmessage)
           end),
 
     meck:wait(bm_pow, make_pow, '_', 1600),
