@@ -2,24 +2,49 @@
 -compile([export_all]).
 -include("../include/bm.hrl").
 
-%% @doc Erlang behaviour callback
-%%
--spec behaviour_info(atom()) -> list(tuple()) | undefined.  % {{{1
-behaviour_info(callbacks) ->
-    [
-     {key_ready, 1},
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 
+%% @doc Hash type for IDs of bitmessage objects
+-type hash() :: binary().
 
-     {received, 1},
-     {sent, 1},
 
-     {connected, 1}, 
-     {disconnected, 1}
-    ];
-behaviour_info(_) ->
-    undefined.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new message or broadcast received with ID of sent object
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback received(hash()) -> ok.
 
-%% @doc Send a message w/standard enc
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new message or broadcast sent with ID of sent object
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback sent(hash()) -> ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new key data is generated
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback key_ready(BMAddress) -> ok when
+      BMAddress :: binary().
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new host is connected with number of peers as argument
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback connected(non_neg_integer()) -> ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new host is disconnected with number of peers as argument
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback disconnected(non_neg_integer()) -> ok.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Send a message w/standard enc
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec send_message(From, To, Subject, Text) -> ok when  % {{{1
       From :: binary(),
       To :: binary(),
@@ -31,8 +56,11 @@ send_message(From, To, Subject, Text) ->
                                         subject=Subject,
                                         text=Text}).
 
-%% @doc Send message w/custom enc
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Send message w/custom enc
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec send_message(From, To, Subject, Text, Encoding) -> ok when  % {{{1
       From :: binary(),
       To :: binary(),
@@ -46,8 +74,11 @@ send_message(From, To, Subject, Text, Encoding) ->
                                         text=Text,
                                         enc=Encoding}).
 
-%% @doc Send a broadcast w/standard enc
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Send a broadcast w/standard enc
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec send_broadcast(From, Subject, Text, Encoding) -> ok when  % {{{1
       From :: binary(),
       Subject :: binary(),
@@ -59,8 +90,11 @@ send_broadcast(From, Subject, Text, Encoding) ->
                                           text=Text,
                                           enc=Encoding}).
 
-%% @doc Subscribe to broadcasts from address
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Subscribe to broadcasts from address
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec subscribe_broadcast(binary()) -> supervisor:startchild_ret().  % {{{1
 subscribe_broadcast(Address) ->
     #address{version=V,
@@ -81,21 +115,30 @@ subscribe_broadcast(Address) ->
     bm_decryptor_sup:add_decryptor(PK).
     
 
-%% @doc Generate bitmessage keypair and address
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Generate bitmessage keypair and address
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec generate_address(fun(({address, binary()}) -> any())) -> ok.  % {{{1
 generate_address(Fun) ->
     bm_address_generator:generate_random_address(make_ref(), 1, false, Fun).
 
-%% @doc Registers callback module
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Registers callback module
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec start_link(atom()) -> ok.  % {{{1
 start_link(Module) ->
     bm_dispatcher:register_receiver(Module).
 
-%% @doc Get incoming message from db by hash
-%%
--spec get_message(binary()) -> {ok, #message{}}.  % {{{1
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Get incoming message from db by hash
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec get_message(hash()) -> {ok, #message{}}.  % {{{1
 get_message(Hash) ->
     [Msg] = bm_db:lookup(message, Hash),
     {ok, Msg}.
