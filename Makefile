@@ -22,7 +22,7 @@ get-deps:
 	@$(REBAR) -C rebar.config get-deps
 
 compile: 
-	@$(REBAR) -C rebar.config skip_deps=true compile
+	@$(REBAR) -C rebar.config compile
 
 doc:
 	@$(REBAR) -C rebar.config skip_deps=true doc
@@ -31,7 +31,7 @@ clean:
 	@$(REBAR) -C rebar.config skip_deps=true clean
 
 test: get-deps 
-	@$(REBAR) -C rebar.config -DTEST skip_deps=true compile ct
+	@$(REBAR) -C rebar.config --force -DTEST skip_deps=true clean compile ct
 
 xref: get-deps compile
 	@$(REBAR) -C rebar.config skip_deps=true xref
@@ -53,4 +53,4 @@ clean-deps:
 
 distclean: clean clean-plt clean-deps
 	
-travis: clean dialyzer test
+travis: dialyzer test
