@@ -120,9 +120,9 @@ subscribe_broadcast(Address) ->
 %%% @doc Generate bitmessage keypair and address
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec generate_address(fun(({address, binary()}) -> any())) -> ok.  % {{{1
-generate_address(Fun) ->
-    bm_address_generator:generate_random_address(make_ref(), 1, false, Fun).
+-spec generate_address() -> ok.  % {{{1
+generate_address() ->
+    bm_dispatcher:generate_address().
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%

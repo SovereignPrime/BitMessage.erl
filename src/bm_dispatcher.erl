@@ -272,6 +272,9 @@ handle_cast({send, Type, Message}, #state{callback=Callback}=State) ->  % {{{1
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1
     {noreply, State#state{callback=Module}};
+handle_cast({generate_address, Module}, #state{callback=Callback}=State) ->  % {{{1
+    bm_address_generator:generate_random_address(make_ref(), 1, false, Callback),
+    {noreply, State};
 handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.

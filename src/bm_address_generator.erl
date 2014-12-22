@@ -2,9 +2,6 @@
 -behaviour(gen_server).  
 -include("../include/bm.hrl").
 
-%% UintTest macro
--include_lib("eunit/include/eunit.hrl").
-
 %% API
 -export([start_link/0]).
 
@@ -30,7 +27,7 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
+start_link() ->  % {{{1
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %%--------------------------------------------------------------------
@@ -39,13 +36,22 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec generate_random_address(Label, Stream, EighteenthByteRipe, Fun) -> ok when
+-spec generate_random_address(Label, Stream, EighteenthByteRipe, Callback) -> ok when  % {{{1
       Label :: reference(),
       Stream :: integer(),
       EighteenthByteRipe :: boolean(),
-      Fun :: fun(({address, binary()}) -> any()).
-generate_random_address(Label, Stream, EighteenthByteRipe, Fun) ->
-    gen_server:cast(?MODULE, {generate, random, Label, Stream, EighteenthByteRipe, Fun}).
+      Callback :: module().
+generate_random_address(Label,
+                        Stream,
+                        EighteenthByteRipe,
+                        Callback) ->
+    gen_server:cast(?MODULE,
+                    {generate,
+                     random,
+                     Label,
+                     Stream,
+                     EighteenthByteRipe,
+                     Callback}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -62,7 +68,7 @@ generate_random_address(Label, Stream, EighteenthByteRipe, Fun) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([]) ->  % {{{1
     bm_db:wait_db(),
     {ok, []}.
 
@@ -80,7 +86,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
 
@@ -94,12 +100,20 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({generate, random, Label, Stream, EighteenthByteRipe, Fun}, State) ->
-    PK = generate_keys(Label, Stream, EighteenthByteRipe),
+handle_cast({generate,
+             random,
+             Label,
+             Stream,
+             EighteenthByteRipe,
+             Callback},
+            State) ->  % {{{1
+    PK = generate_keys(Label,
+                       Stream,
+                       EighteenthByteRipe),
     bm_db:insert(privkey, [PK]),
     bm_decryptor_sup:add_decryptor(PK),
     error_logger:info_msg("Address ~p ready~n",[PK]),
-    apply(Fun, [ {address, PK#privkey.address} ]),
+    Callback:key_ready(PK#privkey.address),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -114,7 +128,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -128,7 +142,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, _State) ->  % {{{1
     ok.
 
 %%--------------------------------------------------------------------
@@ -139,26 +153,12 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->  % {{{1
     {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-%generate_keys(DeterministicPassword, Nonce, EighteenthByteRipe) when size(DeterministicPassword) /= 0 ->
-%    PotentialPrivSign = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce))/bytes>>),
-%    PotentialPrivKey = crypto:hash(sha512, <<DeterministicPassword/bytes, (bm_auth:encode_varint(Nonce + 1))/bytes>>),
-%    PotentialPubKey = point_mult(PotentialPrivKey),
-%    PotentialPubSign = point_mult(PotentialPrivSign),
-%    Ripe = case {crypto:hash(ripemd160, crypto:hash(sha512, <<PotentialPubSign:(32 * 8)/bytes, PotentialPubKey: (32 * 8)/bytes>>)), EighteenthByteRipe}  of
-%        {<<0, 0, R>>, true} ->
-%            R;
-%        {<<0, R>>, false} ->
-%            R;
-%        _ ->
-%            generate_keys(DeterministicPassword, Nonce + 2, EighteenthByteRipe)
-%    end,
-%    bm_auth:encode_address(3, Stream, Ripe).
                           
 %%--------------------------------------------------------------------
 %% @private
@@ -167,7 +167,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec generate_keys(Label, Stream, EighteenthByteRipe) -> #privkey{} when
+-spec generate_keys(Label, Stream, EighteenthByteRipe) -> #privkey{} when  % {{{1
       Label :: any(),
       Stream ::integer(),
       EighteenthByteRipe :: boolean().
