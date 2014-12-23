@@ -138,9 +138,15 @@ handle_cast({send,  % {{{1
 handle_cast({register, Socket}, State) ->  % {{{1
     Time = bm_types:timestamp(),
     ets:insert(addrs, {Socket, Time}), 
+    Number = ets:info(addrs, size),
+    Callback = bm_dispatcher:get_callback(),
+    Callback:connected(Number),
     {noreply, State};
 handle_cast({unregister, Socket}, State) ->  % {{{1
     ets:delete(addrs, Socket), 
+    Number = ets:info(addrs, size),
+    Callback = bm_dispatcher:get_callback(),
+    Callback:disconnected(Number),
     {noreply, State};
 handle_cast(_Msg, State) ->  % {{{1
     {noreply, State}.

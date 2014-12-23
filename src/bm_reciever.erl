@@ -114,8 +114,6 @@ loop(#state{socket = Socket,
         {error, closed} ->
             error_logger:info_msg("Socket ~p closed~n", [Socket]),
             bm_sender:unregister_peer(Socket),
-            {ok, Number} = ets:tabfile_info(size),
-            Callback:disconnected(Number),
             NSocket =  connect_peer(),
             error_logger:info_msg("NConnected ~p~n", [Socket]),
             send_version(#state{socket=NSocket,
@@ -568,8 +566,6 @@ conection_fully_established(#state{socket=Socket,
                           ok
             end, Addrs),
     Invs = bm_message_creator:create_big_inv(Stream, []),
-    {ok, Number} = ets:tabfile_info(size),
-    Callback:connected(Number),
     lists:foreach(fun(I) ->
                           Transport:send(Socket, I),
                           ok 

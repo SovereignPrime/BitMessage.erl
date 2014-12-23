@@ -10,7 +10,9 @@
          broadcast_arrived/3,
          register_receiver/1,
          send_message/1,
-         send_broadcast/1
+         send_broadcast/1,
+         generate_address/0,
+         get_callback/0
 ]).
 
 %% gen_server callbacks
@@ -98,6 +100,16 @@ send_broadcast(Message) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Generates new BM address
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_address() ->  ok. % {{{1
+generate_address() ->
+    gen_server:cast(?MODULE, generate_address).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Registers callback module
 %%
 %% @end
@@ -105,6 +117,16 @@ send_broadcast(Message) ->
 -spec register_receiver(atom()) -> ok.  % {{{1
 register_receiver(Callback) ->
     gen_server:cast(?MODULE, {register, Callback}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get callback module
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec get_callback() -> module().  % {{{1
+get_callback() ->
+    gen_server:call(?MODULE, callback).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -154,6 +176,8 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(callback, _From, #state{callback=Callback}=State) ->  % {{{1
+    {reply, Callback, State};
 handle_call(_Request, _From, State) ->  % {{{1
     Reply = ok,
     {reply, Reply, State}.
@@ -268,11 +292,11 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
     end;
 handle_cast({send, Type, Message}, #state{callback=Callback}=State) ->  % {{{1
     error_logger:info_msg("Sending message ~p~n", [Message]),
-    bm_encryptor_sup:add_encryptor(Message#message{type=Type}),
+    bm_encryptor_sup:add_encryptor(Message#message{type=Type}, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1
     {noreply, State#state{callback=Module}};
-handle_cast({generate_address, Module}, #state{callback=Callback}=State) ->  % {{{1
+handle_cast(generate_address, #state{callback=Callback}=State) ->  % {{{1
     bm_address_generator:generate_random_address(make_ref(), 1, false, Callback),
     {noreply, State};
 handle_cast(Msg, State) ->  % {{{1

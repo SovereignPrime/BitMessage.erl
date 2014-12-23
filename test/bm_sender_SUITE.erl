@@ -23,6 +23,7 @@
         ]).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks  {{{1
@@ -58,6 +59,13 @@ end_per_group(_GroupName, _Config) ->  % {{{2
 
 init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:new(test,[non_strict]),
+    meck:new(bm_dispatcher,[]),
+    meck:expect(test, connected, fun(_) ->
+                                         ok
+                                 end),
+    meck:expect(bm_dispatcher, get_callback, fun() ->
+                                                     test
+                                             end),
     bm_sender:start_link(test),
     Config.
 
@@ -77,7 +85,8 @@ register_peer_test(_Config) ->  % {{{2
     ok=bm_sender:register_peer(Socket),
     timer:sleep(1),
     [{Socket, _}] = ets:lookup(addrs, Socket),
-    1 = ets:info(addrs, size).
+    1 = ets:info(addrs, size),
+    ?assert(meck:called(test, connected, [1])).
 
 
 unregister_peer_test() ->  % {{{2
@@ -85,6 +94,9 @@ unregister_peer_test() ->  % {{{2
 
 unregister_peer_test(_Config) ->  % {{{2
     Socket = gen_tcp:listen(0, []),
+    meck:expect(test, disconnected, fun(_) ->
+                                         ok 
+                                    end),
     ok=bm_sender:register_peer(Socket),
     timer:sleep(1),
     [{Socket, _}] = ets:lookup(addrs, Socket),
@@ -92,7 +104,8 @@ unregister_peer_test(_Config) ->  % {{{2
     ok=bm_sender:unregister_peer(Socket),
     timer:sleep(1),
     [] = ets:lookup(addrs, Socket),
-    0 = ets:info(addrs, size).
+    0 = ets:info(addrs, size),
+    ?assert(meck:called(test, disconnected, [0])).
 
 send_broadcast_test() ->  % {{{2
     [].
