@@ -102,10 +102,9 @@ subscribe_broadcast(Address) ->
              ripe=R} = bm_auth:decode_address(Address),
 
     <<PrivKey:32/bytes,
-      _/bytes>> = crypto:hash(sha512,
-                              <<(bm_types:encode_varint(V))/bytes,
-                                (bm_types:encode_varint(S))/bytes,
-                                R/bytes>>),
+      _/bytes>> = bm_auth:dual_sha(<<(bm_types:encode_varint(V))/bytes,
+                                     (bm_types:encode_varint(S))/bytes,
+                                     R/bytes>>),
     PK = #privkey{hash=PrivKey,
                   pek=PrivKey,
                   address=Address,

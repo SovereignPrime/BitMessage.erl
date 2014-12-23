@@ -364,6 +364,7 @@ analyse_packet(<<"object", _/bytes>>,
             {Version, R} = bm_types:decode_varint(Packet),
             case bm_types:decode_varint(R) of
                  {Stream, R1} ->
+                    file:write_file(".test/data/broadcast1.bin", Payload),
                     process_object(Hash, Payload, State);
                 _ when Stream == 1, Version == 1; Type == 2 ->
                     process_object(Hash, Payload, State);
@@ -480,8 +481,14 @@ analyse_object(?BROADCAST,  % {{{2
                Data,
                State) when size(Data) > 160 ->
             case Version of
-                2 ->
+                V when V ==2; 
+                       V == 3 ->
                     bm_message_decryptor:decrypt_broadcast(Data, InvHash),
+                    State;
+                V when V == 4; 
+                       V == 5 ->
+                    <<_Tag:32/bytes, Encrypted/bytes>> = Data,
+                    bm_message_decryptor:decrypt_broadcast(Encrypted, InvHash),
                     State;
                 _ ->
                     State

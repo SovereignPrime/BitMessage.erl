@@ -161,46 +161,77 @@ init([
             callback=Callback},
      0}.
 
-%% TODO: Init for broadcasts  {{{1
-%init([#message{to=To,
-%from=From,
-%subject=Subject,
-%text=Text}=Message,
-%broadcast=Type]) ->
-%    #address{ripe=MyRipe} = bm_auth:decode_address(From),
-%    #address{ripe=Ripe} = bm_auth:decode_address(To),
+%% Init for new and resending messages  {{{1
+%init([
+%      #message{hash=Id,
+%              from=From,
+%              subject=Subject,
+%              enc=Enc,
+%              text=Text,
+%              status=Status,
+%              folder=sent,
+%              type=broadcast} = Message,
+%      Callback
+%     ]) when 
+%      Status == new;
+%      Status == ackwait->
 %
-%    {MyPek, MyPSK} = case bm_db:lookup(privkey, MyRipe) of
-%        [#pubkey{pek=EK, psk=SK, hash=Ripe}] ->
-%            {EK, SK};
+%    MyRipe = case bm_auth:decode_address(From) of
+%    #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
+%            R;
+%    #address{ripe = <<0,R/bytes>>} when size(R) == 19 -> 
+%            R;
+%    #address{ripe = <<R/bytes>>} when size(R) == 20 -> 
+%            R
+%    end,
+%    #address{ripe=Ripe} = bm_auth:decode_address(To),
+%    {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
+%        [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
+%            {EK, SK, Pub};
 %        [] ->
+%            error_logger:warning_msg("No addres ~n"),
 %            {stop, {shudown, "Not my address"}}
 %    end,
-%
-%    AckData = crypto:rand_bytes(32),
-%    MSG = <<"Subject:", Subject, 13, "Body:", Text>>,
-%    UPayload = <<2, %Broadcast version
-%                3, %Address version
-%                1, %Stream number
-%                1:32/big-integer, %Bitfield
-%                MyPSK:64/bytes,
-%                MyPek:64/bytes,
-%                (bm_types:encode_varint(320))/bytes, %NonceTrialsPerByte
-%                (bm_types:encode_varint(14000))/bytes, % ExtraBytes
-%                (bm_types:encode_varint(byte_size(MSG)))/bytes,
+%    
+%    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
+%    A = crypto:rand_bytes(32),
+%    AckData = bm_message_creator:create_obj(2, 1, 1, A),
+%    Ack = bm_message_creator:create_message(<<"object">>,
+%                                            AckData),
+%    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
+%    error_logger:info_msg("MSG ~p ~n", [MSG]),
+%    UPayload = <<%1, %MSG version
+%                 3, %Address version
+%                 1, %Stream number
+%                 1:32/big-integer, %Bitfield
+%                 PubKey:128/bytes,
+%                 (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
+%                 (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
+%                 Ripe/bytes,
+%                 Enc, % Message encoding
+%                 (bm_types:encode_varint(byte_size(MSG)))/bytes,
 %                 MSG/bytes,
-%                 32/big-integer, %AckData length
-%                 AckData:32/bytes>>,
-%    Sig = crypto:sign(ecda, sha512, UPayload, [MyPSK, secp256k1]),
+%                 (bm_types:encode_varint(byte_size(Ack)))/bytes,
+%                 Ack/bytes>>,
+%    Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
 %    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
-%
-%    case bm_db:lookup(pubkey, Ripe) of
-%        [#pubkey{pek=PEK, psk=PSK, hash=Ripe}] ->
-%            {ok, encrypt_message, #state{type=Type, message=Message, pek=PEK, psk=PSK}, 1};
-%        [] ->
-%            bm_sender:send_broadcast(bm_message_creator:create_getpubkey(To)),
-%            {ok, wait_pybkey, #state{message=Message}}
-%    end. % }}}
+%    error_logger:info_msg("Message ~p ~n", [Payload]),
+%    <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
+%    NMessage = Message#message{payload=Payload,
+%                               hash=Hash,
+%                               folder=sent,
+%                               ackdata=A,
+%                               status=wait_pubkey},
+%    io:format("Deleting: ~p~n", [Message]),
+%    mnesia:dirty_delete(message, Id),
+%    bm_db:insert(message, [NMessage]),
+%    {ok,
+%     wait_pubkey,
+%     #state{type=msg,
+%            hash=Ripe,
+%            message=NMessage,
+%            callback=Callback},
+%     0}.
 
 %%--------------------------------------------------------------------
 %% @private

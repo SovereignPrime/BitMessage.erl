@@ -106,7 +106,7 @@ handle_call(_Request, _From, State) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
-                              _:16/integer,  %Curve type
+                              714:16/integer,  %Curve type
                               XLength:16/big-integer, X:XLength/bytes, 
                               YLength:16/big-integer, Y:YLength/bytes, 
                               Data/bytes>> = Payload}, 

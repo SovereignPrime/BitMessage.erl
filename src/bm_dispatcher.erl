@@ -196,24 +196,27 @@ handle_call(_Request, _From, State) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
-    #address{version=AddrVer, ripe=RIPE}=bm_auth:decode_address(Address),
-     R1 = case bm_types:decode_varint(Data) of
-           {1, RT} ->
-               {A, R} = bm_types:decode_varint(RT),
-               R;
-           {_, R} ->
-                R
-       end,
-    {Stream, R2} = bm_types:decode_varint(R1),
+    #address{version=AddrVer,
+             stream=Stream, % TODO: Is this stream ok??
+             ripe=RIPE}=bm_auth:decode_address(Address),
+    {S, R1} = bm_types:decode_varint(Data),
+     R2 = case bm_types:decode_varint(R1) of
+              {Stream, R} ->
+                  R;
+              R ->
+                  R
+          end,
     <<_BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
-    R4 = case AddrVer of
-        2 ->
-            R3;
-        MV when MV >= 3 ->
-            {_NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
-            {_ExtraBytes, RV1} = bm_types:decode_varint(RV),
-            RV1
-        end,
+    {NTpB,
+     PLEB,
+     R4} = case AddrVer of
+               2 ->
+                   {?MIN_NTPB, ?MIN_PLEB, R3};
+               MV when MV >= 3 ->
+                   {NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
+                   {ExtraBytes, RV1} = bm_types:decode_varint(RV),
+                   {NonceTrailsPerBytes, ExtraBytes, RV1}
+           end,
     case Type of
         msg -> 
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
@@ -245,7 +248,10 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                     [#inventory{payload=D}] = bm_db:lookup(inventory, Hash),
                     <<_:64/integer, TT:12/bytes, _/bytes>> = D,
                     DS = <<TT:12/bytes,
-                           1,
+                           case Type of
+                               msg -> 2;
+                               broadcast -> 3
+                           end,
                            (bm_types:encode_varint(Stream))/bytes,
                            DataSig/bytes>>,
                     crypto:verify(ecdsa,
@@ -269,6 +275,8 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             PubKey = #pubkey{hash=FRipe,
                              psk=PSK,
                              pek=PEK,
+                             ntpb=NTpB,
+                             pleb=PLEB,
                              time=bm_types:timestamp()},
             error_logger:info_msg("~p~n", [PubKey]),
             bm_db:insert(pubkey, [PubKey]),
