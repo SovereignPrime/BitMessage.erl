@@ -51,7 +51,7 @@ start_link() ->  % {{{1
       Hash :: binary(),
       Address :: binary().
 message_arrived(Data, Hash, Address) ->
-    gen_server:cast(?MODULE, {arrived, message, Hash, Address, Data}).
+    gen_server:cast(?MODULE, {arrived, msg, Hash, Address, Data}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -159,7 +159,10 @@ init([]) ->
                               [],
                               ['$_']}],
                             10000),
-    lists:foreach(fun bm_encryptor_sup:add_encryptor/1, Messages),
+    lists:foreach(fun(E) ->
+                          bm_encryptor_sup:add_encryptor(E, bitmessage)
+                  end,
+                  Messages),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -212,7 +215,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             RV1
         end,
     case Type of
-        message -> 
+        msg -> 
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = 
             if DRIPE == RIPE ->
@@ -226,7 +229,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
     end,
 
     {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = if Type == message ->
+    {AckData, R7} = if Type == msg ->
                            bm_types:decode_varbin(R6);
                        true -> 
                            {ok, R6}
@@ -278,6 +281,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                           time=calendar:local_time(),
                           ackdata=AckData,
                           status=unread,
+                          type=Type,
                           text=Text},
             bm_db:insert(message, [MR]),
             if AckData /= ok ->

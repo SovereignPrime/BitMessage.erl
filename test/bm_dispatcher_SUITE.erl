@@ -101,6 +101,7 @@ message_arrived(_Config) ->  % {{{1
                   from= <<"BM-2D8BqFxh5SpfRxnKw5Kg9Kj7HqTdYxkRHu">>, 
                   subject= <<"test">>,
                   folder=incoming,
+                  type=msg,
                   ackdata= <<233,190,180,217,111,98,106,101,99,116,
                              0,0,0,0,0,0,0,0,0,54,178,40,94,40,
                              0,0,0,0,0,139,159,97,0,0,0,0,84,123,152,152,
@@ -179,6 +180,7 @@ message_arrived_old(_Config) ->  %{{{1
                              184,4,19,59,64,97,37,20,254,
                              103,166,97,82,90,60,71,217,208>>,
                   status=unread,
+                  type=msg,
                   text= <<"1">>,
                  time='_'},
     bm_dispatcher:message_arrived(
