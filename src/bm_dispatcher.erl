@@ -276,7 +276,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                                    secp256k1])
             end,
     error_logger:info_msg("Receiver: ~p Signature: ~p AddrVer ~p~n", [RecOK, SigOK, AddrVer]),
-    if RecOK, SigOK, AddrVer > 0, AddrVer < 4 ->
+    if RecOK, SigOK, AddrVer > 0, AVer =< 4 ->
             {Subject, Text} = case MsgEnc of
                 1 ->
                     {"", Message};
