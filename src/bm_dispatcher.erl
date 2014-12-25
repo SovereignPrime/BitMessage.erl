@@ -199,12 +199,14 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
     #address{version=AddrVer,
              stream=Stream, % TODO: Is this stream ok??
              ripe=RIPE}=bm_auth:decode_address(Address),
-    {S, R1} = bm_types:decode_varint(Data),
-     R2 = case bm_types:decode_varint(R1) of
+    file:write_file("./test/data/broadcast_decr.bin", Data),
+    {AV, R1} = bm_types:decode_varint(Data),
+    {AVer, R2} = case bm_types:decode_varint(R1) of
               {Stream, R} ->
-                  R;
-              R ->
-                  R
+                         {AV, R};
+                     {A, R} ->
+                         {Stream, RO} = bm_types:decode_varint(R),
+                         {A, RO}
           end,
     <<_BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
     {NTpB,
@@ -246,13 +248,25 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                 true -> true;
                 false ->
                     [#inventory{payload=D}] = bm_db:lookup(inventory, Hash),
-                    <<_:64/integer, TT:12/bytes, _/bytes>> = D,
+                    %file:write_file("./test/data/broadcast_encr.bin", D),
+                    %file:write_file("./test/data/broadcast_decr.bin", Data),
+                    <<_:64/integer,
+                      TT:12/bytes,
+                      V/integer,
+                      Stream/integer,
+                      Rest/bytes>> = D,
+
+                    Tag = if Type == broadcast, 
+                             V == 5 ->
+                                 <<Ta:32/bytes, _/bytes>> = Rest,
+                                 Ta;
+                             true ->
+                                 <<>>
+                          end,
                     DS = <<TT:12/bytes,
-                           case Type of
-                               msg -> 2;
-                               broadcast -> 3
-                           end,
-                           (bm_types:encode_varint(Stream))/bytes,
+                           V/integer,
+                           Stream/integer,
+                           Tag/bytes,
                            DataSig/bytes>>,
                     crypto:verify(ecdsa,
                                   sha,
@@ -271,7 +285,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                     {S, T}
             end,
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
-            From = bm_auth:encode_address(AddrVer, Stream, FRipe),
+            From = bm_auth:encode_address(AVer, Stream, FRipe),
             PubKey = #pubkey{hash=FRipe,
                              psk=PSK,
                              pek=PEK,

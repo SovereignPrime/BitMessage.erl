@@ -17,7 +17,9 @@
          message_arrived/0,
          message_arrived/1,
          message_arrived_old/0,
-         message_arrived_old/1
+         message_arrived_old/1,
+         broadcast_arrived/0,
+         broadcast_arrived/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -30,7 +32,8 @@
 all() ->
     [
      message_arrived_old,
-     message_arrived
+     message_arrived,
+     broadcast_arrived
     ].
 
 suite() ->
@@ -93,12 +96,14 @@ message_arrived(_Config) ->  % {{{1
                             69,207,198,62,218,93,16,179,240,75,89,252,149,85,213,170,33,118,26,
                             17,40,119,74,1,49,247,98,135,2,157,111,108,110,152,180,125,182,143,
                             70,252,149,248,109,88,217>>,
+                     ntpb=1000,
+                     pleb=1000,
                      time='_'
                     },
     MR = #message{hash= <<"TEST">>, 
                   enc=2, 
                   to= <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>, 
-                  from= <<"BM-2D8BqFxh5SpfRxnKw5Kg9Kj7HqTdYxkRHu">>, 
+                  from= <<"BM-2cTnpNFyndHYFPvQxVezdSztvLiaJBJcNQ">>, 
                   subject= <<"test">>,
                   folder=incoming,
                   type=msg,
@@ -163,12 +168,14 @@ message_arrived_old(_Config) ->  %{{{1
                             247,54,22,118,105,125,143,215,208,95,
                             131,150,215,202,130,41,46,223,225,28,
                             186,255,130,217,4,33,168,184,42,5,32,151,159>>,
+                     ntpb=320,
+                     pleb=14000,
                      time='_'
                     },
     MR = #message{hash= <<"TEST">>, 
                   enc=2, 
                   to= <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>, 
-                  from= <<"BM-2D88R4V4M3QuYMvWkpBrz5Q7sUKLWjZuSt">>, 
+                  from= <<"BM-2cTjQAnM4DsnMo4bnEXBUCfuVyaHHrkvLT">>, 
                   subject= <<"Test">>,
                   folder=incoming,
                   ackdata= <<233,190,180,217,109,115,103,
@@ -234,4 +241,58 @@ message_arrived_old(_Config) ->  %{{{1
               [<<"ACK">>],
               1000),
     io:format("Ack sent~n"),
+    io:format("Done").
+
+broadcast_arrived() ->  % {{{1
+    [].
+
+broadcast_arrived(_Config) ->  % {{{1
+    {ok, MSG} = file:read_file("../../test/data/broadcast_decr.bin"),
+    PubKey = #pubkey{hash= <<0,52,194,59,172,85,148,9,190,117,190,
+                             61,197,187,205,66,191,180,14,132>>,
+                     pek= <<153,255,234,237,140,242,118,120,64,210,197,
+                            12,77,219,35,56,119,191,151,138,16,12,79,8,
+                            160,92,57,48,223,66,74,97,223,12,49,131,223,53,
+                            236,108,214,169,150,90,115,163,195,246,6,11,16,
+                            15,253,99,74,185,80,207,35,105,69,174,232,152>>,
+                     psk= <<27,216,141,78,224,205,94,40,84,186,230,248,57,143,207,4,128,121,45,
+                            69,207,198,62,218,93,16,179,240,75,89,252,149,85,213,170,33,118,26,
+                            17,40,119,74,1,49,247,98,135,2,157,111,108,110,152,180,125,182,143,
+                            70,252,149,248,109,88,217>>,
+                     ntpb=1000,
+                     pleb=1000,
+                     time='_'
+                    },
+    MR = #message{hash= <<"TEST">>, 
+                  enc=2, 
+                  to= <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>, 
+                  from= <<"BM-2cTnpNFyndHYFPvQxVezdSztvLiaJBJcNQ">>, 
+                  subject= <<"2014-12-25 (brd)">>,
+                  folder=incoming,
+                  type=broadcast,
+                  ackdata=ok,
+                  status=unread,
+                  text= <<"16:57">>,
+                  time='_'},
+    meck:expect(bm_db,
+                lookup,
+                fun(inventory,
+                    <<"TEST">>) ->
+                        {ok, EMSG} = file:read_file("../../test/data/broadcast_encr.bin"),
+                        [#inventory{payload=EMSG}]
+                end),
+    bm_dispatcher:broadcast_arrived(
+      MSG,
+      <<"TEST">>, 
+      <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
+    io:format("Function called~n"),
+    meck:wait(bm_db,
+              insert,
+              [pubkey, [PubKey]],
+              10000),
+    io:format("Pubkey inserted~n"),
+    meck:wait(bm_db,
+              insert,
+              [message, [MR]],
+              10000),
     io:format("Done").
