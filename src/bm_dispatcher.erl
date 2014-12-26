@@ -91,12 +91,11 @@ send_message(Message) ->
 -spec send_broadcast(#message{}) ->  ok. % {{{1
 send_broadcast(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
-                               folder=sent,
-                               type=msg},
+                               folder=sent},
     mnesia:transaction(fun() ->
                                mnesia:write(message, NMessage, write)
                        end),
-    gen_server:cast(?MODULE, {send, broadcast, Message}).
+    gen_server:cast(?MODULE, {send, broadcast, NMessage}).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -226,7 +226,6 @@ init([
                                hash=Hash,
                                folder=sent,
                                ackdata=ok,
-                               type=broadcast,
                                to=Tag,
                                status=encrypt_message},
     io:format("Deleting: ~p~n", [Message]),
@@ -396,7 +395,10 @@ make_inv(timeout,
                                           Payload/bytes>>)
         end,
     <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
-    NMessage = Message#message{status=ackwait,
+    NMessage = Message#message{status=case Type of 
+                                          msg -> ackwait;
+                                          broadcast -> ok
+                                      end,
                                hash=Hash,
                                payload=PPayload},
     bm_db:delete(message, MID),
