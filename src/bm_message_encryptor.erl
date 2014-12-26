@@ -128,8 +128,7 @@ init([
                                             AckData),
     MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
-    UPayload = <<%1, %MSG version
-                 3, %Address version
+    UPayload = <<3, %Address version
                  1, %Stream number
                  1:32/big-integer, %Bitfield
                  PubKey:128/bytes,
@@ -141,7 +140,11 @@ init([
                  MSG/bytes,
                  (bm_types:encode_varint(byte_size(Ack)))/bytes,
                  Ack/bytes>>,
-    Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
+    SPayload = <<Time:64/big-integer,
+                 ?MSG:32/big-integer,
+                 1, % Stream
+                 UPayload/bytes>>,
+    Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
     error_logger:info_msg("Message ~p ~n", [Payload]),
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
@@ -159,79 +162,83 @@ init([
             hash=Ripe,
             message=NMessage,
             callback=Callback},
-     0}.
+     0};
 
-%% Init for new and resending messages  {{{1
-%init([
-%      #message{hash=Id,
-%              from=From,
-%              subject=Subject,
-%              enc=Enc,
-%              text=Text,
-%              status=Status,
-%              folder=sent,
-%              type=broadcast} = Message,
-%      Callback
-%     ]) when 
-%      Status == new;
-%      Status == ackwait->
-%
-%    MyRipe = case bm_auth:decode_address(From) of
-%    #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
-%            R;
-%    #address{ripe = <<0,R/bytes>>} when size(R) == 19 -> 
-%            R;
-%    #address{ripe = <<R/bytes>>} when size(R) == 20 -> 
-%            R
-%    end,
-%    #address{ripe=Ripe} = bm_auth:decode_address(To),
-%    {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
-%        [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
-%            {EK, SK, Pub};
-%        [] ->
-%            error_logger:warning_msg("No addres ~n"),
-%            {stop, {shudown, "Not my address"}}
-%    end,
-%    
-%    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
-%    A = crypto:rand_bytes(32),
-%    AckData = bm_message_creator:create_obj(2, 1, 1, A),
-%    Ack = bm_message_creator:create_message(<<"object">>,
-%                                            AckData),
-%    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
-%    error_logger:info_msg("MSG ~p ~n", [MSG]),
-%    UPayload = <<%1, %MSG version
-%                 3, %Address version
-%                 1, %Stream number
-%                 1:32/big-integer, %Bitfield
-%                 PubKey:128/bytes,
-%                 (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
-%                 (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
-%                 Ripe/bytes,
-%                 Enc, % Message encoding
-%                 (bm_types:encode_varint(byte_size(MSG)))/bytes,
-%                 MSG/bytes,
-%                 (bm_types:encode_varint(byte_size(Ack)))/bytes,
-%                 Ack/bytes>>,
-%    Sig = crypto:sign(ecdsa, sha, UPayload, [MyPSK, secp256k1]),
-%    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
-%    error_logger:info_msg("Message ~p ~n", [Payload]),
-%    <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
-%    NMessage = Message#message{payload=Payload,
-%                               hash=Hash,
-%                               folder=sent,
-%                               ackdata=A,
-%                               status=wait_pubkey},
-%    io:format("Deleting: ~p~n", [Message]),
-%    mnesia:dirty_delete(message, Id),
-%    bm_db:insert(message, [NMessage]),
-%    {ok,
-%     wait_pubkey,
-%     #state{type=msg,
-%            hash=Ripe,
-%            message=NMessage,
-%            callback=Callback},
-%     0}.
+% Init for broadcasts  {{{1
+init([
+      #message{hash=Id,
+              from=From,
+              subject=Subject,
+              enc=Enc,
+              text=Text,
+              status=new,
+              folder=sent,
+              type=broadcast} = Message,
+      Callback
+     ]) ->
+
+    error_logger:info_msg("Encrypting broadcast: ~p~n", [Subject]),
+    MyRipe = case bm_auth:decode_address(From) of
+                 #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
+                     R;
+                 #address{ripe = <<0,R/bytes>>} when size(R) == 19 -> 
+                     R;
+                 #address{ripe = <<R/bytes>>} when size(R) == 20 -> 
+                     R
+             end,
+    {BroadcastEK,
+     Tag,
+     MyPSK,
+     PubKey} = case bm_db:lookup(privkey, MyRipe) of
+                   [#privkey{public=Pub,
+                             psk=SK,
+                             hash=MyRipe}] ->
+                       {BK, T} = bm_auth:broadcast_key(From),
+                       EK = bm_auth:pubkey(BK),
+                       {EK, T, SK, Pub};
+                   [] ->
+                       error_logger:warning_msg("No addres ~n"),
+                       {stop, {shudown, "Not my address"}}
+               end,
+    error_logger:info_msg("Encrypting broadcast w/tag: ~p~n", [Tag]),
+
+    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
+    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
+    error_logger:info_msg("Broadcast: ~p ~n", [MSG]),
+    UPayload = <<3, %Address version
+                 1, %Stream number
+                 1:32/big-integer, %Bitfield
+                 PubKey:128/bytes,
+                 (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
+                 (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
+                 Enc, % Message encoding
+                 (bm_types:encode_varint(byte_size(MSG)))/bytes, % Message size
+                 MSG/bytes>>,
+    SPayload = <<Time:64/big-integer,
+                 ?BROADCAST:32/big-integer,
+                 1, % Stream
+                 UPayload/bytes>>,
+    Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
+    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
+    error_logger:info_msg("Broadcast ~p ~n", [Payload]),
+    <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
+    NMessage = Message#message{payload=Payload,
+                               hash=Hash,
+                               folder=sent,
+                               ackdata=ok,
+                               type=broadcast,
+                               to=Tag,
+                               status=encrypt_message},
+    io:format("Deleting: ~p~n", [Message]),
+    mnesia:dirty_delete(message, Id),
+    bm_db:insert(message, [NMessage]),
+    {ok,
+     encrypt_message,
+     #state{type=broadcast,
+            message=NMessage,
+            pek=BroadcastEK,
+            callback=Callback},
+     0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -316,7 +323,6 @@ wait_pubkey(Event, State) ->
 encrypt_message(timeout,
                 #state{pek=PEK,
                        psk=PSK,
-                       hash=Ripe,
                        type=Type,
                        message = #message{payload=Payload} = Message} = State) ->
     error_logger:info_msg("Encrypting ~n"),
@@ -376,17 +382,18 @@ make_inv(timeout,
     PPayload = case Type of 
         msg ->
             #address{stream=Stream} = bm_auth:decode_address(To),
-            bm_message_creator:create_obj(2, 
-                                          1,
+            bm_message_creator:create_obj(?MSG, 
+                                          1, % Version
                                           Stream,
                                           Payload);
 
         broadcast ->
             #address{stream=Stream} = bm_auth:decode_address(From),
-            bm_message_creator:create_obj(3, 
-                                          2,
+            bm_message_creator:create_obj(?BROADCAST, 
+                                          5, % Version
                                           Stream,
-                                          Payload)
+                                          <<To:32/bytes,
+                                          Payload/bytes>>)
         end,
     <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
     NMessage = Message#message{status=ackwait,

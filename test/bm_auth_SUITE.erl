@@ -135,7 +135,7 @@ pubkey_test() ->  % {{{2
 
 pubkey_test(_Config) ->  % {{{2
     application:start(crypto),
-    {Pub, Priv} = crypto:generate_key(ecdh, secp256k1),
+    {<<4, Pub/bytes>>, Priv} = crypto:generate_key(ecdh, secp256k1),
     io:format("Priv: ~p~n Pub: ~p~n", [bm_types:binary_to_hexstring(Priv), bm_types:binary_to_hexstring(Pub)]),
     io:format("Priv: ~p~n Pub: ~p~n", [crypto:bytes_to_integer(Priv), list_to_integer(bm_types:binary_to_hexstring(Priv), 16)]),
     PubResult = bm_auth:pubkey(Priv),

@@ -64,6 +64,20 @@ decode_address(<<"BM-",Data/bytes>>) ->
 generate_ripe(Str) ->
     crypto:hash(ripemd160, crypto:hash(sha512, Str)).
 
+%% @doc TODO: Generates PrivKey for Broadcast
+%%
+-spec broadcast_key(binary()) -> {binary(), binary()}. % ??? % {{{2
+broadcast_key(Address) ->
+    #address{version=V,
+             stream=S,
+             ripe=R} = bm_auth:decode_address(Address),
+
+    <<PrivKey:32/bytes,
+      Tag/bytes>> = bm_auth:dual_sha(<<(bm_types:encode_varint(V))/bytes,
+                                     (bm_types:encode_varint(S))/bytes,
+                                     R/bytes>>),
+    {PrivKey, Tag}.
+
 %% @doc TODO: Generates PubKey from Private
 %%
 -spec pubkey(integer() | binary()) -> binary(). % ??? % {{{2
@@ -79,7 +93,7 @@ pubkey(PrKey) when is_integer(PrKey) ->
     G = {GX, GY},
     {X, Y} = point_mult(G, PrKey, Prime, G),
     io:format("X: ~p Y: ~p~n", [X, Y]),
-    <<4, X:256/integer, Y:256/integer>>.
+    <<X:256/integer, Y:256/integer>>.
 
 
 %%%

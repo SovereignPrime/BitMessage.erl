@@ -88,6 +88,7 @@ send_broadcast(From, Subject, Text, Encoding) ->
     bm_dispatcher:send_broadcast(#message{from=From,
                                           subject=Subject,
                                           text=Text,
+                                          type=broadcast,
                                           enc=Encoding}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -97,19 +98,12 @@ send_broadcast(From, Subject, Text, Encoding) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec subscribe_broadcast(binary()) -> supervisor:startchild_ret().  % {{{1
 subscribe_broadcast(Address) ->
-    #address{version=V,
-             stream=S,
-             ripe=R} = bm_auth:decode_address(Address),
+    {PrivKey, _} = bm_auth:broadcast_key(Address),
 
-    <<PrivKey:32/bytes,
-      _/bytes>> = bm_auth:dual_sha(<<(bm_types:encode_varint(V))/bytes,
-                                     (bm_types:encode_varint(S))/bytes,
-                                     R/bytes>>),
-    PK = #privkey{hash=PrivKey,
-                  pek=PrivKey,
-                  address=Address,
-                  time=bm_types:timestamp()},
-
+     PK = #privkey{hash=PrivKey,
+                   pek=PrivKey,
+                   address=Address,
+                   time=bm_types:timestamp()},
     bm_db:insert(privkey, [PK]),
     bm_decryptor_sup:add_decryptor(PK).
     

@@ -199,7 +199,6 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
     #address{version=AddrVer,
              stream=Stream, % TODO: Is this stream ok??
              ripe=RIPE}=bm_auth:decode_address(Address),
-    file:write_file("./test/data/broadcast_decr.bin", Data),
     {AV, R1} = bm_types:decode_varint(Data),
     {AVer, R2} = case bm_types:decode_varint(R1) of
               {Stream, R} ->
@@ -317,7 +316,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
             {noreply, State}
     end;
 handle_cast({send, Type, Message}, #state{callback=Callback}=State) ->  % {{{1
-    error_logger:info_msg("Sending message ~p~n", [Message]),
+    error_logger:info_msg("Sending ~p ~p~n", [Type, Message]),
     bm_encryptor_sup:add_encryptor(Message#message{type=Type}, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1

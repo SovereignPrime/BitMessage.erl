@@ -16,42 +16,45 @@
 %% Test cases
 -export([
          encode_decode_test/0,
-         encode_decode_test/1
+         encode_decode_test/1,
+         broadcast_encode_decode_test/0,
+         broadcast_encode_decode_test/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
 
 %%%===================================================================
-%%% Common Test callbacks
+%%% Common Test callbacks  % {{{1
 %%%===================================================================
 
-all() ->
+all() ->  % {{{2
     [
-     encode_decode_test
+     encode_decode_test,
+     broadcast_encode_decode_test
     ].
 
-suite() ->
+suite() ->  % {{{2
     [{timetrap, {seconds, 1600}}].
 
-groups() ->
+groups() ->  % {{{2
     [].
 
-init_per_suite(Config) ->
+init_per_suite(Config) ->  % {{{2
     Config.
 
-end_per_suite(_Config) ->
+end_per_suite(_Config) ->  % {{{2
     ok.
 
-group(_GroupName) ->
+group(_GroupName) ->  % {{{2
     [].
 
-init_per_group(_GroupName, Config) ->
+init_per_group(_GroupName, Config) ->  % {{{2
     Config.
 
-end_per_group(_GroupName, _Config) ->
+end_per_group(_GroupName, _Config) ->  % {{{2
     ok.
 
-init_per_testcase(_TestCase, Config) ->
+init_per_testcase(_TestCase, Config) ->  % {{{2
     mnesia:create_schema([node()]),
     mnesia:start(),
     {atomic, ok} = mnesia:create_table(inventory,
@@ -121,17 +124,20 @@ init_per_testcase(_TestCase, Config) ->
     meck:new(bm_dispatcher, [no_link]),
     Config.
 
-end_per_testcase(_TestCase, _Config) ->
+end_per_testcase(_TestCase, _Config) ->  % {{{2
+    meck:unload(),
+    mnesia:stop(),
+    mnesia:delete_schema([node()]),
     ok.
 
 %%%===================================================================
-%%% Test cases
+%%% Test cases  % {{{1
 %%%===================================================================
 
-encode_decode_test() ->
+encode_decode_test() ->  % {{{2
     [].
 
-encode_decode_test(_Config) ->
+encode_decode_test(_Config) ->  % {{{2
     [#privkey{hash=RIPE,
               public=Pub,
               address=Addr}] =
@@ -161,7 +167,7 @@ encode_decode_test(_Config) ->
                         [#inventory{
                             payload = <<1024:64/big-integer,
                                       _:64/big-integer,
-                                      2:32/big-integer,
+                                      ?MSG:32/big-integer,
                                       1:8/integer,
                                       1:8/integer,
                                       Payload/bytes>>
@@ -177,3 +183,55 @@ encode_decode_test(_Config) ->
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
     meck:wait(bm_dispatcher, message_arrived, '_', 1600).
+
+broadcast_encode_decode_test() ->  % {{{2
+    [].
+
+broadcast_encode_decode_test(_Config) ->  % {{{2
+    [#privkey{hash=RIPE,
+              public=Pub,
+              address=Addr}] =
+    bm_db:lookup(privkey, bm_db:first(privkey)),
+    MSG = #message{hash = <<"test">>,
+                   from=Addr,
+                   subject = <<"Test">>,
+                   enc=2,
+                   text = <<"Just test text">>,
+                   status=new,
+                   folder=sent,
+                   type=broadcast,
+                  time='_'},
+    meck:expect(bm_dispatcher,
+                broadcast_arrived,
+                fun(DMSG,
+                    <<"TEST">>,
+                    Addr) ->
+                        ok
+                end),
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(<<_:24/bytes, 
+                      _:8/integer,
+                      Hash/bytes>>) ->
+                        [#inventory{
+                            payload = <<1024:64/big-integer,
+                                      _:64/big-integer,
+                                      ?BROADCAST:32/big-integer,
+                                      5, % Version
+                                      1, % Stream
+                                      _Tag:32/bytes,
+                                      Payload/bytes>>
+                           }] = bm_db:lookup(inventory, Hash),
+                        error_logger:info_msg("Decr: ~p~n", [Payload]),
+                        bm_message_decryptor:decrypt_broadcast(Payload, <<"TEST">>);
+                   (_) ->
+                        meck:exception(error, "Wrong hash")
+                end),
+    bitmessage:subscribe_broadcast(<<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
+    spawn(fun() ->
+                  bm_message_encryptor:start_link(MSG, bitmessage)
+          end),
+
+    meck:wait(bm_pow, make_pow, '_', 1600),
+    meck:wait(bm_sender, send_broadcast, '_', 1600),
+    meck:wait(bm_dispatcher, broadcast_arrived, '_', 1600).
