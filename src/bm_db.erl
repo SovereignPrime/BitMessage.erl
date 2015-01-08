@@ -399,7 +399,10 @@ insert_obj(_, []) -> %  {{{1
 insert_obj(Type, [I|R]) -> %  {{{1
     mnesia:write(Type, I, write),
     insert_obj(Type, R).
-iterate(C, Acc) -> %  {{{1
+
+-spec iterate(term(), Acc) -> Acc when  %  {{{1
+      Acc :: list().
+iterate(C, Acc) ->
     case mnesia:select(C) of %  {{{2
         {D, Cont} -> 
             Acc ++ [D] ++ iterate(Cont, Acc);
