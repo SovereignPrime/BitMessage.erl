@@ -138,32 +138,10 @@ get_callback() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec init([]) -> {ok, #state{}}.  % {{{1
+-spec init([]) -> {ok, #state{}, non_neg_integer()}.  % {{{1
 init([]) ->
     bm_db:wait_db(),
-    Messages = bm_db:select(message,
-                            [{#message{folder=sent,
-                                       status='new',
-                                       _='_'},
-                              [],
-                              ['$_']},
-                             {#message{folder=sent,
-                                       status='wait_pubkey',
-                                       _='_'},
-                              [],
-                              ['$_']},
-                             {#message{folder=sent,
-                                       status='encrypt_message',
-                                       _='_'},
-                              [],
-                              ['$_']}],
-                            10000),
-    error_logger:info_msg("Messages in progress: ~p~n", [Messages]),
-    lists:foreach(fun(E) ->
-                          bm_encryptor_sup:add_encryptor(E, bitmessage)
-                  end,
-                  lists:flatten(Messages)),
-    {ok, #state{}}.
+    {ok, #state{}, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -338,6 +316,30 @@ handle_cast(Msg, State) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(timeout, #state{callback=Callback}=State) ->
+    Messages = bm_db:select(message,
+                            [{#message{folder=sent,
+                                       status='new',
+                                       _='_'},
+                              [],
+                              ['$_']},
+                             {#message{folder=sent,
+                                       status='wait_pubkey',
+                                       _='_'},
+                              [],
+                              ['$_']},
+                             {#message{folder=sent,
+                                       status='encrypt_message',
+                                       _='_'},
+                              [],
+                              ['$_']}],
+                            10000),
+    error_logger:info_msg("Messages in progress: ~p~n", [Messages]),
+    lists:foreach(fun(E) ->
+                          bm_encryptor_sup:add_encryptor(E, Callback)
+                  end,
+                  lists:flatten(Messages)),
+    {noreply, State};
 handle_info(_Info, State) ->  % {{{1
     {noreply, State}.
 
