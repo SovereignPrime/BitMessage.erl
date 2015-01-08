@@ -96,7 +96,7 @@ foldr(Fun, Acc, Type)->
 
 %% @doc Select `MatchSpec` for `Type` limit `N`
 %%
--spec select(table(), [MatchSpec], non_neg_integer()) -> [type_record()] when  % {{{1
+-spec select(table(), [MatchSpec], non_neg_integer()) -> [[type_record()]] when  % {{{1
       MatchSpec :: {type_record(), [tuple()], [atom()]}.
 select(Type, MatchSpec, N)->
     gen_server:call(?MODULE, {select, Type, MatchSpec, N}).
