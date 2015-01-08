@@ -8,6 +8,7 @@
 
 %% gen_fsm callbacks
 -export([init/1, % {{{1
+         payload/2,
          wait_pubkey/2,
          encrypt_message/2,
          make_inv/2,
@@ -64,23 +65,48 @@ pubkey(PubKey) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
+init([Message, Callback]) ->  % {{{1
+    {ok,
+     payload,
+     #state{
+        message=Message,
+        callback=Callback},
+     0}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% State for waiting PubKey for encryption
+%% 
+%% @end
+%%--------------------------------------------------------------------
+-spec payload(term(), #state{}) ->  % {{{1
+                  {next_state, NextStateName, NextState} |
+                  {next_state, NextStateName, NextState, Timeout} |
+                  {stop, Reason, NewState} when
+      NextStateName :: atom(),
+      NewState :: #state{},
+      Timeout :: integer(),
+      Reason :: term(),
+      NewState :: atom().
 
 %% Init for already packed messages  {{{1
-init([
-      #message{to=To,
-              from=From,
-              subject=Subject,
-              enc=Enc,
-              text=Text,
-              type=Type,
-              folder=sent,
-              status=Status}=Message,
-     Callback
-     ]) when 
+payload(timeout,
+        #state{
+           message=#message{to=To,
+                             from=From,
+                             subject=Subject,
+                             enc=Enc,
+                             text=Text,
+                             type=Type,
+                             folder=sent,
+                             status=Status}=Message,
+           callback=Callback
+     }) when 
       Status == encrypt_message;
       Status == wait_pubkey ->
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    {ok,
+    {next_state,
      wait_pubkey,
      #state{type=msg,
             message=Message,
@@ -89,18 +115,19 @@ init([
      0};
 
 %% Init for new and resending messages  {{{1
-init([
-      #message{hash=Id,
-              to=To,
-              from=From,
-              subject=Subject,
-              enc=Enc,
-              text=Text,
-              status=Status,
-              folder=sent,
-              type=msg} = Message,
-      Callback
-     ]) when 
+payload(timeout,
+        #state{
+           message=#message{hash=Id,
+                             to=To,
+                             from=From,
+                             subject=Subject,
+                             enc=Enc,
+                             text=Text,
+                             status=Status,
+                             folder=sent,
+                             type=msg} = Message,
+           callback=Callback
+          }) when 
       Status == new;
       Status == ackwait->
 
@@ -156,7 +183,7 @@ init([
     io:format("Deleting: ~p~n", [Message]),
     mnesia:dirty_delete(message, Id),
     bm_db:insert(message, [NMessage]),
-    {ok,
+    {next_state,
      wait_pubkey,
      #state{type=msg,
             hash=Ripe,
@@ -165,17 +192,18 @@ init([
      0};
 
 % Init for broadcasts  {{{1
-init([
-      #message{hash=Id,
-              from=From,
-              subject=Subject,
-              enc=Enc,
-              text=Text,
-              status=new,
-              folder=sent,
-              type=broadcast} = Message,
-      Callback
-     ]) ->
+payload(timeout,
+        #state{
+           message=#message{hash=Id,
+                            from=From,
+                            subject=Subject,
+                            enc=Enc,
+                            text=Text,
+                            status=new,
+                            folder=sent,
+                            type=broadcast} = Message,
+           callback=Callback
+          }) ->
 
     error_logger:info_msg("Encrypting broadcast: ~p~n", [Subject]),
     MyRipe = case bm_auth:decode_address(From) of
@@ -231,7 +259,7 @@ init([
     io:format("Deleting: ~p~n", [Message]),
     mnesia:dirty_delete(message, Id),
     bm_db:insert(message, [NMessage]),
-    {ok,
+    {next_state,
      encrypt_message,
      #state{type=broadcast,
             message=NMessage,

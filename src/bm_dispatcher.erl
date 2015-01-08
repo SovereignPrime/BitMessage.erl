@@ -316,7 +316,7 @@ handle_cast(Msg, State) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(timeout, #state{callback=Callback}=State) ->
+handle_info(timeout, #state{callback=Callback}=State) ->  % {{{1
     Messages = bm_db:select(message,
                             [{#message{folder=sent,
                                        status='new',
