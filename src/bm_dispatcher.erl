@@ -158,10 +158,11 @@ init([]) ->
                               [],
                               ['$_']}],
                             10000),
+    error_logger:info_msg("Messages in progress: ~p~n", [Messages]),
     lists:foreach(fun(E) ->
                           bm_encryptor_sup:add_encryptor(E, bitmessage)
                   end,
-                  Messages),
+                  lists:flatten(Messages)),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
