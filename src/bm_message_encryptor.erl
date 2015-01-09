@@ -169,6 +169,7 @@ payload(timeout,
                  Ack/bytes>>,
     SPayload = <<Time:64/big-integer,
                  ?MSG:32/big-integer,
+                 1, % Version
                  1, % Stream
                  UPayload/bytes>>,
     Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
@@ -177,6 +178,7 @@ payload(timeout,
     <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
     NMessage = Message#message{payload=Payload,
                                hash=Hash,
+                               time=Time,
                                folder=sent,
                                ackdata=A,
                                status=wait_pubkey},
@@ -244,6 +246,7 @@ payload(timeout,
                  MSG/bytes>>,
     SPayload = <<Time:64/big-integer,
                  ?BROADCAST:32/big-integer,
+                 5, % Version
                  1, % Stream
                  UPayload/bytes>>,
     Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
@@ -254,6 +257,7 @@ payload(timeout,
                                hash=Hash,
                                folder=sent,
                                ackdata=ok,
+                               time=Time,
                                to=Tag,
                                status=encrypt_message},
     io:format("Deleting: ~p~n", [Message]),
@@ -404,14 +408,15 @@ make_inv(timeout,
                 message= #message{hash=MID,
                                   payload = Payload,
                                   to=To,
+                                  time=Time,
                                   from=From}=Message}=State) ->
-    Time = bm_types:timestamp() + 86400 * 2, %crypto:rand_uniform(-300, 300),
     PPayload = case Type of 
         msg ->
             #address{stream=Stream} = bm_auth:decode_address(To),
             bm_message_creator:create_obj(?MSG, 
                                           1, % Version
                                           Stream,
+                                          Time,
                                           Payload);
 
         broadcast ->
@@ -419,6 +424,7 @@ make_inv(timeout,
             bm_message_creator:create_obj(?BROADCAST, 
                                           5, % Version
                                           Stream,
+                                          Time,
                                           <<To:32/bytes,
                                           Payload/bytes>>)
         end,

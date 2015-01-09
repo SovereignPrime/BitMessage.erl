@@ -34,6 +34,16 @@ create_message(Command, Payload) ->
       Payload :: binary().
 create_obj(Type, Version, Stream, Payload) ->
     Time = bm_types:timestamp() + 28 * 24 * 60 * 60,
+    create_obj(Type, Version, Stream, Time, Payload).
+
+-spec create_obj(Type, Version, Stream, Time, Payload) -> binary()    % {{{1 ???
+                                                    | no_return() when
+      Type :: object_type(),
+      Version :: non_neg_integer(),
+      Stream :: non_neg_integer(),
+      Time :: non_neg_integer(),
+      Payload :: binary().
+create_obj(Type, Version, Stream, Time, Payload) ->
     VVersion = bm_types:encode_varint(Version),
     VStream = bm_types:encode_varint(Stream),
     NoPOW = <<Time:64/big-integer,
