@@ -124,8 +124,6 @@ loop(#state{socket = Socket,
                                                              stream=1}}),
             loop(IState#state{socket=NSocket,
                              init_stage=#init_stage{}});
-        {error, timeout} ->
-            loop(IState);
         {error, R} ->
             error_logger:warning_msg("Socket ~p error: ~p~n", [Socket, R]),
             Transport:close(Socket),
