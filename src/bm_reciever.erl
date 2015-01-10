@@ -31,7 +31,7 @@
          init_stage = #init_stage{} :: #init_stage{},
          remote_streams :: [integer()],
          remote_addr :: #network_address{},
-         timeout=10000 :: non_neg_integer(),
+         timeout=50000 :: non_neg_integer(),
          callback=bitmessage
         }).
 
