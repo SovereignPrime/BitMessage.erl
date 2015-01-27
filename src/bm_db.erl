@@ -40,11 +40,6 @@
 -type table() :: type() 
                 | 'addr'.
 
--type type_record() :: #message{}
-                    | #pubkey{}
-                    | #privkey{}
-                    | #inventory{}
-                    | #network_address{}.
 
 %%%===================================================================
 %%% API

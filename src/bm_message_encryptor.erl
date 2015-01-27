@@ -19,7 +19,15 @@
          code_change/4]). %}}}
 -export([pubkey/1]).
 
--record(state, {type, message, pek, psk, hash, callback}).
+-record(state,
+        {
+         type :: atom(),
+         message :: type_record(),
+         pek :: binary(),
+         psk :: binary(),
+         hash :: binary(),
+         callback :: module()
+        }).
 
 %%%===================================================================
 %%% API
@@ -59,13 +67,12 @@ pubkey(PubKey) ->
 %% gen_fsm:start_link/[3,4], this function is called by the new
 %% process to initialize.
 %%
-%% @spec init(Args) -> {ok, StateName, State} |
-%%                     {ok, StateName, State, Timeout} |
-%%                     ignore |
-%%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([Message, Callback]) ->  % {{{1
+-spec init([term()]) -> {ok, StateName, #state{}, Timeout} when  % {{{1
+    Timeout :: non_neg_integer(),
+    StateName :: atom().
+init([Message, Callback]) ->
     {ok,
      payload,
      #state{
