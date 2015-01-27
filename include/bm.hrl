@@ -11,7 +11,7 @@
 %% @doc object types
 -define(GET_PUBKEY, 0).
 -define(PUBKEY, 1).
--define(MSG, 4).
+-define(MSG, 2).
 -define(BROADCAST, 3).
 -define(FILEOBJ, 4).
 -define(FILECHUNK, 5).
