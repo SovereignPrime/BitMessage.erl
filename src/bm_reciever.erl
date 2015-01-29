@@ -456,6 +456,8 @@ analyse_object(?PUBKEY,  % {{{2
                Data,
                State) when size(Data) >= 350 ->
     %% TODO
+    <<_Tag:32/bytes, Encrypted/bytes>> = Data,
+    bm_message_decryptor:decrypt(Encrypted, InvHash),
     State;
 analyse_object(?MSG,  % {{{2
                _Version,
@@ -469,7 +471,7 @@ analyse_object(?MSG,  % {{{2
             State;
         false ->
             error_logger:info_msg("This is not ACK for me, trying to decrypt"),
-            bm_message_decryptor:decrypt_message(Data, InvHash),
+            bm_message_decryptor:decrypt(Data, InvHash),
             State
     end;
 analyse_object(?BROADCAST,  % {{{2
@@ -481,12 +483,12 @@ analyse_object(?BROADCAST,  % {{{2
             case Version of
                 V when V ==2; 
                        V == 3 ->
-                    bm_message_decryptor:decrypt_broadcast(Data, InvHash),
+                    bm_message_decryptor:decrypt(Data, InvHash),
                     State;
                 V when V == 4; 
                        V == 5 ->
                     <<_Tag:32/bytes, Encrypted/bytes>> = Data,
-                    bm_message_decryptor:decrypt_broadcast(Encrypted, InvHash),
+                    bm_message_decryptor:decrypt(Encrypted, InvHash),
                     State;
                 _ ->
                     State

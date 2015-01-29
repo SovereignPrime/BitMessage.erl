@@ -121,10 +121,10 @@ message_arrived(_Config) ->  % {{{1
                 fun(inventory,
                     <<"TEST">>) ->
                         {ok, EMSG} = file:read_file("../../test/data/msg_encr.bin"),
-                        [#inventory{payload=EMSG}]
+                        [#inventory{type=?MSG,
+                                    payload=EMSG}]
                 end),
     bm_dispatcher:arrived(
-      ?MSG,
       MSG,
       <<"TEST">>, 
       <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
@@ -191,8 +191,15 @@ message_arrived_old(_Config) ->  %{{{1
                   type=?MSG,
                   text= <<"1">>,
                  time='_'},
+    meck:expect(bm_db,
+                lookup,
+                fun(inventory,
+                    <<"TEST">>) ->
+                        {ok, EMSG} = file:read_file("../../test/data/msg_encr.bin"),
+                        [#inventory{type=?MSG,
+                                    payload=EMSG}]
+                end),
     bm_dispatcher:arrived(
-      ?MSG,
       <<1,4,1,0,0,0,1,228,178,121,192,222,101,137,
         85,198,31,83,237,164,114,185,13,93,71,208,
         48,137,66,145,32,244,170,165,24,196,166,39,
@@ -281,10 +288,10 @@ broadcast_arrived(_Config) ->  % {{{1
                 fun(inventory,
                     <<"TEST">>) ->
                         {ok, EMSG} = file:read_file("../../test/data/broadcast_encr.bin"),
-                        [#inventory{payload=EMSG}]
+                        [#inventory{type=?BROADCAST,
+                                    payload=EMSG}]
                 end),
     bm_dispatcher:arrived(
-      ?BROADCAST,
       MSG,
       <<"TEST">>, 
       <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),

@@ -15,9 +15,8 @@
          terminate/2,
          code_change/3]).  % }}}
 -export([  % {{{1
-    decrypt_message/2,
-    decrypt_broadcast/2
-    ]).  % }}}
+         decrypt/2
+        ]).  % }}}
 
 -record(state, {type, key}).
 
@@ -41,23 +40,10 @@ start_link(Init) ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec decrypt_message(binary(), binary()) -> ok. % {{{1
-decrypt_message(Data, Hash) ->
+-spec decrypt(binary(), binary()) -> ok. % {{{1
+decrypt(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
-    error_logger:info_msg("Trying to decrypt w/decryptors: ~p~n", [Pids]),
-    send_all(Pids, {decrypt, ?MSG, Hash, Data}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds broadcast to decrypt
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec decrypt_broadcast(binary(), binary()) -> ok. % {{{1
-decrypt_broadcast(Data, Hash) ->
-    Pids = supervisor:which_children(bm_decryptor_sup),
-    send_all(Pids, {decrypt, ?BROADCAST, Hash, Data}).
+    send_all(Pids, {decrypt, Hash, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -105,11 +91,14 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
-                              714:16/integer,  %Curve type
-                              XLength:16/big-integer, X:XLength/bytes, 
-                              YLength:16/big-integer, Y:YLength/bytes, 
-                              Data/bytes>> = Payload}, 
+-spec handle_cast(term(), #privkey{}) -> {noreply, #privkey{}}.  % {{{1
+handle_cast({decrypt,
+             Hash,
+             <<IV:16/bytes,
+               714:16/integer,  %Curve type
+               XLength:16/big-integer, X:XLength/bytes, 
+               YLength:16/big-integer, Y:YLength/bytes, 
+               Data/bytes>> = Payload}, 
             #privkey{
                address=Address,
                pek=PrivKey
@@ -130,7 +119,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
             error_logger:info_msg("Decrypting"),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            bm_dispatcher:arrived(Type, DMessage, Hash, Address);
+            bm_dispatcher:arrived(DMessage, Hash, Address);
         H ->
             not_for_me
     end,

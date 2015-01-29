@@ -154,7 +154,7 @@ encode_decode_test(_Config) ->  % {{{2
                   time='_'},
     meck:expect(bm_dispatcher,
                 arrived,
-                fun(?MSG,
+                fun(
                     DMSG,
                     <<"TEST">>,
                     Addr) ->
@@ -173,7 +173,7 @@ encode_decode_test(_Config) ->  % {{{2
                                       1:8/integer,
                                       Payload/bytes>>
                            }] = bm_db:lookup(inventory, Hash),
-                        bm_message_decryptor:decrypt_message(Payload, <<"TEST">>);
+                        bm_message_decryptor:decrypt(Payload, <<"TEST">>);
                    (_) ->
                         meck:exception(error, "Wrong hash")
                 end),
@@ -204,7 +204,7 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
                   time='_'},
     meck:expect(bm_dispatcher,
                 arrived,
-                fun(?BROADCAST,
+                fun(
                     DMSG,
                     <<"TEST">>,
                     Addr) ->
@@ -225,7 +225,7 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
                                       Payload/bytes>>
                            }] = bm_db:lookup(inventory, Hash),
                         error_logger:info_msg("Decr: ~p~n", [Payload]),
-                        bm_message_decryptor:decrypt_broadcast(Payload, <<"TEST">>);
+                        bm_message_decryptor:decrypt(Payload, <<"TEST">>);
                    (_) ->
                         meck:exception(error, "Wrong hash")
                 end),

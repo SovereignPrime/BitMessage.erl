@@ -6,7 +6,7 @@
 
 %% API  {{{1
 -export([start_link/0]).
--export([arrived/4,
+-export([arrived/3,
          register_receiver/1,
          send/1,
          generate_address/0,
@@ -44,13 +44,12 @@ start_link() ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec arrived(Type, Data, Hash, Address) ->  ok when % {{{1
-      Type :: object_type(),
+-spec arrived(Data, Hash, Address) ->  ok when % {{{1
       Data :: binary(),
       Hash :: binary(),
       Address :: binary().
-arrived(Type, Data, Hash, Address) ->
-    gen_server:cast(?MODULE, {arrived, Type, Hash, Address, Data}).
+arrived(Data, Hash, Address) ->
+    gen_server:cast(?MODULE, {arrived, Hash, Address, Data}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,10 +142,12 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
+handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
     #address{version=AddrVer,
              stream=Stream, % TODO: Is this stream ok??
              ripe=RIPE}=bm_auth:decode_address(Address),
+    [#inventory{type=Type,
+                payload=D}] = bm_db:lookup(inventory, Hash),
     {AV, R1} = bm_types:decode_varint(Data),
     {AVer, R2} = case bm_types:decode_varint(R1) of
               {Stream, R} ->
@@ -194,7 +195,6 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
     SigOK = case crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]) of
                 true -> true;
                 false ->
-                    [#inventory{payload=D}] = bm_db:lookup(inventory, Hash),
                     %file:write_file("./test/data/broadcast_encr.bin", D),
                     %file:write_file("./test/data/broadcast_decr.bin", Data),
                     <<_:64/integer,
