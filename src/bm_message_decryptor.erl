@@ -45,7 +45,7 @@ start_link(Init) ->  % {{{1
 decrypt_message(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
     error_logger:info_msg("Trying to decrypt w/decryptors: ~p~n", [Pids]),
-    send_all(Pids, {decrypt, message, Hash, Data}).
+    send_all(Pids, {decrypt, ?MSG, Hash, Data}).
 
 
 %%--------------------------------------------------------------------
@@ -57,7 +57,7 @@ decrypt_message(Data, Hash) ->
 -spec decrypt_broadcast(binary(), binary()) -> ok. % {{{1
 decrypt_broadcast(Data, Hash) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
-    send_all(Pids, {decrypt, broadcast, Hash, Data}).
+    send_all(Pids, {decrypt, ?BROADCAST, Hash, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -114,7 +114,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
                address=Address,
                pek=PrivKey
               }=State) ->
-    error_logger:info_msg("Starting ~p decrypting", [Type]),
+    error_logger:info_msg("Starting ~p decrypting", [Hash]),
     MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     XPad = << <<0>> || _<- lists:seq(1, 32 - XLength)>>,
@@ -130,12 +130,7 @@ handle_cast({decrypt, Type, Hash, <<IV:16/bytes,   % {{{1
             error_logger:info_msg("Decrypting"),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            case Type of 
-                message ->
-                    bm_dispatcher:message_arrived(DMessage, Hash, Address);
-                broadcast ->
-                    bm_dispatcher:broadcast_arrived(DMessage, Hash, Address)
-            end;
+            bm_dispatcher:arrived(Type, DMessage, Hash, Address);
         H ->
             not_for_me
     end,

@@ -106,7 +106,7 @@ message_arrived(_Config) ->  % {{{1
                   from= <<"BM-2cTnpNFyndHYFPvQxVezdSztvLiaJBJcNQ">>, 
                   subject= <<"test">>,
                   folder=incoming,
-                  type=msg,
+                  type=?MSG,
                   ackdata= <<233,190,180,217,111,98,106,101,99,116,
                              0,0,0,0,0,0,0,0,0,54,178,40,94,40,
                              0,0,0,0,0,139,159,97,0,0,0,0,84,123,152,152,
@@ -123,7 +123,8 @@ message_arrived(_Config) ->  % {{{1
                         {ok, EMSG} = file:read_file("../../test/data/msg_encr.bin"),
                         [#inventory{payload=EMSG}]
                 end),
-    bm_dispatcher:message_arrived(
+    bm_dispatcher:arrived(
+      ?MSG,
       MSG,
       <<"TEST">>, 
       <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
@@ -187,10 +188,11 @@ message_arrived_old(_Config) ->  %{{{1
                              184,4,19,59,64,97,37,20,254,
                              103,166,97,82,90,60,71,217,208>>,
                   status=unread,
-                  type=msg,
+                  type=?MSG,
                   text= <<"1">>,
                  time='_'},
-    bm_dispatcher:message_arrived(
+    bm_dispatcher:arrived(
+      ?MSG,
       <<1,4,1,0,0,0,1,228,178,121,192,222,101,137,
         85,198,31,83,237,164,114,185,13,93,71,208,
         48,137,66,145,32,244,170,165,24,196,166,39,
@@ -269,7 +271,7 @@ broadcast_arrived(_Config) ->  % {{{1
                   from= <<"BM-2cTnpNFyndHYFPvQxVezdSztvLiaJBJcNQ">>, 
                   subject= <<"2014-12-25 (brd)">>,
                   folder=incoming,
-                  type=broadcast,
+                  type=?BROADCAST,
                   ackdata=ok,
                   status=unread,
                   text= <<"16:57">>,
@@ -281,7 +283,8 @@ broadcast_arrived(_Config) ->  % {{{1
                         {ok, EMSG} = file:read_file("../../test/data/broadcast_encr.bin"),
                         [#inventory{payload=EMSG}]
                 end),
-    bm_dispatcher:broadcast_arrived(
+    bm_dispatcher:arrived(
+      ?BROADCAST,
       MSG,
       <<"TEST">>, 
       <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),

@@ -6,11 +6,9 @@
 
 %% API  {{{1
 -export([start_link/0]).
--export([message_arrived/3,
-         broadcast_arrived/3,
+-export([arrived/4,
          register_receiver/1,
-         send_message/1,
-         send_broadcast/1,
+         send/1,
          generate_address/0,
          get_callback/0
 ]).
@@ -42,29 +40,17 @@ start_link() ->  % {{{1
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback when new incomming message arrived
+%% Callback when new incomming message or broadast arrived
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec message_arrived(Data, Hash, Address) ->  ok when % {{{1
+-spec arrived(Type, Data, Hash, Address) ->  ok when % {{{1
+      Type :: object_type(),
       Data :: binary(),
       Hash :: binary(),
       Address :: binary().
-message_arrived(Data, Hash, Address) ->
-    gen_server:cast(?MODULE, {arrived, msg, Hash, Address, Data}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback when new incomming broadcast arrived
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec broadcast_arrived(Data, Hash, Address) ->  ok when % {{{1
-      Data :: binary(),
-      Hash :: binary(),
-      Address :: binary().
-broadcast_arrived(Data, Hash, Address) ->
-    gen_server:cast(?MODULE, {arrived, broadcast,Hash, Address, Data}).
+arrived(Type, Data, Hash, Address) ->
+    gen_server:cast(?MODULE, {arrived, Type, Hash, Address, Data}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,30 +58,14 @@ broadcast_arrived(Data, Hash, Address) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec send_message(#message{}) ->  ok. % {{{1
-send_message(Message) ->
-    NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
-                               folder=sent,
-                               type=msg},
-    mnesia:transaction(fun() ->
-                               mnesia:write(message, NMessage, write)
-                       end),
-    gen_server:cast(?MODULE, {send, msg, NMessage}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Send a broadcast TODO
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec send_broadcast(#message{}) ->  ok. % {{{1
-send_broadcast(Message) ->
+-spec send(#message{}) ->  ok. % {{{1
+send(#message{type=Type} = Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
                                folder=sent},
     mnesia:transaction(fun() ->
                                mnesia:write(message, NMessage, write)
                        end),
-    gen_server:cast(?MODULE, {send, broadcast, NMessage}).
+    gen_server:cast(?MODULE, {send, Type, NMessage}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -197,7 +167,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                    {NonceTrailsPerBytes, ExtraBytes, RV1}
            end,
     case Type of
-        msg -> 
+        ?MSG -> 
             <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = 
             if DRIPE == RIPE ->
@@ -205,13 +175,13 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                true ->
                    false
             end;
-        broadcast ->
+        ?BROADCAST ->
             <<MsgEnc/big-integer, R5/bytes>> = R4,
             RecOK = true
     end,
 
     {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = if Type == msg ->
+    {AckData, R7} = if Type == ?MSG ->
                            bm_types:decode_varbin(R6);
                        true -> 
                            {ok, R6}
@@ -233,7 +203,7 @@ handle_cast({arrived, Type, Hash, Address,  Data},  #state{callback=Callback}=St
                       Stream/integer,
                       Rest/bytes>> = D,
 
-                    Tag = if Type == broadcast, 
+                    Tag = if Type == ?BROADCAST, 
                              V == 5 ->
                                  <<Ta:32/bytes, _/bytes>> = Rest,
                                  Ta;

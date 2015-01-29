@@ -101,12 +101,12 @@ new_decrypt_test(_Config) ->  % {{{2
     {ok, PID} = bm_message_decryptor:start_link(PK),
     {ok, MSG} = file:read_file("../../test/data/msg5.bin"),
     meck:expect(bm_dispatcher,
-                message_arrived,
-                fun(M,
+                arrived,
+                fun(T, M,
                     <<"test">>,
                     _) ->
                         io:format("Message: ~p~n", [M]) 
                 end),
     gen_server:cast(PID, {decrypt, message, <<"test">>, MSG}),
-    meck:wait(bm_dispatcher, message_arrived, '_', 1500).
+    meck:wait(bm_dispatcher, arrived, '_', 1500).
 

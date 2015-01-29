@@ -21,7 +21,7 @@
 
 -record(state,
         {
-         type :: atom(),
+         type :: object_type(),
          message :: type_record(),
          pek :: binary(),
          psk :: binary(),
@@ -115,7 +115,7 @@ payload(timeout,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
     {next_state,
      wait_pubkey,
-     #state{type=msg,
+     #state{type=Type,
             message=Message,
             hash=Ripe,
             callback=Callback},
@@ -125,14 +125,14 @@ payload(timeout,
 payload(timeout,
         #state{
            message=#message{hash=Id,
-                             to=To,
-                             from=From,
-                             subject=Subject,
-                             enc=Enc,
-                             text=Text,
-                             status=Status,
-                             folder=sent,
-                             type=msg} = Message,
+                            to=To,
+                            from=From,
+                            subject=Subject,
+                            enc=Enc,
+                            text=Text,
+                            status=Status,
+                            folder=sent,
+                            type=?MSG} = Message,
            callback=Callback
           }) when 
       Status == new;
@@ -194,7 +194,7 @@ payload(timeout,
     bm_db:insert(message, [NMessage]),
     {next_state,
      wait_pubkey,
-     #state{type=msg,
+     #state{type=?MSG,
             hash=Ripe,
             message=NMessage,
             callback=Callback},
@@ -210,7 +210,7 @@ payload(timeout,
                             text=Text,
                             status=new,
                             folder=sent,
-                            type=broadcast} = Message,
+                            type=?BROADCAST} = Message,
            callback=Callback
           }) ->
 
@@ -272,7 +272,7 @@ payload(timeout,
     bm_db:insert(message, [NMessage]),
     {next_state,
      encrypt_message,
-     #state{type=broadcast,
+     #state{type=?BROADCAST,
             message=NMessage,
             pek=BroadcastEK,
             callback=Callback},
@@ -307,7 +307,7 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                     bm_db:insert(message, [NMessage]),
             {next_state,
              encrypt_message,
-             State#state{type=msg,
+             State#state{type=?MSG,
                          message=NMessage,
                          pek=PEK,
                          psk=PSK},
@@ -321,7 +321,11 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
                                        folder=sent},
             bm_db:insert(message, [NMessage]),
             Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
-            {next_state, wait_pubkey, State#state{type=msg, message=NMessage}, Timeout}
+            {next_state,
+             wait_pubkey,
+             State#state{type=?MSG,
+                         message=NMessage},
+             Timeout}
     end;
 
 %% Receive PubKey and check compability  % {{{2
@@ -360,8 +364,6 @@ wait_pubkey(Event, State) ->
 %% Encrypt % {{{2
 encrypt_message(timeout,
                 #state{pek=PEK,
-                       psk=PSK,
-                       type=Type,
                        message = #message{payload=Payload} = Message} = State) ->
     error_logger:info_msg("Encrypting ~n"),
     IV = crypto:rand_bytes(16),
@@ -418,7 +420,7 @@ make_inv(timeout,
                                   time=Time,
                                   from=From}=Message}=State) ->
     PPayload = case Type of 
-        msg ->
+        ?MSG ->
             #address{stream=Stream} = bm_auth:decode_address(To),
             bm_message_creator:create_obj(?MSG, 
                                           1, % Version
@@ -426,7 +428,7 @@ make_inv(timeout,
                                           Time,
                                           Payload);
 
-        broadcast ->
+        ?BROADCAST ->
             #address{stream=Stream} = bm_auth:decode_address(From),
             bm_message_creator:create_obj(?BROADCAST, 
                                           5, % Version
@@ -437,8 +439,8 @@ make_inv(timeout,
         end,
     <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
     NMessage = Message#message{status=case Type of 
-                                          msg -> ackwait;
-                                          broadcast -> ok
+                                          ?MSG -> ackwait;
+                                          ?BROADCAST -> ok
                                       end,
                                hash=Hash,
                                payload=PPayload},
@@ -446,8 +448,8 @@ make_inv(timeout,
     bm_db:insert(message, [NMessage]),
     bm_db:insert(inventory, [#inventory{hash = Hash,
                                         type = case Type of
-                                                   msg -> 2;
-                                                   broadcast -> 3
+                                                   ?MSG -> 2;
+                                                   ?BROADCAST -> 3
                                                end,
                                         stream = Stream,
                                         payload = PPayload,

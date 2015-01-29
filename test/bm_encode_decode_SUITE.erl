@@ -150,11 +150,12 @@ encode_decode_test(_Config) ->  % {{{2
                    text = <<"Just test text">>,
                    status=new,
                    folder=sent,
-                   type=msg,
+                   type=?MSG,
                   time='_'},
     meck:expect(bm_dispatcher,
-                message_arrived,
-                fun(DMSG,
+                arrived,
+                fun(?MSG,
+                    DMSG,
                     <<"TEST">>,
                     Addr) ->
                         ok
@@ -182,7 +183,7 @@ encode_decode_test(_Config) ->  % {{{2
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(bm_dispatcher, message_arrived, '_', 1600).
+    meck:wait(bm_dispatcher, arrived, '_', 1600).
 
 broadcast_encode_decode_test() ->  % {{{2
     [].
@@ -199,11 +200,12 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
                    text = <<"Just test text">>,
                    status=new,
                    folder=sent,
-                   type=broadcast,
+                   type=?BROADCAST,
                   time='_'},
     meck:expect(bm_dispatcher,
-                broadcast_arrived,
-                fun(DMSG,
+                arrived,
+                fun(?BROADCAST,
+                    DMSG,
                     <<"TEST">>,
                     Addr) ->
                         ok
@@ -234,4 +236,4 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(bm_dispatcher, broadcast_arrived, '_', 1600).
+    meck:wait(bm_dispatcher, arrived, '_', 1600).

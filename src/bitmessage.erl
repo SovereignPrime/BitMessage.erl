@@ -51,10 +51,11 @@
       Subject :: binary(),
       Text :: binary().
 send_message(From, To, Subject, Text) ->
-    bm_dispatcher:send_message(#message{from=From,
-                                        to=To,
-                                        subject=Subject,
-                                        text=Text}).
+    bm_dispatcher:send(#message{from=From,
+                                type=?MSG,
+                                to=To,
+                                subject=Subject,
+                                text=Text}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -68,11 +69,12 @@ send_message(From, To, Subject, Text) ->
       Text :: binary(),
       Encoding :: integer().
 send_message(From, To, Subject, Text, Encoding) ->
-    bm_dispatcher:send_message(#message{from=From,
-                                        to=To,
-                                        subject=Subject,
-                                        text=Text,
-                                        enc=Encoding}).
+    bm_dispatcher:send(#message{from=From,
+                                type=?MSG,
+                                to=To,
+                                subject=Subject,
+                                text=Text,
+                                enc=Encoding}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -85,11 +87,11 @@ send_message(From, To, Subject, Text, Encoding) ->
       Text :: binary(),
       Encoding :: integer().
 send_broadcast(From, Subject, Text, Encoding) ->
-    bm_dispatcher:send_broadcast(#message{from=From,
-                                          subject=Subject,
-                                          text=Text,
-                                          type=broadcast,
-                                          enc=Encoding}).
+    bm_dispatcher:send(#message{from=From,
+                                subject=Subject,
+                                text=Text,
+                                type=?BROADCAST,
+                                enc=Encoding}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%

@@ -90,7 +90,7 @@
          status=new :: atom() | atom(),  % Variants
          ackdata :: binary() | atom(),
          payload :: binary() | atom(),
-         type :: binary() | atom(),
+         type :: object_type() | atom(),
          time :: calendar:date_time() | non_neg_integer()
         }).
 
