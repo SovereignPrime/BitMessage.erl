@@ -55,7 +55,6 @@ end_per_group(_GroupName, _Config) ->  % {{{2
     ok.
 
 init_per_testcase(_TestCase, Config) ->  % {{{2
-    mnesia:create_schema([node()]),
     mnesia:start(),
     {atomic, ok} = mnesia:create_table(inventory,
                                        [
@@ -78,8 +77,8 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     {atomic, ok} = mnesia:create_table(message,
                                        [
                                         {attributes, record_info(fields, message)},
-                                        {type, set},
-                                        {record_name, message}]),
+                                        {type, set}
+                                        ]),
 
     bm_db:start_link(),
     PrivKey={privkey,
@@ -112,7 +111,10 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                },
     bm_db:insert(pubkey, 
                  [PubKey]),
+    meck:new(bm_dispatcher, [passthrough]),
     bm_decryptor_sup:start_link(),
+    bm_dispatcher:start_link(),
+    bm_encryptor_sup:start_link(),
     meck:new(bm_pow),
     meck:expect(bm_pow, make_pow, fun(Payload) ->
                                           <<1024:64/big-integer, Payload/bytes>>
@@ -121,13 +123,11 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                                           POW == 1024
                                   end),
     meck:new(bm_sender, [no_link]),
-    meck:new(bm_dispatcher, [no_link]),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2
     meck:unload(),
     mnesia:stop(),
-    mnesia:delete_schema([node()]),
     ok.
 
 %%%===================================================================
@@ -177,9 +177,10 @@ encode_decode_test(_Config) ->  % {{{2
                    (_) ->
                         meck:exception(error, "Wrong hash")
                 end),
-    spawn(fun() ->
-                  bm_message_encryptor:start_link(MSG, bitmessage)
-          end),
+    bitmessage:send_message(Addr,
+                            Addr,
+                            <<"Test">>,
+                            <<"Just test text">>),
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
@@ -230,9 +231,10 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
                         meck:exception(error, "Wrong hash")
                 end),
     bitmessage:subscribe_broadcast(<<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
-    spawn(fun() ->
-                  bm_message_encryptor:start_link(MSG, bitmessage)
-          end),
+    bitmessage:send_broadcast(Addr,
+                            <<"Test">>,
+                            <<"Just test text">>,
+                            2),
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
