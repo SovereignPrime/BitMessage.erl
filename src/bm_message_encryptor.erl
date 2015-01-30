@@ -255,6 +255,7 @@ payload(timeout,
                  ?BROADCAST:32/big-integer,
                  5, % Version
                  1, % Stream
+                 Tag:32/bytes,
                  UPayload/bytes>>,
     Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
     Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
@@ -447,10 +448,7 @@ make_inv(timeout,
     bm_db:delete(message, MID),
     bm_db:insert(message, [NMessage]),
     bm_db:insert(inventory, [#inventory{hash = Hash,
-                                        type = case Type of
-                                                   ?MSG -> 2;
-                                                   ?BROADCAST -> 3
-                                               end,
+                                        type = Type,
                                         stream = Stream,
                                         payload = PPayload,
                                         time = Time
