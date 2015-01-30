@@ -59,22 +59,42 @@ send_message(From, To, Subject, Text) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
-%%% @doc Send message w/custom enc
+%%% @doc Send a message w/attachments
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec send_message(From, To, Subject, Text, Encoding) -> ok when  % {{{1
+-spec send_message(From, To, Subject, Text, Attachments) -> ok when  % {{{1
       From :: binary(),
       To :: binary(),
       Subject :: binary(),
       Text :: binary(),
-      Encoding :: integer().
-send_message(From, To, Subject, Text, Encoding) ->
+      Attachments :: [Attachment],
+      Attachment :: string().
+send_message(From, To, Subject, Text, Attachments) ->
     bm_dispatcher:send(#message{from=From,
                                 type=?MSG,
                                 to=To,
                                 subject=Subject,
-                                text=Text,
-                                enc=Encoding}).
+                                enc=3,
+                                text=Text}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Send message w/custom enc
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%-spec send_message(From, To, Subject, Text, Encoding) -> ok when  % {{{1
+%      From :: binary(),
+%      To :: binary(),
+%      Subject :: binary(),
+%      Text :: binary(),
+%      Encoding :: integer().
+%send_message(From, To, Subject, Text, Encoding) ->
+%    bm_dispatcher:send(#message{from=From,
+%                                type=?MSG,
+%                                to=To,
+%                                subject=Subject,
+%                                text=Text,
+%                                enc=Encoding}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%

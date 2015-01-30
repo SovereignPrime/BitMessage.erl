@@ -99,6 +99,7 @@
         {
          hash :: binary() | atom(),
          name :: binary() | atom(),
+         path :: binary() | atom(),
          size :: non_neg_integer() | atom(),
          chunks :: list() | non_neg_integer() | atom(), %% ???
          mercleroot :: binary() | atom(),
