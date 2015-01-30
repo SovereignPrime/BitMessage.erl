@@ -123,6 +123,8 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                                           POW == 1024
                                   end),
     meck:new(bm_sender, [no_link]),
+    meck:new(test, [non_strict]),
+    bm_dispatcher:register_receiver(test),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2
@@ -142,29 +144,26 @@ encode_decode_test(_Config) ->  % {{{2
               public=Pub,
               address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
-    MSG = #message{hash = <<"test">>,
-                   to=Addr,
-                   from=Addr,
-                   subject = <<"Test">>,
-                   enc=2,
-                   text = <<"Just test text">>,
-                   status=new,
-                   folder=sent,
-                   type=?MSG,
-                  time='_'},
-    meck:expect(bm_dispatcher,
-                arrived,
-                fun(
-                    DMSG,
-                    <<"TEST">>,
-                    Addr) ->
-                        ok
+    meck:expect(test,
+                received,
+                fun(Hash) ->
+                        {ok,
+                         #message{hash = Hash,
+                                  to=Addr,
+                                  from=Addr,
+                                  subject = <<"Test">>,
+                                  enc=2,
+                                  text = <<"Just test text">>,
+                                  status=unread,
+                                  folder=incoming,
+                                  type=?MSG
+                                  }} = bitmessage:get_message(Hash)
+
                 end),
-    meck:expect(bm_sender,
-                send_broadcast,
-                fun(<<_:24/bytes, 
-                      _:8/integer,
-                      Hash/bytes>>) ->
+    meck:expect(test,
+                sent,
+                fun(Hash) ->
+                        mnesia:clear_table(message),
                         [#inventory{
                             payload = <<1024:64/big-integer,
                                       _:64/big-integer,
@@ -173,9 +172,12 @@ encode_decode_test(_Config) ->  % {{{2
                                       1:8/integer,
                                       Payload/bytes>>
                            }] = bm_db:lookup(inventory, Hash),
-                        bm_message_decryptor:decrypt(Payload, <<"TEST">>);
-                   (_) ->
-                        meck:exception(error, "Wrong hash")
+                        bm_message_decryptor:decrypt(Payload, Hash)
+                end),
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(_) ->
+                        ok 
                 end),
     bitmessage:send_message(Addr,
                             Addr,
@@ -184,7 +186,7 @@ encode_decode_test(_Config) ->  % {{{2
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(bm_dispatcher, arrived, '_', 1600).
+    meck:wait(test, received, '_', 1600).
 
 broadcast_encode_decode_test() ->  % {{{2
     [].
@@ -194,41 +196,42 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
               public=Pub,
               address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
-    MSG = #message{hash = <<"test">>,
-                   from=Addr,
-                   subject = <<"Test">>,
-                   enc=2,
-                   text = <<"Just test text">>,
-                   status=new,
-                   folder=sent,
-                   type=?BROADCAST,
-                  time='_'},
-    meck:expect(bm_dispatcher,
-                arrived,
-                fun(
-                    DMSG,
-                    <<"TEST">>,
-                    Addr) ->
-                        ok
+    meck:expect(test,
+                received,
+                fun(Hash) ->
+                        {ok,
+                         #message{hash = Hash,
+                                  to=Addr,
+                                  from=Addr,
+                                  subject = <<"Test">>,
+                                  enc=2,
+                                  text = <<"Just test text">>,
+                                  status=unread,
+                                  folder=incoming,
+                                  type=?BROADCAST
+                                  }} = bitmessage:get_message(Hash)
+
                 end),
-    meck:expect(bm_sender,
-                send_broadcast,
-                fun(<<_:24/bytes, 
-                      _:8/integer,
-                      Hash/bytes>>) ->
+    meck:expect(test,
+                sent,
+                fun(Hash) ->
+                        mnesia:clear_table(message),
                         [#inventory{
+                            type=?BROADCAST,
                             payload = <<1024:64/big-integer,
                                       _:64/big-integer,
                                       ?BROADCAST:32/big-integer,
-                                      5, % Version
-                                      1, % Stream
+                                      5:8/integer, % Version
+                                      1:8/integer, % Stream
                                       _Tag:32/bytes,
                                       Payload/bytes>>
                            }] = bm_db:lookup(inventory, Hash),
-                        error_logger:info_msg("Decr: ~p~n", [Payload]),
-                        bm_message_decryptor:decrypt(Payload, <<"TEST">>);
-                   (_) ->
-                        meck:exception(error, "Wrong hash")
+                        bm_message_decryptor:decrypt(Payload, Hash)
+                end),
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(_) ->
+                        ok 
                 end),
     bitmessage:subscribe_broadcast(<<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>),
     bitmessage:send_broadcast(Addr,
@@ -238,4 +241,4 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(bm_dispatcher, arrived, '_', 1600).
+    meck:wait(test, received, '_', 1600).
