@@ -79,22 +79,12 @@ send_message(From, To, Subject, Text, Attachments) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
-%%% @doc Send message w/custom enc
+%%% @doc Send custom message record (use w/caution)
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%-spec send_message(From, To, Subject, Text, Encoding) -> ok when  % {{{1
-%      From :: binary(),
-%      To :: binary(),
-%      Subject :: binary(),
-%      Text :: binary(),
-%      Encoding :: integer().
-%send_message(From, To, Subject, Text, Encoding) ->
-%    bm_dispatcher:send(#message{from=From,
-%                                type=?MSG,
-%                                to=To,
-%                                subject=Subject,
-%                                text=Text,
-%                                enc=Encoding}).
+-spec send_message(#message{}) -> ok. % {{{1
+send_message(Msg) ->
+    bm_dispatcher:send(Msg).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
