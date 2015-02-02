@@ -159,22 +159,35 @@ test_file_encode_decode(_Config) -> % {{{2
                                   status=unread,
                                   folder=incoming,
                                   type=?MSG
-                                  }} = bitmessage:get_message(Hash)
-
+                                  }} = bitmessage:get_message(Hash),
+                        Files = bm_db:match(bm_file, #bm_file{}),
+                        case length(Files) of
+                            2 ->
+                                ok;
+                            _FL ->
+                                meck:exception(error, "Wrong number of attachments received")
+                        end
                 end),
     meck:expect(test,
                 sent,
                 fun(Hash) ->
-                        mnesia:clear_table(message),
-                        [#inventory{
-                            payload = <<1024:64/big-integer,
-                                      _:64/big-integer,
-                                      ?MSG:32/big-integer,
-                                      1:8/integer,
-                                      1:8/integer,
-                                      Payload/bytes>>
-                           }] = bm_db:lookup(inventory, Hash),
-                        bm_message_decryptor:decrypt(Payload, Hash)
+                        Files = bm_db:match(bm_file, #bm_file{}),
+                        case length(Files) of
+                            2 ->
+                                mnesia:clear_table(bm_file),
+                                mnesia:clear_table(message),
+                                [#inventory{
+                                    payload = <<1024:64/big-integer,
+                                                _:64/big-integer,
+                                                ?MSG:32/big-integer,
+                                                1:8/integer,
+                                                1:8/integer,
+                                                Payload/bytes>>
+                                   }] = bm_db:lookup(inventory, Hash),
+                                bm_message_decryptor:decrypt(Payload, Hash);
+                            _FL ->
+                                meck:exception(error, "Wrong number of attachments sent")
+                        end
                 end),
     meck:expect(bm_sender,
                 send_broadcast,
