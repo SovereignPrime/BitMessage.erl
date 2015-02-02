@@ -91,6 +91,23 @@
          ackdata :: binary() | atom(),
          payload :: binary() | atom(),
          type :: object_type() | atom(),
+         time :: calendar:date_time() | non_neg_integer(),
+         attachments = [] :: [string()] | atom()
+        }).
+
+-record(old_message,
+        {
+         hash :: binary() | atom(),
+         to :: binary() | atom(),
+         from :: binary() | atom(),
+         subject :: binary() | atom(),
+         enc=2 :: integer() | atom(),
+         folder :: string() | atom(),  % ???
+         text :: binary() | atom(),
+         status=new :: atom() | atom(),  % Variants
+         ackdata :: binary() | atom(),
+         payload :: binary() | atom(),
+         type :: object_type() | atom(),
          time :: calendar:date_time() | non_neg_integer()
         }).
 
