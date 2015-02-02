@@ -57,14 +57,14 @@ arrived(Data, Hash, Address) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec send(#message{}) ->  ok. % {{{1
-send(#message{type=Type} = Message) ->
+-spec send(#message{}, [strig()]) ->  ok. % {{{1
+send(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
                                folder=sent},
     mnesia:transaction(fun() ->
                                mnesia:write(message, NMessage, write)
                        end),
-    gen_server:cast(?MODULE, {send, Type, NMessage}).
+    gen_server:cast(?MODULE, {send, NMessage}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -263,9 +263,9 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
         true ->
             {noreply, State}
     end;
-handle_cast({send, Type, Message}, #state{callback=Callback}=State) ->  % {{{1
-    error_logger:info_msg("Sending ~p ~p~n", [Type, Message]),
-    bm_encryptor_sup:add_encryptor(Message#message{type=Type}, Callback),
+handle_cast({send, Message}, #state{callback=Callback}=State) ->  % {{{1
+    error_logger:info_msg("Sending  ~p~n", [Message]),
+    bm_encryptor_sup:add_encryptor(Message, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1
     {noreply, State#state{callback=Module}};

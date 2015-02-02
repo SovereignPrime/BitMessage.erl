@@ -75,6 +75,7 @@ send_message(From, To, Subject, Text, Attachments) ->
                                 to=To,
                                 subject=Subject,
                                 enc=3,
+                                attachments=Attachments,
                                 text=Text}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
