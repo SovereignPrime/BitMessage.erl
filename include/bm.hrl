@@ -116,11 +116,10 @@
         {
          hash :: binary() | atom(),
          name :: binary() | atom(),
-         path :: binary() | atom(),
+         path :: string() | atom(),
          size :: non_neg_integer() | atom(),
-         chunks :: list() | non_neg_integer() | atom(), %% ???
-         mercleroot :: binary() | atom(),
-         key :: binary() | atom(),
+         chunks :: list() | atom(), %% ???
+         key :: {binary(), binary()} | atom(),
          time :: calendar:date_time() | non_neg_integer()
         }).
 
@@ -137,4 +136,6 @@
                     | #pubkey{}
                     | #privkey{}
                     | #inventory{}
+                    | #bm_file{}
+                    | #bm_filechunk{}
                     | #network_address{}.

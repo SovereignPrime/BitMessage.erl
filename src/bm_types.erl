@@ -37,7 +37,9 @@ decode_varint(<<16#ff, Num:64/big-integer, Rest/bits>>) ->
 %% String packing and unpacking to VariantStr  % {{{1
 %%%
 
--spec encode_varstr(string()) -> binary().  % {{{2
+-spec encode_varstr(iodata()) -> binary().  % {{{2
+encode_varstr(Str) when is_binary(Str) ->
+    binary_to_list(Str);
 encode_varstr(Str) ->
     Len = length(Str),
     <<(encode_varint(Len))/bytes, (list_to_binary(Str))/bytes>>.
@@ -62,7 +64,7 @@ decode_varbin(VStr) ->
 encode_list(Lst, Fun) ->
     Len = length(Lst),
     BLst = << <<(Fun(I))/bytes>> || I <- Lst>>,
-    <<(encode_varint(Len))/bytes, BLst/bytes>>.
+   <<(encode_varint(Len))/bytes, BLst/bytes>>.
 
 -spec decode_list(binary(), fun((TList) -> binary())) -> {list(TList), binary()}.  % {{{2
 decode_list(VLst, Fun) ->

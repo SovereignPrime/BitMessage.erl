@@ -32,13 +32,15 @@
 -record(state, {addr}).
 
 -type type() :: message 
-             | pubkey 
-             | privkey
-             | inventory
-             | network_address.
+              | pubkey 
+              | privkey
+              | inventory
+              | bm_file
+              | bm_filechunk
+              | network_address.
 
 -type table() :: type() 
-                | 'addr'.
+               | 'addr'.
 
 
 %%%===================================================================
@@ -179,7 +181,7 @@ init([]) -> %  {{{1
             ok;
         {error, R} -> 
             exit(R)
-    end, % }}}
+    end,
     {ok, #state{}}. % }}}
 
 %%--------------------------------------------------------------------

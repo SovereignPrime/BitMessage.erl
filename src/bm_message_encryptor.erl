@@ -97,7 +97,7 @@ init([Message, Callback]) ->
       Reason :: term(),
       NewState :: atom().
 
-%% Init for already packed messages  {{{1
+%% Init for already packed messages  {{{2
 payload(timeout,
         #state{
            message=#message{to=To,
@@ -121,7 +121,7 @@ payload(timeout,
             callback=Callback},
      0};
 
-%% Init for new and resending messages  {{{1
+%% Init for new and resending messages  {{{2
 payload(timeout,
         #state{
            message=#message{hash=Id,
@@ -132,6 +132,7 @@ payload(timeout,
                             text=Text,
                             status=Status,
                             folder=sent,
+                            attachments=Attachments,
                             type=?MSG} = Message,
            callback=Callback
           }) when 
@@ -160,7 +161,20 @@ payload(timeout,
     AckData = bm_message_creator:create_obj(2, 1, 1, A),
     Ack = bm_message_creator:create_message(<<"object">>,
                                             AckData),
-    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
+    MSG = case Attachments of
+        [] ->
+            <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>;
+        _ ->
+            At = lists:map(fun process_attachment/1, Attachments),  %TODO
+            <<"Subject:",
+              Subject/bytes,
+              10,
+              "Body:",
+              Text/bytes,
+              10,
+              "Attachments:",
+              (bm_types:encode_list(At, fun(E) -> E end))/bytes>>
+    end,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<3, %Address version
                  1, %Stream number
@@ -200,7 +214,7 @@ payload(timeout,
             callback=Callback},
      0};
 
-% Init for broadcasts  {{{1
+% Init for broadcasts  {{{2
 payload(timeout,
         #state{
            message=#message{hash=Id,
@@ -556,3 +570,39 @@ send_all([Pid|Rest], Msg) ->  % {{{1
     {_, P, _, _} = Pid,
     gen_fsm:send_event(P, Msg),
     send_all(Rest, Msg).
+
+-spec process_attachment(string()) -> binary(). %TODO  {{{1
+process_attachment(Path) ->
+    Size = filelib:file_size(Path),
+    Name = filename:basename(Path),
+    TarPath = Path ++ ".rz.tar.gz",
+    erl_tar:create(TarPath, [Path], [compressed]),
+    {ok, F} = file:open(TarPath, [binary, read]),
+    {ok, ChunksData} = file:pread(F,
+                                  lists:map(fun(L) ->
+                                                    {L, 1024}
+                                            end, 
+                                            lists:seq(0,
+                                                      Size,
+                                                      1024))),
+    ChunksHash = lists:map(fun(C) ->
+                                   bm_auth:dual_sha(C)
+                           end,
+                           ChunksData),
+    MercleRoot = bm_auth:mercle_root(ChunksHash), %TODO
+    {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
+    FileRec = #bm_file{
+                 hash=MercleRoot,
+                 name=Name,
+                 path=Path,
+                 chunks=ChunksHash,
+                 key=Keys,
+                 time=calendar:universal_time()
+                },
+    bm_db:insert(bm_file, [FileRec]),
+    file:delete(TarPath),  %TODO: will it work?
+    <<(bm_types:encode_varstr(Name))/bytes,
+      MercleRoot/bytes,
+      (bm_types:encode_varint(Size))/bytes,
+      (bm_types:encode_list(ChunksHash, fun(E) -> E end))/bytes,
+       Priv/bytes>>.
