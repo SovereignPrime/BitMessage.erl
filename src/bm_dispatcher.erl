@@ -57,7 +57,7 @@ arrived(Data, Hash, Address) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec send(#message{}, [strig()]) ->  ok. % {{{1
+-spec send(#message{}) ->  ok. % {{{1
 send(Message) ->
     NMessage = Message#message{hash=crypto:hash(sha512, Message#message.text),
                                folder=sent},
