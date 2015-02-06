@@ -6,6 +6,27 @@
 
 -define(P, bm_types:pow(2,256)-bm_types:pow(2,32)-bm_types:pow(2,9)-bm_types:pow(2,8)-bm_types:pow(2,7)-bm_types:pow(2,6)-bm_types:pow(2,4)-1).
 %%%
+%% @doc Mercle tree root calculation TODO
+%%%
+-spec mercle_root([iodata()]) -> binary().  % {{{2
+mercle_root(Chunks) ->
+    Hashes = lists:map(fun dual_sha/1, Chunks),
+    mercle_root(Hashes, []).
+
+-spec mercle_root([binary()], [binary()]) -> binary().  % {{{2
+mercle_root([H], []) ->
+    H;
+mercle_root([H1, H2], []) ->
+    dual_sha(<<H1/bytes, H2/bytes>>);
+mercle_root([], Acc) ->
+    mercle_root(lists:reverse(Acc), []);
+mercle_root([H], Acc) ->
+    mercle_root([], [dual_sha(<<H/bytes, H/bytes>>) | Acc]);
+mercle_root([H1, H2 | Hashes], Acc) ->
+    mercle_root(Hashes, [dual_sha(<<H1/bytes, H2/bytes>>) | Acc]).
+    
+
+%%%
 %% Address encoding and decoding routines
 %%%
 

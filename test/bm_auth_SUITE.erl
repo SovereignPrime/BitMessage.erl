@@ -18,12 +18,14 @@
          decode_encode_address/1,
          dual_sha/0,
          dual_sha/1,
+         mercle_root/0,
+         mercle_root/1,
          encode_address/0,
          encode_address/1,
          generate_ripe/0,
          generate_ripe/1,
-         pubkey_test/0,
-         pubkey_test/1,
+         pubkey/0,
+         pubkey/1,
          point_mult/0,
          point_mult/1,
          point_double/0,
@@ -46,13 +48,14 @@ all() ->  % {{{2
     [
      decode_encode_address,
      dual_sha,
+     mercle_root,
      encode_address,
      generate_ripe,
      inv,
      point_add,
      point_double,
      point_mult,
-     pubkey_test
+     pubkey
     ].
 
 suite() ->  % {{{2
@@ -85,6 +88,47 @@ end_per_testcase(_TestCase, _Config) ->  % {{{2
 %%%===================================================================
 %%% Test cases  % {{{1
 %%%===================================================================
+
+mercle_root() ->  % {{{2
+    [].
+mercle_root(_Config) ->  % {{{2
+     [D1, D2, D3, D4, D5, D6] = Data = ["test",
+                                        "Yandec",
+                                        "Goofl",
+                                        "mother1",
+                                        "father_=",
+                                        "Sunday19=-+"],
+    [H1, H2, H3, H4, H5, H6] = HData = lists:map(fun bm_auth:dual_sha/1, Data),
+    % Test function result
+    Test = bm_auth:mercle_root(Data),
+    % Firsr round 
+    First = bm_auth:dual_sha(<<H1/bytes, H2/bytes>>),
+    Second = bm_auth:dual_sha(<<H3/bytes, H4/bytes>>),
+    Third = bm_auth:dual_sha(<<H5/bytes, H6/bytes>>),
+
+    % First round for 3 elements
+    DualThird = bm_auth:dual_sha(<<H3/bytes, H3/bytes>>),
+    DualFive = bm_auth:dual_sha(<<H5/bytes, H5/bytes>>),
+
+    % Second round
+    Four = bm_auth:dual_sha(<<First/bytes, Second/bytes>>),
+    Fifth = bm_auth:dual_sha(<<Third/bytes, Third/bytes>>),
+    DualFifth = bm_auth:dual_sha(<<DualFive/bytes, DualFive/bytes>>),
+
+    % Last round
+    Result = bm_auth:dual_sha(<<Four/bytes, Fifth/bytes>>),
+    ThreeResult = bm_auth:dual_sha(<<First/bytes, DualThird/bytes>>),
+    FiveResult = bm_auth:dual_sha(<<Four/bytes, DualFifth/bytes>>),
+
+    % Asserts
+    ?assertEqual(bm_auth:mercle_root([D1]), H1),
+    ?assertEqual(bm_auth:mercle_root([D1, D2]), First),
+    ?assertEqual(bm_auth:mercle_root([D1, D2, D3]), ThreeResult),
+    ?assertEqual(bm_auth:mercle_root([D1, D2, D3, D4]), Four),
+    ?assertEqual(bm_auth:mercle_root([D1, D2, D3, D4, D5]), FiveResult),
+    ?assertEqual(Test, Result).
+
+    
 
 dual_sha() ->  % {{{2
     [].
@@ -130,10 +174,10 @@ point_mult() ->  % {{{2
 point_mult(_Config) ->  % {{{2
     ok=eunit:test({generator, fun point_mult_test_/0}).
 
-pubkey_test() ->  % {{{2
+pubkey() ->  % {{{2
     [].
 
-pubkey_test(_Config) ->  % {{{2
+pubkey(_Config) ->  % {{{2
     application:start(crypto),
     {<<4, Pub/bytes>>, Priv} = crypto:generate_key(ecdh, secp256k1),
     io:format("Priv: ~p~n Pub: ~p~n", [bm_types:binary_to_hexstring(Priv), bm_types:binary_to_hexstring(Pub)]),
