@@ -71,7 +71,11 @@ decode_list(VLst, Fun) ->
     {Len, S} = decode_varint(VLst),
     decode_list(S, Len, [], Fun).
 
--spec decode_list(binary(), non_neg_integer(), list(), fun((TList) -> binary())) -> {list(TList), binary()}.  % {{{2
+-spec decode_list(binary(),  % {{{2
+                  non_neg_integer(),
+                  list(),
+                  fun((TList) -> binary())) -> {list(TList),
+                                                binary()}.
 decode_list(B, 0, A, _Fun) ->
     {A, B};
 decode_list(B, C, A, Fun) ->

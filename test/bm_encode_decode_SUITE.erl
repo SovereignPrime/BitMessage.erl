@@ -1,5 +1,4 @@
 -module(bm_encode_decode_SUITE).
--include("../include/bm.hrl").
 
 %% API
 -export([all/0,
@@ -22,6 +21,7 @@
         ]).
 
 -include_lib("common_test/include/ct.hrl").
+-include("../include/bm.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks  % {{{1
@@ -158,7 +158,6 @@ encode_decode_test(_Config) ->  % {{{2
                                   folder=incoming,
                                   type=?MSG
                                   }} = bitmessage:get_message(Hash)
-
                 end),
     meck:expect(test,
                 sent,

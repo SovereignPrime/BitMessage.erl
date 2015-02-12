@@ -227,8 +227,13 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
             {Subject, Text} = case MsgEnc of
                 1 ->
                     {"", Message};
-                _ ->
+                2 ->
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
+                    {S, T};
+                3 ->
+                    {match, [_, S,  T, Attachments]} = re:run(Message, "Subject:(.+)\nBody:(.+)\nAttachments:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
+
+                    save_files(Attachments),
                     {S, T}
             end,
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
@@ -341,3 +346,38 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec save_files(binary()) -> ok.  % {{{1
+save_files(Data) ->
+    {Attachments,
+     _} = bm_types:decode_list(Data,
+                               fun(A) ->
+                                       error_logger:info_msg("File: ~p~n", [A]),
+                                       {Name,
+                                        <<Hash:64/bytes,
+                                          R1/bytes>>} = bm_types:decode_varstr(A),
+                                       error_logger:info_msg("File: ~p, hash ~p~n", [Name, Hash]),
+                                       {Size,
+                                        R2} = bm_types:decode_varint(R1),
+                                       error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
+                                       {Chunks,
+                                        <<Key:32/bytes, 
+                                          R3/bytes>>} = bm_types:decode_list(R2,
+                                                                             fun(<<X:64/bytes,
+                                                                                   Y/bytes>>) ->
+                                                                                     {X, Y}
+                                                                             end),
+                                       {#bm_file{
+                                          hash=Hash,
+                                          name=Name,
+                                          size=Size,
+                                          chunks=Chunks,
+                                          key={bm_auth:pubkey(Key), Key},
+                                          time=calendar:universal_time()
+                                         }, R3}
+                               end), 
+    bm_db:insert(bm_file, Attachments),
+    ok.
+
+
+
+

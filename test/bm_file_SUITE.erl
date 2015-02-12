@@ -133,6 +133,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
 end_per_testcase(_TestCase, _Config) ->  % {{{2
     meck:unload(),
     mnesia:stop(),
+    mnesia:delete_schema([node()]),
     ok.
 
 %%%===================================================================
@@ -160,19 +161,19 @@ test_file_encode_decode(_Config) -> % {{{2
                                   folder=incoming,
                                   type=?MSG
                                   }} = bitmessage:get_message(Hash),
-                        Files = bm_db:match(bm_file, #bm_file{}),
-                        case length(Files) of
+                        Files = mnesia:table_info(bm_file, size),
+                        case Files of
                             2 ->
                                 ok;
-                            _FL ->
-                                meck:exception(error, "Wrong number of attachments received")
+                            FL ->
+                                meck:exception(error, iolib:format("Wrong number of attachments received; ~p~n", [FL]))
                         end
                 end),
     meck:expect(test,
                 sent,
                 fun(Hash) ->
-                        Files = bm_db:match(bm_file, #bm_file{}),
-                        case length(Files) of
+                        Files = mnesia:table_info(bm_file, size),
+                        case Files of
                             2 ->
                                 mnesia:clear_table(bm_file),
                                 mnesia:clear_table(message),
@@ -185,8 +186,8 @@ test_file_encode_decode(_Config) -> % {{{2
                                                 Payload/bytes>>
                                    }] = bm_db:lookup(inventory, Hash),
                                 bm_message_decryptor:decrypt(Payload, Hash);
-                            _FL ->
-                                meck:exception(error, "Wrong number of attachments sent")
+                            FL ->
+                                meck:exception(error, iolib:format("Wrong number of attachments sent: ~p~n", [FL]))
                         end
                 end),
     meck:expect(bm_sender,
@@ -198,8 +199,8 @@ test_file_encode_decode(_Config) -> % {{{2
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
-                            ["test/data/file.txt",
-                             "test/data/file1.txt"]),
+                            ["../../test/data/file.txt",
+                             "../../test/data/file1.txt"]),
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),

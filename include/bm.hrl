@@ -17,12 +17,12 @@
 -define(FILECHUNK, 5).
 
 -type object_type() :: ?GET_PUBKEY
-                  | ?PUBKEY
-                  | ?MSG
-                  | ?BROADCAST
-                  | ?FILEOBJ
-                  | ?FILECHUNK
-                  | non_neg_integer().
+                     | ?PUBKEY
+                     | ?MSG
+                     | ?BROADCAST
+                     | ?FILEOBJ
+                     | ?FILECHUNK
+                     | non_neg_integer().
 
 %% @doc Network address storing structure
 -record(network_address,
@@ -115,7 +115,7 @@
 -record(bm_file,
         {
          hash :: binary() | atom(),
-         name :: binary() | atom(),
+         name :: iodata() | atom(),
          path :: string() | atom(),
          size :: non_neg_integer() | atom(),
          chunks :: list() | atom(), %% ???

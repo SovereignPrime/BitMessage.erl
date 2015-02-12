@@ -6,7 +6,7 @@
 
 -define(P, bm_types:pow(2,256)-bm_types:pow(2,32)-bm_types:pow(2,9)-bm_types:pow(2,8)-bm_types:pow(2,7)-bm_types:pow(2,6)-bm_types:pow(2,4)-1).
 %%%
-%% @doc Mercle tree root calculation TODO
+%% @doc Mercle tree root calculation
 %%%
 -spec mercle_root([iodata()]) -> binary().  % {{{2
 mercle_root(Chunks) ->
@@ -123,7 +123,7 @@ pubkey(PrKey) when is_integer(PrKey) ->
 
 %% @doc Double sha512 hashing
 %%
--spec dual_sha(iodata()) -> binary().
+-spec dual_sha(iodata()) -> binary().  % {{{2
 dual_sha(Data) ->
     crypto:hash(sha512, crypto:hash(sha512, Data)).
 

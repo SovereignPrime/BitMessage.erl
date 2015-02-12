@@ -591,6 +591,8 @@ process_attachment(Path) ->
                            ChunksData),
     MercleRoot = bm_auth:mercle_root(ChunksHash), %TODO
     {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
+    error_logger:info_msg("File: ~p, hash ~p~n", [Name, MercleRoot]),
+    error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
@@ -602,7 +604,7 @@ process_attachment(Path) ->
     bm_db:insert(bm_file, [FileRec]),
     file:delete(TarPath),  %TODO: will it work?
     <<(bm_types:encode_varstr(Name))/bytes,
-      MercleRoot/bytes,
+      MercleRoot:64/bytes,
       (bm_types:encode_varint(Size))/bytes,
       (bm_types:encode_list(ChunksHash, fun(E) -> E end))/bytes,
        Priv/bytes>>.
