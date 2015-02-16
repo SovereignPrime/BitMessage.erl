@@ -205,3 +205,70 @@ test_file_encode_decode(_Config) -> % {{{2
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
     meck:wait(test, received, '_', 1600).
+
+test_filechunk_encode_decode() ->  % {{{2
+    [].
+
+test_filechunk_encode_decode(_Config) -> % {{{2
+    [#privkey{hash=RIPE,
+              public=Pub,
+              address=Addr}] =
+    bm_db:lookup(privkey, bm_db:first(privkey)),
+    meck:expect(test,
+                received,
+                fun(Hash) ->
+                        {ok,
+                         #message{hash = Hash,
+                                  to=Addr,
+                                  from=Addr,
+                                  subject = <<"Test message with file">>,
+                                  enc=3,
+                                  text = <<"File in attachment">>,
+                                  status=unread,
+                                  folder=incoming,
+                                  type=?MSG
+                                  }} = bitmessage:get_message(Hash),
+                        Files = mnesia:table_info(bm_file, size),
+                        case Files of
+                            2 ->
+                                ok;
+                            FL ->
+                                meck:exception(error, iolib:format("Wrong number of attachments received; ~p~n", [FL]))
+                        end
+                end),
+    meck:expect(test,
+                sent,
+                fun(Hash) ->
+                        Files = mnesia:table_info(bm_file, size),
+                        case Files of
+                            2 ->
+                                mnesia:clear_table(bm_file),
+                                mnesia:clear_table(message),
+                                [#inventory{
+                                    payload = <<1024:64/big-integer,
+                                                _:64/big-integer,
+                                                ?MSG:32/big-integer,
+                                                1:8/integer,
+                                                1:8/integer,
+                                                Payload/bytes>>
+                                   }] = bm_db:lookup(inventory, Hash),
+                                bm_message_decryptor:decrypt(Payload, Hash);
+                            FL ->
+                                meck:exception(error, iolib:format("Wrong number of attachments sent: ~p~n", [FL]))
+                        end
+                end),
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(_) ->
+                        ok 
+                end),
+    bitmessage:send_message(Addr,
+                            Addr,
+                            <<"Test message with file">>,
+                            <<"File in attachment">>,
+                            ["../../test/data/file.txt",
+                             "../../test/data/file1.txt"]),
+
+    meck:wait(bm_pow, make_pow, '_', 1600),
+    meck:wait(bm_sender, send_broadcast, '_', 1600),
+    meck:wait(test, received, '_', 1600).

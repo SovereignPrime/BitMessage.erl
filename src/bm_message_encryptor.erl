@@ -73,10 +73,11 @@ pubkey(PubKey) ->
     Timeout :: non_neg_integer(),
     StateName :: atom().
 init([Message, Callback]) ->
+    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
     {ok,
      payload,
      #state{
-        message=Message,
+        message=Message#message{time=Time},
         callback=Callback},
      0}.
 
@@ -130,6 +131,7 @@ payload(timeout,
                             subject=Subject,
                             enc=Enc,
                             text=Text,
+                            time=Time,
                             status=Status,
                             folder=sent,
                             attachments=Attachments,
@@ -156,7 +158,6 @@ payload(timeout,
             {stop, {shudown, "Not my address"}}
     end,
     
-    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
     A = crypto:rand_bytes(32),
     AckData = bm_message_creator:create_obj(2, 1, 1, A),
     Ack = bm_message_creator:create_message(<<"object">>,
@@ -222,8 +223,10 @@ payload(timeout,
                             subject=Subject,
                             enc=Enc,
                             text=Text,
+                            time=Time,
                             status=new,
                             folder=sent,
+                            attachments=Attachments,
                             type=?BROADCAST} = Message,
            callback=Callback
           }) ->
@@ -253,8 +256,20 @@ payload(timeout,
                end,
     error_logger:info_msg("Encrypting broadcast w/tag: ~p~n", [Tag]),
 
-    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
-    MSG = <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>,
+    MSG = case Attachments of
+        [] ->
+            <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>;
+        _ ->
+            At = lists:map(fun process_attachment/1, Attachments),  %TODO
+            <<"Subject:",
+              Subject/bytes,
+              10,
+              "Body:",
+              Text/bytes,
+              10,
+              "Attachments:",
+              (bm_types:encode_list(At, fun(E) -> E end))/bytes>>
+    end,
     error_logger:info_msg("Broadcast: ~p ~n", [MSG]),
     UPayload = <<3, %Address version
                  1, %Stream number

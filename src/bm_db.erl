@@ -170,19 +170,90 @@ init([]) -> %  {{{1
             mnesia:stop(),
             mnesia:create_schema([node()]),
             mnesia:start(),
-            {atomic, ok} = mnesia:create_table(inventory, [{disc_copies, [node()]}, {attributes, record_info(fields, inventory)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(pubkey, [{disc_copies, [node()]}, {attributes, record_info(fields, pubkey)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(privkey, [{disc_copies, [node()]}, {attributes, record_info(fields, privkey)}, {type, set}]),
-            {atomic, ok} = mnesia:create_table(addr, [{disc_copies, [node()]}, {attributes, record_info(fields, network_address)}, {type, set}, {record_name, network_address}]),
-            {atomic, ok} = mnesia:create_table(message, [{disc_copies, [node()]}, {attributes, record_info(fields, message)}, {type, set}, {record_name, message}]);
+            {atomic, ok} = mnesia:create_table(inventory,
+                                               [{disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             inventory)},
+                                                {type, set}]),
+            {atomic, ok} = mnesia:create_table(pubkey,
+                                               [{disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             pubkey)},
+                                                {type, set}]),
+            {atomic, ok} = mnesia:create_table(privkey,
+                                               [{disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             privkey)},
+                                                {type, set}]),
+            {atomic, ok} = mnesia:create_table(addr,
+                                               [{disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             network_address)},
+                                                {type, set},
+                                                {record_name, network_address}]),
+            {atomic, ok} = mnesia:create_table(bm_file,
+                                               [
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_file)},
+
+                                                {type, set}
+                                               ]),
+            {atomic, ok} = mnesia:create_table(bm_filechunk,
+                                               [
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_filechunk)},
+                                                {type, set}
+                                               ]),
+            {atomic, ok} = mnesia:create_table(message,
+                                               [{disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             message)},
+                                                {type, set}]);
         {timeout, _} ->
             timer:sleep(5000);
          ok ->
+            update(),
             ok;
         {error, R} -> 
             exit(R)
     end,
     {ok, #state{}}. % }}}
+
+update() ->
+    case mnesia:table_info(message, arity) of
+        12 ->
+            {atomic, ok} = mnesia:create_table(bm_file,
+                                               [
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_file)},
+
+                                                {type, set}
+                                               ]),
+            {atomic, ok} = mnesia:create_table(bm_filechunk,
+                                               [
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_filechunk)},
+                                                {type, set}
+                                               ]),
+            mnesia:transform_table(message,
+                                   fun(In) ->
+                                           InL = tuple_to_list(In),
+                                           list_to_tuple(InL ++ [[]])
+                                   end,
+                                   record_info(fields, message));
+        _ ->
+            ok
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @private
