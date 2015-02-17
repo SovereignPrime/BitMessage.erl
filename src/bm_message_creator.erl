@@ -237,3 +237,28 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
                                        time=Time,
                                        stream=Stream}]),
     create_inv([ Hash ]).
+
+-spec create_getchunk(FileHash, ChunkHash) -> message_bin() when % {{{1
+      FileHash :: binary(),
+      ChunkHash :: binary().
+create_getchunk(FileHash, ChunkHash) ->
+    Payload = <<FileHash:32/bytes, ChunkHash:32/bytes>>,
+    Obj = create_obj(?GETFILECHUNK, 1, 1, Payload),
+    save_obj(Obj).
+
+-spec save_obj(binary()) -> message_bin().  % {{{1
+save_obj(<<_:64/bits,
+           Time:64/big-integer,
+           Type:32/big-integer,
+           _Version/integer,
+           Stream/integer,
+           _/bytes>> = Payload) ->
+    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
+    bm_db:insert(inventory, [#inventory{hash=Hash,
+                                        payload = Payload,
+                                        type = Type,
+                                        time=Time,
+                                        stream=Stream}]),
+    error_logger:info_msg("Advertising GetPubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+    create_inv([ Hash ]).
+
