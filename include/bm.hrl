@@ -13,15 +13,13 @@
 -define(PUBKEY, 1).
 -define(MSG, 2).
 -define(BROADCAST, 3).
--define(FILEOBJ, 4).
--define(FILECHUNK, 5).
--define(GETFILECHUNK, 6).
+-define(FILECHUNK, 4).
+-define(GETFILECHUNK, 5).
 
 -type object_type() :: ?GET_PUBKEY
                      | ?PUBKEY
                      | ?MSG
                      | ?BROADCAST
-                     | ?FILEOBJ
                      | ?FILECHUNK
                      | ?GETFILECHUNK
                      | non_neg_integer().
