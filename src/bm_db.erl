@@ -228,7 +228,7 @@ init([]) -> %  {{{1
 
 update() ->
     case mnesia:table_info(message, arity) of
-        12 ->
+        13 ->
             {atomic, ok} = mnesia:create_table(bm_file,
                                                [
                                                 {attributes,
