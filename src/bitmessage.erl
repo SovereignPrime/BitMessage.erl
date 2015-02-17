@@ -120,6 +120,15 @@ subscribe_broadcast(Address) ->
     bm_db:insert(privkey, [PK]),
     bm_decryptor_sup:add_decryptor(PK).
     
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Get attachment
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%-spec get_attachment(binary(), string()) -> ok.  % {{{1
+%get_attachment(Hash, Path) ->
+%    bm_dispatcher:get_attachment(Hash, Path),
+%    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%

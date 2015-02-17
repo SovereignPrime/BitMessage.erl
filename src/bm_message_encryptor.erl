@@ -137,7 +137,7 @@ payload(timeout,
                             attachments=Attachments,
                             type=?MSG} = Message,
            callback=Callback
-          }) when 
+          } = State) when 
       Status == new;
       Status == ackwait->
 
@@ -155,7 +155,7 @@ payload(timeout,
             {EK, SK, Pub};
         [] ->
             error_logger:warning_msg("No addres ~n"),
-            {stop, {shudown, "Not my address"}}
+            {stop, {shudown, "Not my address"}, State}
     end,
     
     A = crypto:rand_bytes(32),
@@ -593,12 +593,13 @@ process_attachment(Path) ->
     TarPath = Path ++ ".rz.tar.gz",
     erl_tar:create(TarPath, [Path], [compressed]),
     {ok, F} = file:open(TarPath, [binary, read]),
+    TarSize = filelib:file_size(TarPath),
     {ok, ChunksData} = file:pread(F,
                                   lists:map(fun(L) ->
                                                     {L, 1024}
                                             end, 
                                             lists:seq(0,
-                                                      Size,
+                                                      TarSize,
                                                       1024))),
     ChunksHash = lists:map(fun(C) ->
                                    bm_auth:dual_sha(C)

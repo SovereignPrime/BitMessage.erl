@@ -96,6 +96,15 @@ register_receiver(Callback) ->
 get_callback() ->
     gen_server:call(?MODULE, callback).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get attachment
+%%
+%% @end
+%%--------------------------------------------------------------------
+%-spec get_attachment(binary(), string()) -> ok.  % {{{1
+%get_attachment(Hash, Path) ->
+%    gen_server:call(?MODULE, callback).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
