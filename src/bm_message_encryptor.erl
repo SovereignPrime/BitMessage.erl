@@ -162,20 +162,27 @@ payload(timeout,
     AckData = bm_message_creator:create_obj(2, 1, 1, A),
     Ack = bm_message_creator:create_message(<<"object">>,
                                             AckData),
-    MSG = case Attachments of
+    {MSG, HAttachments} = case Attachments of
         [] ->
-            <<"Subject:", Subject/bytes, 10, "Body:", Text/bytes>>;
+              {<<"Subject:",
+                 Subject/bytes, 10, "Body:", Text/bytes>>, []};
         _ ->
-            At = lists:map(fun process_attachment/1, Attachments),  %TODO
-            <<"Subject:",
-              Subject/bytes,
-              10,
-              "Body:",
-              Text/bytes,
-              10,
-              "Attachments:",
-              (bm_types:encode_list(At, fun(E) -> E end))/bytes>>
-    end,
+              At = lists:map(fun process_attachment/1,
+                             Attachments),
+              {<<"Subject:",
+                Subject/bytes,
+                10,
+                "Body:",
+                Text/bytes,
+                10,
+                "Attachments:",
+                (bm_types:encode_list(At, fun(E) -> E end))/bytes>>,
+               lists:map(fun(<<H:64/bytes,
+                               _/bytes>>) ->
+                                 H
+                         end,
+                         At)}
+          end,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<3, %Address version
                  1, %Stream number
@@ -203,6 +210,7 @@ payload(timeout,
                                time=Time,
                                folder=sent,
                                ackdata=A,
+                               attachments=HAttachments,
                                status=wait_pubkey},
     io:format("Deleting: ~p~n", [Message]),
     mnesia:dirty_delete(message, Id),
@@ -588,6 +596,7 @@ send_all([Pid|Rest], Msg) ->  % {{{1
 
 -spec process_attachment(string()) -> binary(). %TODO  {{{1
 process_attachment(Path) ->
+    ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
     TarPath = Path ++ ".rz.tar.gz",
@@ -596,11 +605,11 @@ process_attachment(Path) ->
     TarSize = filelib:file_size(TarPath),
     {ok, ChunksData} = file:pread(F,
                                   lists:map(fun(L) ->
-                                                    {L, 1024}
+                                                    {L, ChunkSize}
                                             end, 
                                             lists:seq(0,
                                                       TarSize,
-                                                      1024))),
+                                                      ChunkSize))),
     ChunksHash = lists:map(fun(C) ->
                                    bm_auth:dual_sha(C)
                            end,
@@ -612,6 +621,7 @@ process_attachment(Path) ->
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
+                 size=Size,
                  path=Path,
                  chunks=ChunksHash,
                  key=Keys,
@@ -619,8 +629,8 @@ process_attachment(Path) ->
                 },
     bm_db:insert(bm_file, [FileRec]),
     file:delete(TarPath),  %TODO: will it work?
-    <<(bm_types:encode_varstr(Name))/bytes,
-      MercleRoot:64/bytes,
+    <<MercleRoot:64/bytes,
+      (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
       (bm_types:encode_list(ChunksHash, fun(E) -> E end))/bytes,
        Priv/bytes>>.

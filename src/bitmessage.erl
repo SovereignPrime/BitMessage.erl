@@ -29,6 +29,12 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
+%%% @doc Called when attachment download complete
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback downloaded(hash()) -> ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
 %%% @doc Called when new host is connected with number of peers as argument
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -callback connected(non_neg_integer()) -> ok.
@@ -125,10 +131,10 @@ subscribe_broadcast(Address) ->
 %%% @doc Get attachment
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%-spec get_attachment(binary(), string()) -> ok.  % {{{1
-%get_attachment(Hash, Path) ->
-%    bm_dispatcher:get_attachment(Hash, Path),
-%    ok.
+-spec get_attachment(binary(), string()) -> ok.  % {{{1
+get_attachment(Hash, Path) ->
+    bm_dispatcher:get_attachment(Hash, Path),
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -181,6 +187,11 @@ received(Hash) ->  % {{{1
 -spec sent(hash()) -> ok.
 sent(Hash) ->  % {{{1
     error_logger:info_msg("Sent message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+    ok.
+-spec downloaded(hash()) -> ok.
+downloaded(Hash) ->  % {{{1
+    error_logger:info_msg("Attachment download complete: ~p~n",
+                          [bm_types:binary_to_hexstring(Hash)]),
     ok.
 -spec key_ready(binary()) -> ok.
 key_ready(Address) ->  % {{{1

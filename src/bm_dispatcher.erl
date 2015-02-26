@@ -9,6 +9,7 @@
 -export([arrived/3,
          register_receiver/1,
          send/1,
+         get_attachment/2,
          generate_address/0,
          get_callback/0
 ]).
@@ -102,9 +103,9 @@ get_callback() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-%-spec get_attachment(binary(), string()) -> ok.  % {{{1
-%get_attachment(Hash, Path) ->
-%    gen_server:call(?MODULE, callback).
+-spec get_attachment(binary(), string()) -> ok.  % {{{1
+get_attachment(Hash, Path) ->
+    gen_server:call(?MODULE, {attachment, Hash, Path}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -233,17 +234,17 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
             end,
     error_logger:info_msg("Receiver: ~p Signature: ~p AddrVer ~p~n", [RecOK, SigOK, AddrVer]),
     if RecOK, SigOK, AddrVer > 0, AVer =< 4 ->
-            {Subject, Text} = case MsgEnc of
+            {Subject, Text, Attachments} = case MsgEnc of
                 1 ->
-                    {"", Message};
+                    {"", Message, []};
                 2 ->
                     {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
-                    {S, T};
+                    {S, T, []};
                 3 ->
-                    {match, [_, S,  T, Attachments]} = re:run(Message, "Subject:(.+)\nBody:(.+)\nAttachments:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
+                    {match, [_, S,  T, BAttachments]} = re:run(Message, "Subject:(.+)\nBody:(.+)\nAttachments:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
 
-                    save_files(Attachments),
-                    {S, T}
+                    Att = save_files(BAttachments),
+                    {S, T, Att}
             end,
             FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
             From = bm_auth:encode_address(AVer, Stream, FRipe),
@@ -265,6 +266,7 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
                           ackdata=AckData,
                           status=unread,
                           type=Type,
+                          attachments=Attachments,
                           text=Text},
             bm_db:insert(message, [MR]),
             if AckData /= ok ->
@@ -280,6 +282,10 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
 handle_cast({send, Message}, #state{callback=Callback}=State) ->  % {{{1
     error_logger:info_msg("Sending  ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message, Callback),
+    {noreply, State};
+handle_cast({attachment, Hash, Path}, #state{callback=Callback}=State) ->  % {{{1
+    error_logger:info_msg("Getting attachment  ~p~n", [Hash, Path]),
+    bm_attachment_sup:download_attachment(Hash, Path, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1
     {noreply, State#state{callback=Module}};
@@ -355,15 +361,15 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec save_files(binary()) -> ok.  % {{{1
+-spec save_files(binary()) -> [binary()].  % {{{1
 save_files(Data) ->
     {Attachments,
      _} = bm_types:decode_list(Data,
-                               fun(A) ->
+                               fun(<<Hash:64/bytes,
+                                     A/bytes>>) ->
                                        error_logger:info_msg("File: ~p~n", [A]),
                                        {Name,
-                                        <<Hash:64/bytes,
-                                          R1/bytes>>} = bm_types:decode_varstr(A),
+                                        R1} = bm_types:decode_varstr(A),
                                        error_logger:info_msg("File: ~p, hash ~p~n", [Name, Hash]),
                                        {Size,
                                         R2} = bm_types:decode_varint(R1),
@@ -376,7 +382,7 @@ save_files(Data) ->
                                                                                      {X, Y}
                                                                              end),
                                        {#bm_file{
-                                          hash=Hash,
+                                           hash=Hash,
                                           name=Name,
                                           size=Size,
                                           chunks=Chunks,
@@ -385,7 +391,10 @@ save_files(Data) ->
                                          }, R3}
                                end), 
     bm_db:insert(bm_file, Attachments),
-    ok.
+    lists:map(fun(#bm_file{hash=H}) ->
+                      H
+              end,
+              Attachments).
 
 
 

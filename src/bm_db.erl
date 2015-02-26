@@ -81,7 +81,7 @@ next(Type, Prev)->
 
 %% @doc Gets element from `Type` table with `ID`
 %%
--spec lookup(table(), term()) -> any(). %  {{{1
+-spec lookup(table(), term()) -> [any()]. %  {{{1
 lookup(Type, Id)->
     gen_server:call(?MODULE, {get, Type, Id}).
 
@@ -225,8 +225,7 @@ init([]) -> %  {{{1
             exit(R)
     end,
     {ok, #state{}}. % }}}
-
-update() ->
+update() ->  % {{{1
     case mnesia:table_info(message, arity) of
         13 ->
             {atomic, ok} = mnesia:create_table(bm_file,
