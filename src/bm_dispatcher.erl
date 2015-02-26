@@ -9,6 +9,7 @@
 -export([arrived/3,
          register_receiver/1,
          send/1,
+         get_attachment/2,
          generate_address/0,
          get_callback/0
 ]).
@@ -102,9 +103,9 @@ get_callback() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-%-spec get_attachment(binary(), string()) -> ok.  % {{{1
-%get_attachment(Hash, Path) ->
-%    gen_server:call(?MODULE, callback).
+-spec get_attachment(binary(), string()) -> ok.  % {{{1
+get_attachment(Hash, Path) ->
+    gen_server:call(?MODULE, {attachment, Hash, Path}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -280,6 +281,10 @@ handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) -
 handle_cast({send, Message}, #state{callback=Callback}=State) ->  % {{{1
     error_logger:info_msg("Sending  ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message, Callback),
+    {noreply, State};
+handle_cast({attachment, Hash, Path}, #state{callback=Callback}=State) ->  % {{{1
+    error_logger:info_msg("Getting attachment  ~p~n", [Hash, Path]),
+    bm_attachment_sup:download_attachment(Hash, Path, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1
     {noreply, State#state{callback=Module}};

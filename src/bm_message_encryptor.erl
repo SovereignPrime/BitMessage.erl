@@ -588,6 +588,7 @@ send_all([Pid|Rest], Msg) ->  % {{{1
 
 -spec process_attachment(string()) -> binary(). %TODO  {{{1
 process_attachment(Path) ->
+    ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
     TarPath = Path ++ ".rz.tar.gz",
@@ -596,11 +597,11 @@ process_attachment(Path) ->
     TarSize = filelib:file_size(TarPath),
     {ok, ChunksData} = file:pread(F,
                                   lists:map(fun(L) ->
-                                                    {L, 1024}
+                                                    {L, ChunkSize}
                                             end, 
                                             lists:seq(0,
                                                       TarSize,
-                                                      1024))),
+                                                      ChunkSize))),
     ChunksHash = lists:map(fun(C) ->
                                    bm_auth:dual_sha(C)
                            end,
@@ -612,6 +613,7 @@ process_attachment(Path) ->
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
+                 size=Size,
                  path=Path,
                  chunks=ChunksHash,
                  key=Keys,
