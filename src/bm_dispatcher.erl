@@ -105,7 +105,7 @@ get_callback() ->
 %%--------------------------------------------------------------------
 -spec get_attachment(binary(), string()) -> ok.  % {{{1
 get_attachment(Hash, Path) ->
-    gen_server:call(?MODULE, {attachment, Hash, Path}).
+    gen_server:cast(?MODULE, {attachment, Hash, Path}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -284,7 +284,6 @@ handle_cast({send, Message}, #state{callback=Callback}=State) ->  % {{{1
     bm_encryptor_sup:add_encryptor(Message, Callback),
     {noreply, State};
 handle_cast({attachment, Hash, Path}, #state{callback=Callback}=State) ->  % {{{1
-    error_logger:info_msg("Getting attachment  ~p~n", [Hash, Path]),
     bm_attachment_sup:download_attachment(Hash, Path, Callback),
     {noreply, State};
 handle_cast({register, Module}, State) ->  % {{{1

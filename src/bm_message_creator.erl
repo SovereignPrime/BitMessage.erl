@@ -242,7 +242,7 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
       FileHash :: binary(),
       ChunkHash :: binary().
 create_getchunk(FileHash, ChunkHash) ->
-    Payload = <<FileHash:32/bytes, ChunkHash:32/bytes>>,
+    Payload = <<FileHash:64/bytes, ChunkHash:64/bytes>>,
     Obj = create_obj(?GETFILECHUNK, 1, 1, Payload),
     save_obj(Obj).
 
@@ -259,6 +259,6 @@ save_obj(<<_:64/bits,
                                         type = Type,
                                         time=Time,
                                         stream=Stream}]),
-    error_logger:info_msg("Advertising GetPubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+    %error_logger:info_msg("Advertising ~p inv: ~p~n", [Type, bm_types:binary_to_hexstring(Hash)]),
     create_inv([ Hash ]).
 

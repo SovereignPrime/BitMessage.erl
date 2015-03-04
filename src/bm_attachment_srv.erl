@@ -156,6 +156,7 @@ handle_info(timeout,   % {{{2
                                      Chunks),
                        []
                 end,
+    error_logger:info_msg("Remaining: ~p~n", [length(Remaining)]),
     {noreply, State#state{remaining=Remaining}, Timeout};
 handle_info(Info, #state{timeout=Timeout} = State) ->
     error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n", [?MODULE_STRING, Info, State]),
@@ -204,23 +205,25 @@ save_file(#bm_file{
              size=Size
             } = File,
           Path) ->
-    BChuncks = lists:map(fun(C) ->
-                                 [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
-                                                                         C),
-                                 BC
-                         end,
-                         Chunks),
-    TarFile = << <<D/bytes>> || D <- BChuncks>>,
-    erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
-    FPath = Path ++ "/" ++ Name,
-    RSiaze = filelib:file_size(FPath),
-    MercleRoot = bm_auth:mercle_root(Chunks),
-    if RSiaze == Size, MercleRoot == Hash ->
-        bm_db:insert(bm_file, [File#bm_file{path=Path ++ "/" ++ Name}]),
-        ok;
-       true ->
-           incomplete
-    end.
+    mnesia:info(),
+    ok.
+    %BChuncks = lists:map(fun(C) ->
+    %                             [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
+    %                                                                     C),
+    %                             BC
+    %                     end,
+    %                     Chunks),
+    %TarFile = << <<D/bytes>> || D <- BChuncks>>,
+    %erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
+    %FPath = Path ++ "/" ++ Name,
+    %RSiaze = filelib:file_size(FPath),
+    %MercleRoot = bm_auth:mercle_root(Chunks),
+    %if RSiaze == Size, MercleRoot == Hash ->
+    %    bm_db:insert(bm_file, [File#bm_file{path=Path ++ "/" ++ Name}]),
+    %    ok;
+    %   true ->
+    %       incomplete
+    %end.
 
 
 
