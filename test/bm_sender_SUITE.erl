@@ -130,8 +130,9 @@ send_broadcast_test(_Config) ->  % {{{2
 
     ok=bm_sender:send_broadcast(<<"test">>),
     true=meck:validate(test),
-    %3=meck:num_calls(test, send, '_'),
-    timer:sleep(1),
+    meck:wait(test, send, [Socket3, <<"test">>], 300),
+    meck:wait(test, send, [Socket2, <<"test">>], 300),
+    meck:wait(test, send, [Socket1, <<"test">>], 300),
     2=ets:info(addrs, size),
     [] = ets:lookup(addrs, Socket2).
 
