@@ -239,6 +239,16 @@ test_filechunk_query(_Config) -> % {{{2
                 fun(_) ->
                         ok
                 end),
+    TarPath = "../../test/data/rand64k.raw.tgz",
+    {ok, TarFile} = file:open(TarPath, [binary, read]),
+    TarSize = filelib:file_size(TarPath),
+    {ok, TarData} = file:pread(TarFile,
+                                  lists:map(fun(L) ->
+                                                    {L, 1024}
+                                            end, 
+                                            lists:seq(0,
+                                                      TarSize,
+                                                      1024))),
     meck:expect(bm_sender,
                 send_broadcast,
                 fun(<<_:25/bytes,
@@ -250,22 +260,29 @@ test_filechunk_query(_Config) -> % {{{2
                                             F:64/bytes,
                                             C:64/bytes>>
                                }]  -> 
+                                [ Data ] = lists:filter(fun(D) ->
+                                                              S = bm_auth:dual_sha(D),
+                                                              S == C
+                                                      end,
+                                                      TarData),
                                 bm_db:insert(bm_filechunk,
                                              [#bm_filechunk{hash=C,
                                                             file=F,
+                                                            data=Data,
                                                             size=1024}]);
                             I ->
                                 ok 
                         end
                 end),
 
+
     bitmessage:send_message(Addr,
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
                             ["../../test/data/rand64k.raw"]),
-    meck:wait(bm_pow, make_pow, '_', 1600),
-    meck:wait(bm_sender, send_broadcast, '_', 1600),
+    meck:wait(bm_pow, make_pow, '_', 16000),
+    meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 16000),
     ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
     ?assertEqual(66, meck:num_calls(bm_sender, send_broadcast, '_')).

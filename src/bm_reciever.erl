@@ -493,6 +493,14 @@ analyse_object(?BROADCAST,  % {{{2
                 _ ->
                     State
             end;
+analyse_object(?GETFILECHUNK,  % {{{2
+               1,
+               _Time,
+               InvHash,
+               Data,
+               State) when size(Data) > 160 ->
+    <<FileHash:64/bytes, ChunkHash:64/bytes>> = Data,
+    bm_attachment_srv:send_chunk(FileHash, ChunkHash);
 analyse_object(_, _Data, _Time, _InvHash, _Payload, State) ->  % {{{2
     State.
 %%%

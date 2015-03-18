@@ -3,10 +3,13 @@
 -behaviour(gen_server).
 -include("../include/bm.hrl").
 
-%% API functions
--export([start_link/3]).
+%% API functions  {{{1
+-export([
+         start_link/3, 
+         send_chunk/2
+        ]).
 
-%% gen_server callbacks
+%% gen_server callbacks  {{{1
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -36,6 +39,26 @@
 %%--------------------------------------------------------------------
 start_link(Hash, Path, Callback) ->   % {{{2
     gen_server:start_link(?MODULE, [Hash, Path, Callback], []).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends filechunk to network
+%%
+%%--------------------------------------------------------------------
+-spec send_chunk(FileHash, ChunkHash) -> ok when  % {{{2
+      FileHash :: binary(),
+      ChunkHash :: binary().
+send_chunk(FileHash, ChunkHash) ->
+    Timeout = crypto:rand_uniform(0, 300),
+    timer:sleep(Timeout).
+    %InNetwork = bm_db:is_filchunk_in_network(ChunkHash),
+    %Here = bm_db:is_filchunk_here(ChunkHash),
+    %case {InNetwork, Here}  of
+    %    {false, true} ->
+    %        ok;
+    %    _ ->
+    %        ok
+    %end.
 
 %%%===================================================================
 %%% gen_server callbacks {{{1
@@ -121,7 +144,8 @@ handle_info(timeout,   % {{{2
     case lists:foldl(fun(CID, Acc) ->
                              case bm_db:lookup(bm_filechunk, CID) of
                                  [] -> 
-                                     [CID | Acc];
+                                     Acc;
+                                     %[CID | Acc];
                                  [_] ->
                                      Acc
                              end
@@ -129,7 +153,7 @@ handle_info(timeout,   % {{{2
                      [],
                      Chunks) of
         [] ->
-            ok=save_file(File, Path),
+            save_file(File, Path),
             Callback:downloaded(File#bm_file.hash),
             {stop, normal, State};
         Remaining ->
@@ -205,25 +229,24 @@ save_file(#bm_file{
              size=Size
             } = File,
           Path) ->
-    mnesia:info(),
-    ok.
-    %BChuncks = lists:map(fun(C) ->
-    %                             [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
-    %                                                                     C),
-    %                             BC
-    %                     end,
-    %                     Chunks),
-    %TarFile = << <<D/bytes>> || D <- BChuncks>>,
-    %erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
-    %FPath = Path ++ "/" ++ Name,
-    %RSiaze = filelib:file_size(FPath),
-    %MercleRoot = bm_auth:mercle_root(Chunks),
-    %if RSiaze == Size, MercleRoot == Hash ->
-    %    bm_db:insert(bm_file, [File#bm_file{path=Path ++ "/" ++ Name}]),
-    %    ok;
-    %   true ->
-    %       incomplete
-    %end.
+    BChuncks = lists:map(fun(C) ->
+                                 [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
+                                                                         C),
+                                 BC
+                         end,
+                         Chunks),
+    TarFile = << <<D/bytes>> || D <- BChuncks>>,
+    erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
+    FPath = Path ++ "/" ++ Name,
+    RSiaze = filelib:file_size(FPath),
+    MercleRoot = bm_auth:mercle_root(Chunks),
+    if RSiaze == Size,
+       MercleRoot == Hash ->
+            bm_db:insert(bm_file, [File#bm_file{path=Path ++ "/" ++ Name}]),
+            ok;
+        true ->
+            incomplete
+    end.
 
 
 

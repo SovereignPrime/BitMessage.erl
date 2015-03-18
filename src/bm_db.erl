@@ -127,6 +127,15 @@ clear(Addr) ->
     gen_server:cast(?MODULE, {clear, Addr}).
 
 %% @doc 
+%% Checkc if filechunk present in inventory
+%%
+%% @end
+%-spec is_filchunk_in_network(ChunkHash) -> ok when  % {{{1
+%      ChunkHash :: binary().
+%clear(Addr) ->
+%    gen_server:cast(?MODULE, {filechunk_, Addr}).
+
+%% @doc 
 %% Selects messages w/o akc to resend
 %%
 %% Used by bm_clear_fsm ??? 
