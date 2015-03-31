@@ -15,7 +15,7 @@
          terminate/2,
          code_change/3]).  % }}}
 -export([  % {{{1
-         decrypt/2
+         decrypt/1
         ]).  % }}}
 
 -record(state, {type, key}).
@@ -40,10 +40,12 @@ start_link(Init) ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec decrypt(binary(), binary()) -> ok. % {{{1
-decrypt(Data, Hash) ->
+-spec decrypt(binary()) -> not_for_me | {decrypted, Address, Data} when % {{{1
+      Address :: binary(),
+      Data :: binary().
+decrypt(Data) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
-    send_all(Pids, {decrypt, Hash, Data}).
+    send_all(Pids, {decrypt, Data}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -77,33 +79,17 @@ init([Init]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->  % {{{1
-    Reply = ok,
-    {reply, Reply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
--spec handle_cast(term(), #privkey{}) -> {noreply, #privkey{}}.  % {{{1
-handle_cast({decrypt,
-             Hash,
+handle_call({decrypt,
              <<IV:16/bytes,
                714:16/integer,  %Curve type
                XLength:16/big-integer, X:XLength/bytes, 
                YLength:16/big-integer, Y:YLength/bytes, 
                Data/bytes>> = Payload}, 
+            _From,
             #privkey{
                address=Address,
                pek=PrivKey
               }=State) ->
-    error_logger:info_msg("Starting ~p decrypting", [Hash]),
     MLength = byte_size(Data) - 32,
     <<EMessage:MLength/bytes, HMAC:32/bytes>> = Data,
     XPad = << <<0>> || _<- lists:seq(1, 32 - XLength)>>,
@@ -119,12 +105,25 @@ handle_cast({decrypt,
             error_logger:info_msg("Decrypting"),
             DMessage = crypto:block_decrypt(aes_cbc256, E, IV, EMessage),
             error_logger:info_msg("Message decrypted: ~p~n", [DMessage]),
-            bm_dispatcher:arrived(DMessage, Hash, Address);
-        H ->
-            not_for_me
-    end,
-    {noreply, State};
+            {reply, {decrypted, Address, DMessage}, State};
+        _H ->
+            {reply, not_for_me, State}
+    end;
+handle_call(_Request, _From, State) ->  % {{{1
+    Reply = ok,
+    {reply, Reply, State}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%%
+%% @spec handle_cast(Msg, State) -> {noreply, State} |
+%%                                  {noreply, State, Timeout} |
+%%                                  {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_cast(term(), #privkey{}) -> {noreply, #privkey{}}.  % {{{1
 handle_cast(Msg, State) ->  % {{{1
     error_logger:warning_msg("Decryptor wrong cast ~p~n ~p~n", [Msg, State]),
     {noreply, State}.
@@ -173,12 +172,18 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 
 %% @doc Sends cast to all decryptors
 %%
--spec send_all(PIDs, Msg) -> ok when
+-spec send_all(PIDs, Msg) -> not_for_me | {decrypted, Address, Data} when % {{{1
       PIDs :: [pid()],
-      Msg :: term().
+      Msg :: term(),
+      Address :: binary(),
+      Data :: binary().
 send_all([], _Msg) ->  % {{{1
-    ok;
+    not_for_me;
 send_all([Pid|Rest], Msg) ->  % {{{1
     {_, P, _, _} = Pid,
-    gen_server:cast(P, Msg),
-    send_all(Rest, Msg).
+    case gen_server:call(P, Msg) of
+        not_for_me ->
+            send_all(Rest, Msg);
+        Data ->
+            Data
+    end.

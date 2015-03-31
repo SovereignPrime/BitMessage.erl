@@ -113,6 +113,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                  [PubKey]),
     meck:new(bm_dispatcher, [passthrough]),
     bm_decryptor_sup:start_link(),
+    bm_decryptor:callback(test),
     bm_dispatcher:start_link(),
     bm_encryptor_sup:start_link(),
     meck:new(bm_pow),
@@ -142,7 +143,7 @@ encode_decode_test() ->  % {{{2
 encode_decode_test(_Config) ->  % {{{2
     [#privkey{hash=RIPE,
               public=Pub,
-              address=Addr}] =
+              address=Addr}=PK] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
     meck:expect(test,
                 received,
@@ -164,14 +165,10 @@ encode_decode_test(_Config) ->  % {{{2
                 fun(Hash) ->
                         mnesia:clear_table(message),
                         [#inventory{
-                            payload = <<1024:64/big-integer,
-                                      _:64/big-integer,
-                                      ?MSG:32/big-integer,
-                                      1:8/integer,
-                                      1:8/integer,
-                                      Payload/bytes>>
+                            payload=Payload
                            }] = bm_db:lookup(inventory, Hash),
-                        bm_message_decryptor:decrypt(Payload, Hash)
+                        mnesia:clear_table(inventory),
+                        bm_decryptor:process_object(Payload)
                 end),
     meck:expect(bm_sender,
                 send_broadcast,
@@ -193,7 +190,7 @@ broadcast_encode_decode_test() ->  % {{{2
 broadcast_encode_decode_test(_Config) ->  % {{{2
     [#privkey{hash=RIPE,
               public=Pub,
-              address=Addr}] =
+              address=Addr} = PK] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
     meck:expect(test,
                 received,
@@ -217,15 +214,10 @@ broadcast_encode_decode_test(_Config) ->  % {{{2
                         mnesia:clear_table(message),
                         [#inventory{
                             type=?BROADCAST,
-                            payload = <<1024:64/big-integer,
-                                      _:64/big-integer,
-                                      ?BROADCAST:32/big-integer,
-                                      5:8/integer, % Version
-                                      1:8/integer, % Stream
-                                      _Tag:32/bytes,
-                                      Payload/bytes>>
+                            payload=Payload
                            }] = bm_db:lookup(inventory, Hash),
-                        bm_message_decryptor:decrypt(Payload, Hash)
+                        mnesia:clear_table(inventory),
+                        bm_decryptor:process_object(Payload)
                 end),
     meck:expect(bm_sender,
                 send_broadcast,

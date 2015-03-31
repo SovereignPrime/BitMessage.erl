@@ -87,7 +87,7 @@
          enc=2 :: integer() | atom(),
          folder :: string() | atom(),  % ???
          text :: binary() | atom(),
-         status=new :: atom() | atom(),  % Variants
+         status=new :: atom(),  % Variants
          ackdata :: binary() | atom(),
          payload :: binary() | atom(),
          type :: object_type() | atom(),
@@ -115,7 +115,9 @@
          size :: non_neg_integer() | atom(),
          data :: binary() | atom(),
          file :: binary() | atom(),
-         time :: calendar:date_time() | non_neg_integer()
+         time :: calendar:date_time() | non_neg_integer(),
+         payload :: binary() | atom(),
+         status=new :: atom()
         }).
          
 -type type_record() :: #message{}

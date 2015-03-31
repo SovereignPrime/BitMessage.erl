@@ -252,14 +252,19 @@ object_packet_test() ->  % {{{2
 
 object_packet_test(_Config) ->  % {{{2
     Data = crypto:rand_bytes(256),
+    meck:new(bm_decryptor),
     meck:expect(bm_pow, make_pow, fun(Test) ->
                                           <<2048:64/big-integer, Test/bytes>>
                                   end),
-    meck:expect(bm_pow, check_pow, fun(<<2048:64/big-integer, _Test/bytes>>) ->
-                                          true
-                                  end),
     MSG = bm_message_creator:create_obj(0, 1, 1, Data),
+    meck:expect(bm_decryptor,
+                process_object,
+                fun(M) when M == <<MSG/bytes>> ->
+                        ok;
+                   (_) ->
+                        meck:exception(error, "Wrong payload")
+                end),
     #state{} = bm_reciever:analyse_packet(<<"object">>, size(MSG), MSG, #state{}),
-    ?assert(meck:called(bm_pow, make_pow, '_')),
-    ?assert(meck:called(bm_pow, check_pow, '_')).
+    ?assert(meck:called(bm_decryptor, process_object, '_')),
+    ?assert(meck:validate(bm_decryptor)).
 

@@ -15,8 +15,8 @@
 
 %% Test cases
 -export([
-         test_file_encode_decode/0,
-         test_file_encode_decode/1,
+         test_attachment_encode_decode/0,
+         test_attachment_encode_decode/1,
          test_filechunk_query/0,
          test_filechunk_query/1
         ]).
@@ -30,7 +30,7 @@
 
 all() ->  % {{{2
     [
-     test_file_encode_decode,
+     test_attachment_encode_decode,
      test_filechunk_query
     ].
 
@@ -137,6 +137,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:new(bm_sender, [no_link]),
     meck:new(test, [non_strict]),
     bm_dispatcher:register_receiver(test),
+    bm_decryptor:callback(test),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2
@@ -149,9 +150,9 @@ end_per_testcase(_TestCase, _Config) ->  % {{{2
 %%% Test cases  % {{{1
 %%%===================================================================
 
-test_file_encode_decode() ->  % {{{2
+test_attachment_encode_decode() ->  % {{{2
     [].
-test_file_encode_decode(_Config) -> % {{{2
+test_attachment_encode_decode(_Config) -> % {{{2
     [#privkey{hash=RIPE,
               public=Pub,
               address=Addr}] =
@@ -187,14 +188,10 @@ test_file_encode_decode(_Config) -> % {{{2
                                 mnesia:clear_table(bm_file),
                                 mnesia:clear_table(message),
                                 [#inventory{
-                                    payload = <<1024:64/big-integer,
-                                                _:64/big-integer,
-                                                ?MSG:32/big-integer,
-                                                1:8/integer,
-                                                1:8/integer,
-                                                Payload/bytes>>
+                                    payload = Payload
                                    }] = bm_db:lookup(inventory, Hash),
-                                bm_message_decryptor:decrypt(Payload, Hash);
+                                mnesia:clear_table(inventory),
+                                bm_decryptor:process_object(Payload);
                             FL ->
                                 meck:exception(error, iolib:format("Wrong number of attachments sent: ~p~n", [FL]))
                         end
@@ -287,7 +284,85 @@ test_filechunk_query(_Config) -> % {{{2
     ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
     ?assertEqual(66, meck:num_calls(bm_sender, send_broadcast, '_')).
 
-%test_filechunk_query_receive() ->  % {{{2
-%    [].
-%
-%test_filechunk_query_receive(_Config) -> % {{{2
+test_filechunk_send() ->  % {{{2
+    [].
+
+test_filechunk_send(_Config) -> % {{{2
+    {Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
+    File = #bm_file{
+              hash = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
+                       145,35,159,150,21,169,198,231,167,229,103,36,26,243,
+                       163,102,54,24,115,165,10,106,202,230,103,120,78,56,35,
+                       102,66,187,183,129,128,131,36,144,181,100,109,251,41,
+                       37,171,111,21,73,199>>,
+              name= "file.txt",
+              size=90,
+              path="../../test/data/file.txt",
+              chunks=[<<24,157,228,172,234,149,216,48,114,205,82,28,220,
+                        91,122,175,32,204,135,55,206,74,204,174,13,144,
+                        55,80,144,113,94,149,198,114,48,173,79,104,214,
+                        110,99,205,53,69,173,238,184,247,151,138,3,162,
+                        93,168,49,197,126,17,218,51,26,255,211,238>>],
+              key=Keys,
+              time=bm_types:timestamp()
+             },
+    FileChunk = #bm_filechunk{
+                   hash = <<24,157,228,172,234,149,216,48,114,205,82,28,220,
+                            91,122,175,32,204,135,55,206,74,204,174,13,144,
+                            55,80,144,113,94,149,198,114,48,173,79,104,214,
+                            110,99,205,53,69,173,238,184,247,151,138,3,162,
+                            93,168,49,197,126,17,218,51,26,255,211,238>>,
+                   size = 1024,
+                   file = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
+                            145,35,159,150,21,169,198,231,167,229,103,36,26,243,
+                            163,102,54,24,115,165,10,106,202,230,103,120,78,56,35,
+                            102,66,187,183,129,128,131,36,144,181,100,109,251,41,
+                            37,171,111,21,73,199>>,
+                   data = <<31,139,8,0,0,0,0,0,0,3,237,210,193,78,195,48,
+                            12,128,225,158,247,20,126,0,148,58,105,201,
+                            158,129,243,246,2,17,77,213,138,106,67,137,39,216,
+                            219,19,224,10,183,9,16,250,191,139,21,219,
+                            146,109,41,206,245,206,245,150,171,245,83,178,
+                            212,207,235,150,157,189,90,119,67,234,85,227,
+                            56,118,170,234,247,247,250,30,213,127,190,63,248,
+                            33,116,62,140,49,68,191,31,52,180,254,160,131,
+                            118,162,183,92,226,59,151,106,169,180,85,
+                            126,98,214,31,116,92,243,36,47,171,45,146,182,77,
+                            108,89,171,204,231,34,165,125,136,249,210,50,83,
+                            78,173,246,32,143,229,234,156,219,201,23,14,75,
+                            122,202,245,57,167,146,239,164,158,79,167,108,18,
+                            227,238,183,47,3,0,0,0,0,0,0,0,0,0,0,0,0,128,255,
+                            237,13,54,140,167,14,0,40,0,0>>,
+                   time=bm_types:timestamp()
+                  },
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(<<_:25/bytes,
+                      Inv:32/bytes>>
+                      ) ->
+                        case bm_db:lookup(inventory, Inv) of
+                            [#inventory{
+                                type=?FILECHUNK,
+                                payload = <<1024/big-integer,
+                                            _:64/big-integer,
+                                            ?FILECHUNK:32/big-integer,
+                                            1/integer, % Version
+                                            1/integer, % Stream
+                                            ChunkHash:64/bytes,
+                                            Payload/bytes>>
+                               }] when ChunkHash == FileChunk#bm_filechunk.hash -> 
+                                bm_message_decryptor:start_link(#privkey{
+                                                                   pek=Priv, 
+                                                                   address=filechunk
+                                                                  }),
+                                
+                                ok;
+                            I ->
+                                error_logger:error_msg("Wrong inventory: ~p~n", [I]),
+                                ok 
+                        end
+                end),
+    bm_attachment_srv:send_chunk(File#bm_file.hash,
+                                 FileChunk#bm_filechunk.hash),
+    meck:wait(bm_pow, make_pow, '_', 1600),
+    meck:wait(bm_sender, send_broadcast, '_', 1600).

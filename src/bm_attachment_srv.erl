@@ -50,8 +50,9 @@ start_link(Hash, Path, Callback) ->   % {{{2
       ChunkHash :: binary().
 send_chunk(FileHash, ChunkHash) ->
     Timeout = crypto:rand_uniform(0, 300),
-    timer:sleep(Timeout).
-    %InNetwork = bm_db:is_filchunk_in_network(ChunkHash),
+    timer:sleep(Timeout),
+    InNetwork = is_filchunk_in_network(ChunkHash),
+    ok.
     %Here = bm_db:is_filchunk_here(ChunkHash),
     %case {InNetwork, Here}  of
     %    {false, true} ->
@@ -248,6 +249,9 @@ save_file(#bm_file{
             incomplete
     end.
 
-
-
-
+-spec is_filchunk_in_network(ChunkHash) -> boolean() when  % {{{2
+      ChunkHash :: binary().
+is_filchunk_in_network(ChunkHash) ->
+    FileChunkObjs = bm_db:match(inventory, #inventory{type=?FILECHUNK}),
+    false.
+    %lists:any(fun(#inventory{data=<<_

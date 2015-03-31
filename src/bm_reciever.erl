@@ -349,27 +349,8 @@ analyse_packet(<<"object", _/bytes>>,
                                     verack_recv=true,
                                     verack_sent=true
                                    }} = State) ->
-    POW = bm_pow:check_pow(Payload),
-    TTL = Time - bm_types:timestamp(),
-    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-    error_logger:info_msg("Received object: ~p~n", [bm_types:binary_to_hexstring( Hash )]),
-    if 
-        not POW; 
-          TTL > 28 * 24 * 60 * 60 + 10800;
-          TTL < -3600 -> 
-            State;
-        true ->
-            {Version, R} = bm_types:decode_varint(Packet),
-            case bm_types:decode_varint(R) of
-                 {Stream, R1} ->
-                    file:write_file(".test/data/broadcast1.bin", Payload),
-                    process_object(Hash, Payload, State);
-                _ when Stream == 1, Version == 1; Type == 2 ->
-                    process_object(Hash, Payload, State);
-                _ ->
-                    State
-            end
-    end;
+    bm_decryptor:process_object(Payload),
+    State;
            
 %% Unexpected message {{{3
 analyse_packet(Command,
@@ -385,129 +366,6 @@ analyse_packet(Command,
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec analyse_object(Type, Version, Time, InvHash, Payload, State) -> State when % {{{1
-      Type :: object_type(),
-      Time :: non_neg_integer(),
-      Version :: non_neg_integer(),
-      InvHash :: binary(),
-      Payload :: binary(),
-      State :: #state{}.
-analyse_object(?GET_PUBKEY, 3, _Time, InvHash, Data, State) when size(Data) == 20 ->  % {{{2
-    error_logger:info_msg("Requested AVer: 3~n"),
-    RIPE = case Data of
-               <<0, 0, R/bytes>> when size(R) == 18 ->
-                   R;
-               <<0, R/bytes>> when size(R) == 19 ->
-                   R;
-               R ->
-                   R
-           end,
-    Stream = State#state.stream,
-    case bm_db:lookup(privkey, RIPE) of
-        [#privkey{hash=RIPE,
-                  address=Addr,
-                  enabled=true}=PrKey] ->
-            #address{version=3,
-                     stream=Stream,
-                     ripe=Ripe} = bm_auth:decode_address(Addr),
-            error_logger:info_msg("It's my address - sending pubkey~n"),
-            bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
-            State;
-        [] ->
-            State
-    end;
-analyse_object(?GET_PUBKEY, 4, _Time, InvHash, Data, State) when size(Data) /= 32 ->  % {{{2
-    error_logger:info_msg("Requested AVer: 4~n"),
-    case bm_db:lookup(privkey, Data) of
-        [#privkey{hash=RIPE,
-                  address=Addr,
-                  enabled=true}=PrKey] ->
-            #address{version=4,
-                     stream=Stream,
-                     ripe=Ripe} = bm_auth:decode_address(Addr),
-            error_logger:info_msg("It's my address - sending pubkey~n"),
-            bm_sender:send_broadcast(bm_message_creator:create_pubkey(PrKey)),
-            State;
-        [] ->
-            State
-    end;
-analyse_object(?PUBKEY, 3, Time, InvHash, Data, State) when size(Data) >= 170 ->  % {{{2
-    <<_BBitField:32/big-integer,
-      PSK:64/bytes,
-      PEK:64/bytes,
-      Rest/bytes>> = Data,
-    Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
-    {NTpB, R} = bm_types:decode_varint(Rest),
-    {PLEB, _R1} = bm_types:decode_varint(Rest),
-    Pubkey = #pubkey{hash=Ripe,
-                     data=Data, % Seems useless ???
-                     time=Time,
-                     ntpb=NTpB,
-                     pleb=PLEB,
-                     psk=PSK,
-                     pek=PEK},
-    bm_db:insert(pubkey, [Pubkey]),
-    bm_message_encryptor:pubkey(Pubkey),
-    State;
-analyse_object(?PUBKEY,  % {{{2
-               4,
-               Time,
-               InvHash,
-               Data,
-               State) when size(Data) >= 350 ->
-    %% TODO
-    <<_Tag:32/bytes, Encrypted/bytes>> = Data,
-    bm_message_decryptor:decrypt(Encrypted, InvHash),
-    State;
-analyse_object(?MSG,  % {{{2
-               _Version,
-               Time,
-               InvHash,
-               Data,
-               State) ->
-    case check_ackdata(Data) of
-        true ->
-            error_logger:info_msg("This is ACK for me"),
-            State;
-        false ->
-            error_logger:info_msg("This is not ACK for me, trying to decrypt"),
-            bm_message_decryptor:decrypt(Data, InvHash),
-            State
-    end;
-analyse_object(?BROADCAST,  % {{{2
-               Version,
-               _Time,
-               InvHash,
-               Data,
-               State) when size(Data) > 160 ->
-            case Version of
-                V when V ==2; 
-                       V == 3 ->
-                    bm_message_decryptor:decrypt(Data, InvHash),
-                    State;
-                V when V == 4; 
-                       V == 5 ->
-                    <<_Tag:32/bytes, Encrypted/bytes>> = Data,
-                    bm_message_decryptor:decrypt(Encrypted, InvHash),
-                    State;
-                _ ->
-                    State
-            end;
-analyse_object(?GETFILECHUNK,  % {{{2
-               1,
-               _Time,
-               InvHash,
-               Data,
-               State) when size(Data) > 160 ->
-    <<FileHash:64/bytes, ChunkHash:64/bytes>> = Data,
-    bm_attachment_srv:send_chunk(FileHash, ChunkHash);
-analyse_object(_, _Data, _Time, _InvHash, _Payload, State) ->  % {{{2
-    State.
-%%%
-%% Responce sending routines
-%%%
-
-%% Send version
 -spec send_version(#state{}) -> ok | {error, atom()}.  % {{{1
 send_version(#state{transport=Transport,
                     socket=Socket,
@@ -603,41 +461,6 @@ invs_to_list(<<Inv:32/bytes, Rest/bytes>>) ->
             {[], Rest}
     end.
 %% Process object
--spec process_object(Hash, Payload, State) -> State when  % {{{1
-      Hash :: binary(),
-      Payload :: binary(),
-      State :: #state{}.
-process_object(Hash,
-                     <<_POW:64/big-integer,
-                       Time:64/big-integer,
-                       Type:32/big-integer,
-                       Packet/bytes>>=Payload,
-                     #state{
-                        stream=Stream
-                       } = State) ->
-    {Version, R1} = bm_types:decode_varint(Packet),
-     R = case bm_types:decode_varint(R1) of
-         {Stream, R2} ->
-             R2;
-         R2 ->
-             R2
-     end,
-    case bm_db:lookup(inventory, Hash) of
-        [_] ->
-            State;
-        [] ->
-            bm_db:insert(inventory,
-                         [ #inventory{hash=Hash,
-                                      payload=Payload,
-                                      type=Type,
-                                      time=Time,
-                                      stream=Stream} ]),
-            bm_sender:send_broadcast(
-              bm_message_creator:create_inv([ Hash ])),
-            error_logger:info_msg("Requested Type: ~p Ver: ~p Size: ~p~n", [Type, Version, size(R)]),
-
-            analyse_object(Type, Version, Time, Hash, R, State)
-    end.
 
 %%%
 %% Helpers
@@ -654,20 +477,6 @@ update_peer_time(#state{socket=Socket, stream=Stream}) ->
                                    port=Port,
                                    stream=Stream}]).
 
--spec check_ackdata(binary()) -> boolean().  % {{{1
-check_ackdata(Payload) ->
-    case bm_db:match(message,
-                     #message{ackdata=Payload,
-                              folder=sent,
-                              status=ackwait,
-                              _='_'}) of
-        [] ->
-            false;
-        [ Message ] ->
-            error_logger:info_msg("Recv ack: ~p~n", [Message#message.hash]),
-            bm_db:insert(message, [Message#message{status=ok}]),
-            true
-    end.
 
 %% @private
 %% @doc Creates object message by inventory hash

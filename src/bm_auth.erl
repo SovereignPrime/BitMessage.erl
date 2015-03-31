@@ -85,6 +85,28 @@ decode_address(<<"BM-",Data/bytes>>) ->
 generate_ripe(Str) ->
     crypto:hash(ripemd160, crypto:hash(sha512, Str)).
 
+%% @doc Makes ripe apropreate length
+%%
+-spec normalyze_ripe(binary()) -> binary(). % {{{2
+normalyze_ripe(RIPE) when size(RIPE) == 20 ->
+    RIPE;
+normalyze_ripe(RIPE) when size(RIPE) == 19 ->
+    <<0, RIPE/bytes>>;
+normalyze_ripe(RIPE) when size(RIPE) == 18 ->
+    <<0, 0, RIPE/bytes>>;
+normalyze_ripe(RIPE) ->
+    RIPE.
+
+%% @doc Removes leading zerros from ripe
+%%
+-spec denormalyze_ripe(binary()) -> binary(). % {{{2
+denormalyze_ripe(<<0, RIPE/bytes>>) when size(RIPE) == 19 ->
+    RIPE;
+denormalyze_ripe(<<0, 0, RIPE/bytes>>) when size(RIPE) == 18 ->
+    RIPE;
+denormalyze_ripe(RIPE) ->
+    RIPE.
+
 %% @doc TODO: Generates PrivKey for Broadcast
 %%
 -spec broadcast_key(binary()) -> {binary(), binary()}. % ??? % {{{2

@@ -72,12 +72,25 @@ pubkey(PubKey) ->
 -spec init([term()]) -> {ok, StateName, #state{}, Timeout} when  % {{{1
     Timeout :: non_neg_integer(),
     StateName :: atom().
-init([Message, Callback]) ->
+% For messages and broadcasts {{{2
+init([Message, Callback]) when is_record(Message, message) ->
     Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
+    #message{status=State} = Message,
     {ok,
      payload,
      #state{
         message=Message#message{time=Time},
+        callback=Callback},
+     0};
+
+% For filechunks {{{2
+init([Message, Callback]) when is_record(Message, bm_filechunk) ->
+    Time = bm_types:timestamp() + 3600 + crypto:rand_uniform(-300, 300),
+    #bm_filechunk{status=State} = Message,
+    {ok,
+     payload,
+     #state{
+        message=Message#bm_filechunk{time=Time},
         callback=Callback},
      0}.
 
@@ -314,8 +327,48 @@ payload(timeout,
             message=NMessage,
             pek=BroadcastEK,
             callback=Callback},
-     0}.
+     0};
 
+% Init for filechunk  {{{2
+payload(timeout,
+        #state{
+           message=#bm_filechunk{
+                      hash=Hash,
+                      size=Size,
+                      data=Data,
+                      file=FileHash
+                     } = Message,
+           callback=Callback
+          }) ->
+
+    error_logger:info_msg("Encrypting filechunk: ~p~n", [Hash]),
+    PEK = case bm_db:lookup(bm_file, FileHash) of
+                   [#bm_file{
+                       key={Pub, _Priv}
+                      }] ->
+                       Pub;
+                   [] ->
+                       error_logger:warning_msg("No keys ~n"),
+                       {stop, {shudown, "Not my address"}}
+               end,
+
+    VSize = bm_types:encode_varint(Size),
+    Payload = <<VSize/bytes,
+                FileHash:64/bytes,
+                (bm_types:encode_varint(byte_size(Data)))/bytes, % Message size
+                Data/bytes>>,
+    NMessage = Message#bm_filechunk{payload=Payload,
+                                    status=encrypt_message},
+    io:format("Deleting: ~p~n", [Message]),
+    mnesia:dirty_delete(bm_filechunk, Hash),
+    bm_db:insert(bm_filechunk, [NMessage]),
+    {next_state,
+     encrypt_message,
+     #state{type=?FILECHUNK,
+            message=NMessage,
+            pek=PEK,
+            callback=Callback},
+     0}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -399,31 +452,26 @@ wait_pubkey(Event, State) ->
       Reason :: term(),
       NewState :: atom().
 
-%% Encrypt % {{{2
+%% Encrypt message {{{2
 encrypt_message(timeout,
                 #state{pek=PEK,
                        message = #message{payload=Payload} = Message} = State) ->
     error_logger:info_msg("Encrypting ~n"),
-    IV = crypto:rand_bytes(16),
-    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
-    XP = crypto:compute_key(ecdh, <<4, PEK/bytes>>, Keyr, secp256k1),
-    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
-    PLength = 16 - (size(Payload) rem 16),
-    Pad = << <<4>> || _<-lists:seq(1, PLength)>>,
-    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, <<Payload/bytes, Pad/bytes>>),
-    <<4, X:32/bytes, Y:32/bytes>> = KeyR,
-    HPayload = <<IV:16/bytes,
-                16#02ca:16/big-integer,
-                32:16/big-integer,
-                X:32/bytes,
-                32:16/big-integer,
-                Y:32/bytes,
-                EMessage/bytes>>,
-    HMAC = crypto:hmac(sha256, M, HPayload),
+    HPayload = encrypt(PEK, Payload) ,
     {next_state,
      make_inv,
-     State#state{message = Message#message{payload = <<HPayload/bytes,
-                                                       HMAC/bytes>> }},
+     State#state{message = Message#message{payload = HPayload}},
+     0};
+
+%% Encrypt filechunk {{{2
+encrypt_message(timeout,
+                #state{pek=PEK,
+                       message = #bm_filechunk{payload=Payload} = Message} = State) ->
+    error_logger:info_msg("Encrypting ~n"),
+    HPayload = encrypt(PEK, Payload) ,
+    {next_state,
+     make_inv,
+     State#state{message = Message#bm_filechunk{payload = HPayload}},
      0};
 
 %% Default {{{2
@@ -448,7 +496,7 @@ encrypt_message(Event, State) ->
       Reason :: term(),
       NewState :: atom().
 
-%% Work cycle {{{2
+%% Work cycle for message and broadcast {{{2
 make_inv(timeout,
          #state{type=Type,
                 callback=Callback,
@@ -499,6 +547,39 @@ make_inv(timeout,
     Callback:sent(Hash),
     {stop, normal, State};
 
+%% Work cycle for filechunk {{{2
+make_inv(timeout,
+         #state{type=?FILECHUNK,
+                callback=Callback,
+                message= #bm_filechunk{hash=ChunksHash,
+                                       payload=Payload,
+                                       time=Time}=Message}=State) ->
+    Stream = 1, % TODO: make dynamic
+    PPayload = bm_message_creator:create_obj(?FILECHUNK, 
+                                             1, % Version
+                                             Stream, 
+                                             Time,
+                                             <<ChunksHash:64/bytes,
+                                               Payload/bytes>>),
+    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
+    NMessage = Message#bm_filechunk{status=ok,
+                                    payload=PPayload},
+    bm_db:delete(bm_filechunk, ChunksHash),
+    bm_db:insert(bm_filechunk, [NMessage]), % TODO: try to avoid???
+    bm_db:insert(inventory, [#inventory{hash = Hash, % Differ from chunk hash
+                                        type = ?FILECHUNK,
+                                        stream = Stream,
+                                        payload = PPayload,
+                                        time = Time
+                                       }]),
+    error_logger:info_msg("Filechunk ~p sent with inventory ~p~n",
+                          [
+                           bm_types:binary_to_hexstring(ChunksHash),
+                           bm_types:binary_to_hexstring(Hash)
+                          ]),
+    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+    Callback:filechunk_sent(Hash, ChunksHash), % May be usefull to stat counting
+    {stop, normal, State};
 %% Default {{{2
 make_inv(_Event, State) ->
     {next_state, make_inv, State, 0}.
@@ -618,6 +699,7 @@ process_attachment(Path) ->
     {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     error_logger:info_msg("File: ~p, hash ~p~n", [Name, MercleRoot]),
     error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
+    error_logger:info_msg("FileChunks: ~p hash ~p~n", [ChunksData, ChunksHash]),
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
@@ -632,5 +714,28 @@ process_attachment(Path) ->
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
-      (bm_types:encode_list(ChunksHash, fun(E) -> E end))/bytes,
+      (bm_types:encode_list(ChunksHash,
+                            fun(E) -> E end))/bytes,
        Priv/bytes>>.
+
+-spec encrypt(PEK, Payload) -> Payload when  % {{{2
+      Payload :: binary(),
+      PEK :: binary().
+encrypt(PEK, Payload) ->
+    IV = crypto:rand_bytes(16),
+    {KeyR, Keyr} = crypto:generate_key(ecdh, secp256k1),
+    XP = crypto:compute_key(ecdh, <<4, PEK/bytes>>, Keyr, secp256k1),
+    <<E:32/bytes, M:32/bytes>> = crypto:hash(sha512, XP),
+    PLength = 16 - (size(Payload) rem 16),
+    Pad = << <<4>> || _<-lists:seq(1, PLength)>>,
+    EMessage = crypto:block_encrypt(aes_cbc256, E, IV, <<Payload/bytes, Pad/bytes>>),
+    <<4, X:32/bytes, Y:32/bytes>> = KeyR,
+    HPayload = <<IV:16/bytes,
+                16#02ca:16/big-integer,
+                32:16/big-integer,
+                X:32/bytes,
+                32:16/big-integer,
+                Y:32/bytes,
+                EMessage/bytes>>,
+    HMAC = crypto:hmac(sha256, M, HPayload),
+    <<HPayload/bytes, HMAC/bytes>>.

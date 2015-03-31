@@ -37,7 +37,9 @@ start_link() ->
 add_decryptor(PrivKey) ->
     %TODO
     supervisor:start_child(?MODULE, ?CHILD({cryptor, make_ref()}, 
-                                           bm_message_decryptor, worker, [PrivKey])).
+                                           bm_message_decryptor,
+                                           worker,
+                                           [PrivKey])).
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================
@@ -60,7 +62,8 @@ init([]) ->
     Children = bm_db:foldr(fun(O, A) ->
                 [?CHILD({cryptor, length(A) + 1}, bm_message_decryptor, worker, [O]) | A]
             end, [], privkey),
-    {ok, {{one_for_one, 5, 10}, Children}}.
+    {ok, {{one_for_one, 5, 10}, 
+          [?CHILD(decoder, bm_decryptor, worker, [permanent, #privkey{}]) | Children]}}.
 
 %%%===================================================================
 %%% Internal functions

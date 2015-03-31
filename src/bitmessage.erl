@@ -35,6 +35,14 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
+%%% @doc Called when new message or broadcast sent with ID of sent object
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback filechunk_sent(Hash, ChunkHash) -> ok when
+      Hash :: hash(),
+      ChunkHash :: hash().
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
 %%% @doc Called when new host is connected with number of peers as argument
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -callback connected(non_neg_integer()) -> ok.
@@ -179,31 +187,38 @@ get_message(Hash) ->
 %%% @doc Callback examples  % {{{1
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--spec received(hash()) -> ok.
-received(Hash) ->  % {{{1
+-spec received(hash()) -> ok.  % {{{1
+received(Hash) ->
     error_logger:info_msg("Received message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
     ok.
 
--spec sent(hash()) -> ok.
-sent(Hash) ->  % {{{1
+-spec sent(hash()) -> ok.  % {{{1
+sent(Hash) ->
     error_logger:info_msg("Sent message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
     ok.
--spec downloaded(hash()) -> ok.
-downloaded(Hash) ->  % {{{1
+
+-spec downloaded(hash()) -> ok.  % {{{1
+downloaded(Hash) ->
     error_logger:info_msg("Attachment download complete: ~p~n",
                           [bm_types:binary_to_hexstring(Hash)]),
     ok.
--spec key_ready(binary()) -> ok.
-key_ready(Address) ->  % {{{1
+
+-spec filechunk_sent(hash(), hash()) -> ok.  % {{{1
+filechunk_sent(Hash, ChunkHash) ->
+    error_logger:info_msg("Filechunk ~p sent message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
+    ok.
+
+-spec key_ready(binary()) -> ok.  % {{{1
+key_ready(Address) ->
     error_logger:info_msg("New address generated: ~p~n", [Address]),
     ok.
--spec connected(non_neg_integer()) -> ok.
-connected(N) ->  % {{{1
+-spec connected(non_neg_integer()) -> ok.  % {{{1
+connected(N) ->
     error_logger:info_msg("New peer. Number of peers: ~p~n",
                           [N]),
     ok.
--spec disconnected(non_neg_integer()) -> ok.
-disconnected(N) ->  % {{{1
+-spec disconnected(non_neg_integer()) -> ok.  % {{{1
+disconnected(N) ->
     error_logger:info_msg("Peer disconnected. Number of peers: ~p~n",
                           [N]),
     ok.
