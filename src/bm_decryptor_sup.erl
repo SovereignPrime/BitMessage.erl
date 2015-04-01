@@ -63,7 +63,7 @@ init([]) ->
                 [?CHILD({cryptor, length(A) + 1}, bm_message_decryptor, worker, [O]) | A]
             end, [], privkey),
     {ok, {{one_for_one, 5, 10}, 
-          [?CHILD(decoder, bm_decryptor, worker, [permanent, #privkey{}]) | Children]}}.
+          [?CHILD(decoder, bm_decryptor, worker, [#privkey{}]) | Children]}}.
 
 %%%===================================================================
 %%% Internal functions

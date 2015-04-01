@@ -6,7 +6,7 @@
 %% API functions  {{{1
 -export([
          start_link/3, 
-         send_chunk/2
+         send_chunk/3
         ]).
 
 %% gen_server callbacks  {{{1
@@ -45,21 +45,19 @@ start_link(Hash, Path, Callback) ->   % {{{2
 %% Sends filechunk to network
 %%
 %%--------------------------------------------------------------------
--spec send_chunk(FileHash, ChunkHash) -> ok when  % {{{2
+-spec send_chunk(FileHash, ChunkHash, Callback) -> ok when  % {{{2
       FileHash :: binary(),
-      ChunkHash :: binary().
-send_chunk(FileHash, ChunkHash) ->
+      ChunkHash :: binary(),
+      Callback :: module().
+send_chunk(FileHash, ChunkHash, Callback) ->
     Timeout = crypto:rand_uniform(0, 300),
     timer:sleep(Timeout),
     InNetwork = is_filchunk_in_network(ChunkHash),
-    ok.
-    %Here = bm_db:is_filchunk_here(ChunkHash),
-    %case {InNetwork, Here}  of
-    %    {false, true} ->
-    %        ok;
-    %    _ ->
-    %        ok
-    %end.
+    if InNetwork ->
+           ok;
+       true ->
+           encode_filechunk(FileHash, ChunkHash, Callback)
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks {{{1
@@ -80,8 +78,10 @@ init([Hash, Path, Callback]) ->   % {{{2
     Timeout = application:get_env(bitmessage, chunk_timeout, 15 * 60000),
     [
      #bm_file{
+        key={_Pub, Priv},
         chunks=Chunks
        } = File] = bm_db:lookup(bm_file, Hash),
+    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
      {ok,
       #state{
          path=Path,
@@ -144,9 +144,9 @@ handle_info(timeout,   % {{{2
                   } = State) ->
     case lists:foldl(fun(CID, Acc) ->
                              case bm_db:lookup(bm_filechunk, CID) of
-                                 [] -> 
-                                     Acc;
-                                     %[CID | Acc];
+                                 [#bm_filechunk{data=undefined,
+                                                hash=CID}] -> 
+                                     [CID | Acc];
                                  [_] ->
                                      Acc
                              end
@@ -184,7 +184,11 @@ handle_info(timeout,   % {{{2
     error_logger:info_msg("Remaining: ~p~n", [length(Remaining)]),
     {noreply, State#state{remaining=Remaining}, Timeout};
 handle_info(Info, #state{timeout=Timeout} = State) ->
-    error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n", [?MODULE_STRING, Info, State]),
+    error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n",
+                             [?MODULE_STRING,
+                              Info,
+                              State]),
+
     {noreply, State, Timeout}.
 
 %%--------------------------------------------------------------------
@@ -219,6 +223,7 @@ code_change(_OldVsn, State, _Extra) ->   % {{{2
       FHash :: binary(),
       CID :: binary().
 send_chunk_request(FHash, CID) ->
+    bm_db:insert(bm_filechunk, [#bm_filechunk{hash=CID, file=FHash}]),
     bm_sender:send_broadcast(bm_message_creator:create_getchunk(FHash, CID)).
 
 -spec save_file(#bm_file{}, Path) -> 'ok' | 'incomplete' when  % {{{2
@@ -253,5 +258,56 @@ save_file(#bm_file{
       ChunkHash :: binary().
 is_filchunk_in_network(ChunkHash) ->
     FileChunkObjs = bm_db:match(inventory, #inventory{type=?FILECHUNK}),
-    false.
-    %lists:any(fun(#inventory{data=<<_
+    lists:any(fun(#inventory{payload = <<_:22/bytes,
+                                      CH:64/bytes,
+                                      _/bytes>>}) when CH == ChunkHash ->
+                      true;
+                 (_) -> false
+              end,
+              FileChunkObjs).
+
+-spec encode_filechunk(FileHash, ChunkHash, Callback) -> ok when  % {{{2
+      FileHash :: binary(),
+      ChunkHash :: binary(),
+      Callback :: module().
+encode_filechunk(FileHash, ChunkHash, Callback) ->
+    case bm_db:lookup(bm_filechunk, ChunkHash) of
+        [FileChunkObj] ->
+            FileChunkObj;
+        [] ->
+            [ #bm_file{path=Path,
+                       chunks=ChunkHashes} ] = bm_db:lookup(bm_file,
+                                                            FileHash),
+
+            ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
+            IsFile = filelib:is_file(Path),
+            if IsFile ->
+                   Location = length(lists:takewhile(fun(CH) ->
+                                                             CH /= ChunkHash 
+                                                     end,
+                                                     ChunkHashes)),
+                   error_logger:info_msg("Chunk location: ~p~n", [Location]),
+                   TarPath = Path ++ ".rz.tar.gz",
+                   erl_tar:create(TarPath,
+                                  [Path],
+                                  [compressed]),
+                   {ok, F} = file:open(TarPath, [binary, read]),
+                   case file:pread(F, Location, ChunkSize) of
+                       {ok, Data} ->
+                           bm_message_encryptor:start_link(#bm_filechunk{
+                                                              hash=ChunkHash,
+                                                              size=ChunkSize,
+                                                              data=Data,
+                                                              file=FileHash
+                                                             },
+                                                           Callback),
+                           file:close(F),
+                           file:delete(TarPath),
+                           ok;
+                       _ ->
+                           ok
+                   end;
+               true -> 
+                   ok
+            end
+    end.

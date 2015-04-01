@@ -5,7 +5,7 @@
 
 %% API functions
 -export([
-         start_link/2,
+         start_link/1,
          process_object/1,
          callback/1
         ]).
@@ -24,7 +24,6 @@
 
 -record(state,
         {
-         type=temporary :: 'temporary' | 'permanent',
          hash :: binary(),
          stream=1 :: non_neg_integer(),
          version=1 :: non_neg_integer(),
@@ -34,7 +33,7 @@
          decrypted :: binary(),
          object :: object_type(),
          callback=bitmessage :: module(),
-         keys :: #privkey{}
+         keys :: term()
         }).
 
 %%%===================================================================
@@ -50,8 +49,8 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Type, Keys) ->% {{{2
-    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [Type, Keys], []).
+start_link(Keys) ->% {{{2
+    gen_fsm:start_link({local, ?MODULE}, ?MODULE, [Keys], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -61,9 +60,8 @@ start_link(Type, Keys) ->% {{{2
 -spec process_object(Payload) -> ok when
       Payload :: binary().
 process_object(Payload) ->  % {{{2
-    Pids = supervisor:which_children(bm_decryptor_sup),
-    error_logger:info_msg("Decrypting ~p by ~p~n", [Payload, Pids]),
-    send_all(Pids, Payload, fun gen_fsm:send_event/2).
+    error_logger:info_msg("Decrypting ~p ~n", [Payload]),
+    gen_fsm:send_event(?MODULE, Payload).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,9 +70,8 @@ process_object(Payload) ->  % {{{2
 %%--------------------------------------------------------------------
 -spec callback(module()) -> ok.
 callback(Module) ->  % {{{2
-    Pids = supervisor:which_children(bm_decryptor_sup),
     error_logger:info_msg("Setting callback to ~p~n", [Module]),
-    send_all(Pids, {callback, Module}, fun gen_fsm:send_all_state_event/2).
+    gen_fsm:send_all_state_event(?MODULE, {callback, Module}).
 
 %%%===================================================================
 %%% gen_fsm callbacks  {{{1
@@ -93,11 +90,10 @@ callback(Module) ->  % {{{2
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
-init([Type, Keys]) ->% {{{2
+init([Keys]) ->% {{{2
     {ok,
      inventory,
-     #state{type=Type,
-            keys=Keys}}.
+     #state{keys=Keys}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -284,30 +280,48 @@ preprocess(timeout,
               object=?FILECHUNK,  % {{{3
               payload=Payload,
               hash=Hash,
-              encrypted=Encrypted
+              encrypted = <<ChunkHash:64/bytes,
+                            Encrypted/bytes>>
              } = State) ->
-    {next_state,
-     inventory,
-     State};
+    error_logger:info_msg("Filechunk received: ~p~n", [ChunkHash]),
+    case bm_db:lookup(bm_filechunk, ChunkHash) of
+        [#bm_filechunk{data=undefined}=FC] ->
+        
+            bm_db:insert(bm_filechunk, [FC#bm_filechunk{status=received,
+                                                        payload=Payload}]),
+            {next_state,
+             decrypt,
+             State#state{encrypted=Encrypted,
+                         keys=ChunkHash},
+            0};
+        _ ->
+            {next_state,
+             inventory,
+             State}
+    end;
 preprocess(timeout,
            #state{
               object=?GETFILECHUNK,  % {{{3
               version=1,
-              encrypted=Data
+              encrypted=Data,
+              callback=Callback
              } = State) ->
     <<FileHash:64/bytes, ChunkHash:64/bytes>> = Data,
-    bm_attachment_srv:send_chunk(FileHash, ChunkHash),
+    bm_attachment_srv:send_chunk(FileHash, ChunkHash, Callback),
     {next_state,
      inventory,
      State};
-preprocess(_Event,  % {{{3
+preprocess(Event,  % {{{3
            State) ->
+    error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
     {next_state,
-     inventory,
-     State}.
+     preprocess,
+     State,
+    0}.
 decrypt(timeout, % {{{2
         #state{
            hash=Hash,
+           keys=Keys,
            encrypted = Payload
           } = State) ->
     error_logger:info_msg("Starting ~p decrypting", [Hash]),
@@ -318,7 +332,12 @@ decrypt(timeout, % {{{2
              payload,
              State#state{
                decrypted=DMessage,
-               keys=#privkey{address=Address}
+               keys=case Address of
+                        undefined->
+                            Keys;
+                        _ -> 
+                            #privkey{address=Address}
+                    end
               },
              0};
         _H ->
@@ -327,12 +346,11 @@ decrypt(timeout, % {{{2
              State}
     end;
 decrypt(_Event, State) ->% {{{2
-    {next_state, inventory, State}.
+    {next_state, decrypt, State, 0}.
 
 payload(timeout,  % {{{2
         #state{
            hash=Hash,
-           type=Process,
            object=Type,
            payload=Payload,
            decrypted=Data,
@@ -434,10 +452,44 @@ payload(timeout,  % {{{2
             inventory,
             State}
     end;
-payload(_Event, State) ->  % {{{2
+payload(timeout,  % {{{2
+        #state{
+           object=?FILECHUNK,
+           decrypted=Data,
+           keys=ChunkHash,
+           callback=Callback
+          } = State) ->
+    error_logger:info_msg("Saving FileChunk ~p ~n", [ChunkHash]),
+    case bm_db:lookup(bm_filechunk, ChunkHash) of
+        [#bm_filechunk{data=undefined} = FC] ->
+            {Size,
+             <<FileHash:64/bytes,
+               Chunk/bytes>>} = bm_types:decode_varint(Data),
+
+            mnesia:dirty_delete(bm_filechunk, ChunkHash),
+            bm_db:insert(bm_filechunk,
+                         [FC#bm_filechunk{status=decrypted,
+                                          file=FileHash,
+                                          size=Size,
+                                          data=Chunk
+                                         }]),
+            error_logger:info_msg("Saving FileChunk ~p ~n", [FC]),
+            Callback:filechunk_received(FileHash, ChunkHash),
+            {next_state,
+             inventory,
+             State};
+        O ->
+            error_logger:info_msg("Found other ~p ~n", [O]),
+            {next_state,
+             inventory,
+             State}
+    end;
+payload(Event, State) ->  % {{{2
+    error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
     {next_state,
-     inventory,
-     State}.
+     payload,
+     State,
+    0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -635,21 +687,8 @@ save_files(Data) ->
               end,
               Attachments).
 %%
-%% @doc Sends cast to all decryptors
 %%
--spec send_all(PIDs, Msg, Fun) -> ok when  % {{{2
-      PIDs :: [pid()],
-      Msg :: term(),
-      Fun :: fun((pid(), term()) -> ok).
-send_all([], _Msg, _Fun) ->
-    ok;
-send_all([Pid|Rest], Msg, Fun) ->
-    {_, P, _, _} = Pid,
-    Fun(P, Msg),
-    send_all(Rest, Msg, Fun).
-%%
-%%
-%% @doc Sends cast to all decryptors
+%% @doc Check if TTL valid for object
 %%
 -spec check_ttl(Time, Type) -> boolean() when  % {{{2
       Time :: non_neg_integer(),

@@ -18,7 +18,9 @@
          test_attachment_encode_decode/0,
          test_attachment_encode_decode/1,
          test_filechunk_query/0,
-         test_filechunk_query/1
+         test_filechunk_query/1,
+         test_filechunk_send/0,
+         test_filechunk_send/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -31,7 +33,8 @@
 all() ->  % {{{2
     [
      test_attachment_encode_decode,
-     test_filechunk_query
+     test_filechunk_query,
+     test_filechunk_send
     ].
 
 suite() ->  % {{{2
@@ -333,36 +336,44 @@ test_filechunk_send(_Config) -> % {{{2
                             122,202,245,57,167,146,239,164,158,79,167,108,18,
                             227,238,183,47,3,0,0,0,0,0,0,0,0,0,0,0,0,128,255,
                             237,13,54,140,167,14,0,40,0,0>>,
-                   time=bm_types:timestamp()
+                   _ = '_'
                   },
     meck:expect(bm_sender,
                 send_broadcast,
                 fun(<<_:25/bytes,
-                      Inv:32/bytes>>
-                      ) ->
-                        case bm_db:lookup(inventory, Inv) of
-                            [#inventory{
-                                type=?FILECHUNK,
-                                payload = <<1024/big-integer,
-                                            _:64/big-integer,
-                                            ?FILECHUNK:32/big-integer,
-                                            1/integer, % Version
-                                            1/integer, % Stream
-                                            ChunkHash:64/bytes,
-                                            Payload/bytes>>
-                               }] when ChunkHash == FileChunk#bm_filechunk.hash -> 
-                                bm_message_decryptor:start_link(#privkey{
-                                                                   pek=Priv, 
-                                                                   address=filechunk
-                                                                  }),
-                                
-                                ok;
-                            I ->
-                                error_logger:error_msg("Wrong inventory: ~p~n", [I]),
-                                ok 
+                      Hash/bytes>>) ->
+                        [#inventory{
+                            payload = Payload
+                           }] = bm_db:lookup(inventory, Hash),
+                        mnesia:clear_table(inventory),
+                        bm_decryptor:process_object(Payload)
+                end),
+    meck:expect(test,
+                filechunk_sent,
+                fun(FileHash, ChunkHash) 
+                      when FileHash == File#bm_file.hash,
+                           ChunkHash == FileChunk#bm_filechunk.hash->
+                        case bm_db:lookup(bm_filechunk, ChunkHash) of
+                            [] ->
+                                meck:exception(error, "No chunk in DB");
+                            [FC] ->
+                                mnesia:clear_table(bm_filechunk),
+                                mnesia:dirty_write(bm_filechunk,
+                                                   FC#bm_filechunk{data=undefined}),
+                                ok
                         end
                 end),
+    meck:expect(test,
+                filechunk_received,
+                fun(FileHash, ChunkHash) ->
+                        ok
+                end),
+    bm_db:insert(bm_file, [File]),
+    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
     bm_attachment_srv:send_chunk(File#bm_file.hash,
-                                 FileChunk#bm_filechunk.hash),
+                                 FileChunk#bm_filechunk.hash,
+                                test),
     meck:wait(bm_pow, make_pow, '_', 1600),
-    meck:wait(bm_sender, send_broadcast, '_', 1600).
+    meck:wait(bm_sender, send_broadcast, '_', 1600),
+    meck:wait(test, filechunk_sent, '_', 1600),
+    meck:wait(test, filechunk_received, '_', 1600).

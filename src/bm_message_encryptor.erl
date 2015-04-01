@@ -355,7 +355,6 @@ payload(timeout,
     VSize = bm_types:encode_varint(Size),
     Payload = <<VSize/bytes,
                 FileHash:64/bytes,
-                (bm_types:encode_varint(byte_size(Data)))/bytes, % Message size
                 Data/bytes>>,
     NMessage = Message#bm_filechunk{payload=Payload,
                                     status=encrypt_message},
@@ -465,7 +464,7 @@ encrypt_message(timeout,
 
 %% Encrypt filechunk {{{2
 encrypt_message(timeout,
-                #state{pek=PEK,
+                #state{pek = <<4, PEK/bytes>>,
                        message = #bm_filechunk{payload=Payload} = Message} = State) ->
     error_logger:info_msg("Encrypting ~n"),
     HPayload = encrypt(PEK, Payload) ,
@@ -553,6 +552,7 @@ make_inv(timeout,
                 callback=Callback,
                 message= #bm_filechunk{hash=ChunksHash,
                                        payload=Payload,
+                                       file=FileHash,
                                        time=Time}=Message}=State) ->
     Stream = 1, % TODO: make dynamic
     PPayload = bm_message_creator:create_obj(?FILECHUNK, 
@@ -578,7 +578,7 @@ make_inv(timeout,
                            bm_types:binary_to_hexstring(Hash)
                           ]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    Callback:filechunk_sent(Hash, ChunksHash), % May be usefull to stat counting
+    Callback:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
     {stop, normal, State};
 %% Default {{{2
 make_inv(_Event, State) ->
@@ -718,7 +718,7 @@ process_attachment(Path) ->
                             fun(E) -> E end))/bytes,
        Priv/bytes>>.
 
--spec encrypt(PEK, Payload) -> Payload when  % {{{2
+-spec encrypt(PEK, Payload) -> Payload when  % {{{1
       Payload :: binary(),
       PEK :: binary().
 encrypt(PEK, Payload) ->

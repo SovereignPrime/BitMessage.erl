@@ -70,7 +70,7 @@
         {hash :: binary(),
          enabled=true :: boolean(),
          label :: any(),
-         address :: binary(),  % ???
+         address :: binary() | atom(),  % ???
          psk :: binary(),
          pek :: binary(),
          time :: bm_types:timestamp(),

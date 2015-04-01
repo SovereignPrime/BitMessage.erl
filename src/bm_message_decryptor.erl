@@ -41,7 +41,7 @@ start_link(Init) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 -spec decrypt(binary()) -> not_for_me | {decrypted, Address, Data} when % {{{1
-      Address :: binary(),
+      Address :: binary() | 'undefined',
       Data :: binary().
 decrypt(Data) ->
     Pids = supervisor:which_children(bm_decryptor_sup),
@@ -79,7 +79,8 @@ init([Init]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({decrypt,
+
+handle_call({decrypt,  % {{{1
              <<IV:16/bytes,
                714:16/integer,  %Curve type
                XLength:16/big-integer, X:XLength/bytes, 
@@ -175,15 +176,19 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 -spec send_all(PIDs, Msg) -> not_for_me | {decrypted, Address, Data} when % {{{1
       PIDs :: [pid()],
       Msg :: term(),
-      Address :: binary(),
+      Address :: binary() | 'undefined',
       Data :: binary().
-send_all([], _Msg) ->  % {{{1
+send_all([], _Msg) ->
     not_for_me;
-send_all([Pid|Rest], Msg) ->  % {{{1
+send_all([Pid|Rest], Msg) ->
     {_, P, _, _} = Pid,
-    case gen_server:call(P, Msg) of
-        not_for_me ->
-            send_all(Rest, Msg);
-        Data ->
-            Data
+    if P /= self() ->
+           case gen_server:call(P, Msg) of
+               not_for_me ->
+                   send_all(Rest, Msg);
+               Data ->
+                   Data
+           end;
+       true ->
+           not_for_me
     end.
