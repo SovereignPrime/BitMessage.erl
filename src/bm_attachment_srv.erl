@@ -75,7 +75,7 @@ send_chunk(FileHash, ChunkHash, Callback) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Hash, Path, Callback]) ->   % {{{2
-    Timeout = application:get_env(bitmessage, chunk_timeout, 15 * 60000),
+    Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
     [
      #bm_file{
         key={_Pub, Priv},

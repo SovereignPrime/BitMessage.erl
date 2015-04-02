@@ -219,8 +219,8 @@ test_filechunk_query() ->  % {{{2
     [].
 
 test_filechunk_query(_Config) -> % {{{2
-    application:set_env(bitmessage, chunk_requests_at_once, 32),
-    application:set_env(bitmessage, chunk_timeout, 1),
+    application:set_env(bitmessage, chunk_requests_at_once, 12),
+    application:set_env(bitmessage, chunk_timeout, 5),
     bm_attachment_sup:start_link(),
     [#privkey{hash=RIPE,
               public=Pub,
@@ -239,16 +239,11 @@ test_filechunk_query(_Config) -> % {{{2
                 fun(_) ->
                         ok
                 end),
-    TarPath = "../../test/data/rand64k.raw.tgz",
-    {ok, TarFile} = file:open(TarPath, [binary, read]),
-    TarSize = filelib:file_size(TarPath),
-    {ok, TarData} = file:pread(TarFile,
-                                  lists:map(fun(L) ->
-                                                    {L, 1024}
-                                            end, 
-                                            lists:seq(0,
-                                                      TarSize,
-                                                      1024))),
+    meck:expect(test,
+                filechunk_sent,
+                fun(FileHash, ChunkHash) ->
+                        ok
+                end),
     meck:expect(bm_sender,
                 send_broadcast,
                 fun(<<_:25/bytes,
@@ -256,21 +251,13 @@ test_filechunk_query(_Config) -> % {{{2
                       ) ->
                         case bm_db:lookup(inventory, Inv) of
                             [#inventory{
-                                payload = <<_:22/bytes,
-                                            F:64/bytes,
-                                            C:64/bytes>>
-                               }]  -> 
-                                [ Data ] = lists:filter(fun(D) ->
-                                                              S = bm_auth:dual_sha(D),
-                                                              S == C
-                                                      end,
-                                                      TarData),
-                                bm_db:insert(bm_filechunk,
-                                             [#bm_filechunk{hash=C,
-                                                            file=F,
-                                                            data=Data,
-                                                            size=1024}]);
-                            I ->
+                                type=Type,
+                                payload = Payload
+                               }]  when Type == ?FILECHUNK; Type == ?GETFILECHUNK -> 
+                                mnesia:dirty_delete(inventory, Inv),
+                                bm_decryptor:process_object(Payload),
+                                timer:sleep(3000);
+                            _I ->
                                 ok 
                         end
                 end),
@@ -283,7 +270,7 @@ test_filechunk_query(_Config) -> % {{{2
                             ["../../test/data/rand64k.raw"]),
     meck:wait(bm_pow, make_pow, '_', 16000),
     meck:wait(bm_sender, send_broadcast, '_', 16000),
-    meck:wait(test, downloaded, '_', 16000),
+    meck:wait(test, downloaded, '_', 160000),
     ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
     ?assertEqual(66, meck:num_calls(bm_sender, send_broadcast, '_')).
 

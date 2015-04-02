@@ -60,7 +60,6 @@ start_link(Keys) ->% {{{2
 -spec process_object(Payload) -> ok when
       Payload :: binary().
 process_object(Payload) ->  % {{{2
-    error_logger:info_msg("Decrypting ~p ~n", [Payload]),
     gen_fsm:send_event(?MODULE, Payload).
 
 %%--------------------------------------------------------------------
@@ -147,12 +146,12 @@ inventory(<<_Nonce:64/big-integer, % {{{2
                     preprocess,
                     State#state{
                       hash = Hash,
-                      version=Version,
-                      stream=Stream,
-                      time=Time,
+                      version = Version,
+                      stream = Stream,
+                      time = Time,
                       payload = Payload,
                       encrypted = R1,
-                      object=Type
+                      object = Type
                      },
                     0}
            end;
@@ -162,7 +161,7 @@ inventory(<<_Nonce:64/big-integer, % {{{2
             State}
     end;
 inventory(Event, State) ->
-    error_logger:info_msg("Wrong event ~p state ~p~n", [Event, State]),
+    %error_logger:info_msg("Wrong event ~p state ~p~n", [Event, State]),
     {next_state,
      inventory,
      State}.
@@ -202,7 +201,6 @@ preprocess(timeout,
              inventory,
              State}
     end;
-
 preprocess(timeout,
            #state{
               object=?PUBKEY,  % {{{3
@@ -311,9 +309,14 @@ preprocess(timeout,
     {next_state,
      inventory,
      State};
+preprocess(timeout,
+           State) ->
+    {next_state,
+     inventory,
+     State};
 preprocess(Event,  % {{{3
            State) ->
-    error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
+    %error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
     {next_state,
      preprocess,
      State,
@@ -484,8 +487,13 @@ payload(timeout,  % {{{2
              inventory,
              State}
     end;
+payload(timeout,  % {{{2
+        State) ->
+    {next_state,
+     inventory,
+     State};
 payload(Event, State) ->  % {{{2
-    error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
+    %error_logger:warning_msg("Wrong event ~p in ~p state ~p~n", [Event, State, ?MODULE_STRING]),
     {next_state,
      payload,
      State,
@@ -505,7 +513,7 @@ payload(Event, State) ->  % {{{2
 %% @end
 %%--------------------------------------------------------------------
 handle_event({callback, Callback}, StateName, State) ->  % {{{2
-    {next_state, StateName, State#state{callback=Callback}};
+    {next_state, StateName, State#state{callback=Callback}, 0};
 handle_event(_Event, StateName, State) ->  % {{{2
     {next_state, StateName, State}.
 

@@ -699,7 +699,6 @@ process_attachment(Path) ->
     {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     error_logger:info_msg("File: ~p, hash ~p~n", [Name, MercleRoot]),
     error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
-    error_logger:info_msg("FileChunks: ~p hash ~p~n", [ChunksData, ChunksHash]),
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
