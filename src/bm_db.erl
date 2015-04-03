@@ -202,6 +202,7 @@ init([]) -> %  {{{1
                                                 {record_name, network_address}]),
             {atomic, ok} = mnesia:create_table(bm_file,
                                                [
+                                                {disc_copies, [node()]},
                                                 {attributes,
                                                  record_info(fields,
                                                              bm_file)},
@@ -210,13 +211,15 @@ init([]) -> %  {{{1
                                                ]),
             {atomic, ok} = mnesia:create_table(bm_filechunk,
                                                [
+                                                {disc_copies, [node()]},
                                                 {attributes,
                                                  record_info(fields,
                                                              bm_filechunk)},
                                                 {type, set}
                                                ]),
             {atomic, ok} = mnesia:create_table(message,
-                                               [{disc_copies, [node()]},
+                                               [
+                                                {disc_copies, [node()]},
                                                 {attributes,
                                                  record_info(fields,
                                                              message)},
@@ -235,6 +238,7 @@ update() ->  % {{{1
         13 ->
             {atomic, ok} = mnesia:create_table(bm_file,
                                                [
+                                                {disc_copies, [node()]},
                                                 {attributes,
                                                  record_info(fields,
                                                              bm_file)},
@@ -243,6 +247,7 @@ update() ->  % {{{1
                                                ]),
             {atomic, ok} = mnesia:create_table(bm_filechunk,
                                                [
+                                                {disc_copies, [node()]},
                                                 {attributes,
                                                  record_info(fields,
                                                              bm_filechunk)},
