@@ -242,7 +242,8 @@ save_file(#bm_file{
                          end,
                          Chunks),
     TarFile = << <<D/bytes>> || D <- BChuncks>>,
-    erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
+    file:write_file(Path ++ "/" ++ Name, TarFile),
+    %erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
     FPath = Path ++ "/" ++ Name,
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
@@ -287,10 +288,10 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                                                      end,
                                                      ChunkHashes)),
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
-                   TarPath = Path ++ ".rz.tar.gz",
-                   erl_tar:create(TarPath,
-                                  [Path],
-                                  [compressed]),
+                   TarPath = Path, %++ ".rz.tar.gz",
+                   %erl_tar:create(TarPath,
+                   %               [Path],
+                   %               [compressed]),
                    {ok, F} = file:open(TarPath, [binary, read]),
                    case file:pread(F, Location, ChunkSize) of
                        {ok, Data} ->
@@ -302,7 +303,7 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                                                              },
                                                            Callback),
                            file:close(F),
-                           file:delete(TarPath),
+                           %file:delete(TarPath),
                            ok;
                        _ ->
                            ok

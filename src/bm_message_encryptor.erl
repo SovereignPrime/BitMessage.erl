@@ -680,8 +680,9 @@ process_attachment(Path) ->
     ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
-    TarPath = Path ++ ".rz.tar.gz",
-    erl_tar:create(TarPath, [Path], [compressed]),
+    TarPath =Path,
+    %TarPath = Path ++ ".rz.tar.gz",
+    %erl_tar:create(TarPath, [Path], [compressed]),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
     {ok, ChunksData} = file:pread(F,
@@ -709,7 +710,7 @@ process_attachment(Path) ->
                  time=calendar:universal_time()
                 },
     bm_db:insert(bm_file, [FileRec]),
-    file:delete(TarPath),  %TODO: will it work?
+    %file:delete(TarPath),  %TODO: will it work?
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,

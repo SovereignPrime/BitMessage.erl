@@ -35,9 +35,17 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
-%%% @doc Called when new message or broadcast sent with ID of sent object
+%%% @doc Called when FileChunk sent
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -callback filechunk_sent(Hash, ChunkHash) -> ok when
+      Hash :: hash(),
+      ChunkHash :: hash().
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when new FileChunk received
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback filechunk_received(Hash, ChunkHash) -> ok when
       Hash :: hash(),
       ChunkHash :: hash().
 
@@ -206,6 +214,11 @@ downloaded(Hash) ->
 -spec filechunk_sent(hash(), hash()) -> ok.  % {{{1
 filechunk_sent(Hash, ChunkHash) ->
     error_logger:info_msg("Filechunk ~p sent message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
+    ok.
+
+-spec filechunk_received(hash(), hash()) -> ok.  % {{{1
+filechunk_received(Hash, ChunkHash) ->
+    error_logger:info_msg("Filechunk ~p received message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
     ok.
 
 -spec key_ready(binary()) -> ok.  % {{{1
