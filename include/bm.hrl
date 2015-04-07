@@ -105,7 +105,8 @@
          size :: non_neg_integer() | atom(),
          chunks :: list(binary()) | atom(), %% ???
          key :: {binary(), binary()} | atom(),
-         time :: calendar:date_time() | non_neg_integer()
+         time :: calendar:date_time() | non_neg_integer(),
+         status=downloading :: atom()
         }).
 
 %% Record for filechunk (draft)

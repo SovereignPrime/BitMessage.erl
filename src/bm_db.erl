@@ -234,6 +234,18 @@ init([]) -> %  {{{1
     end,
     {ok, #state{}}. % }}}
 update() ->  % {{{1
+    case mnesia:table_info(bm_file, arity) of
+        8 ->
+            mnesia:transform_table(bm_file,
+                                   fun(In) ->
+                                           InL = tuple_to_list(In),
+                                           list_to_tuple(InL ++ [ok])
+                                   end,
+                                   record_info(fields, bm_file));
+        _ ->
+            ok
+    end,
+
     case mnesia:table_info(message, arity) of
         13 ->
             {atomic, ok} = mnesia:create_table(bm_file,
@@ -493,7 +505,7 @@ bootstrap_network() ->  % {{{1
                           inet),
     {ok,
      Ips1} = inet:getaddrs("bootstrap8080.bitmessage.org",
-                           inet),
+                          inet),
 
     %Ips= [], %[{192,168,24,112}],
     %Ips1=[],

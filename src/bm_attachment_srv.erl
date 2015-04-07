@@ -81,11 +81,16 @@ init([Hash, Path, Callback]) ->   % {{{2
         key={_Pub, Priv},
         chunks=Chunks
        } = File] = bm_db:lookup(bm_file, Hash),
+    NFile = File#bm_file{
+              path=Path,
+              status=downloading
+             },
+    bm_db:insert(bm_file, [NFile]),
     bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
      {ok,
       #state{
          path=Path,
-         file=File,
+         file=NFile,
          chunks=Chunks,
          remaining=[],
          callback=Callback,
@@ -256,7 +261,10 @@ save_file(#bm_file{
     MercleRoot = bm_auth:mercle_root(Chunks),
     if RSiaze == Size,
        MercleRoot == Hash ->
-            bm_db:insert(bm_file, [File#bm_file{path=Path ++ "/" ++ Name}]),
+            bm_db:insert(bm_file, [File#bm_file{
+                                     path=Path ++ "/" ++ Name,
+                                     status=ok
+                                    }]),
             ok;
         true ->
             incomplete
