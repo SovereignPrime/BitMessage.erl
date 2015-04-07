@@ -144,6 +144,8 @@ handle_info(timeout,   % {{{2
                   } = State) ->
     case lists:foldl(fun(CID, Acc) ->
                              case bm_db:lookup(bm_filechunk, CID) of
+                                 [] -> 
+                                     [CID | Acc];
                                  [#bm_filechunk{data=undefined,
                                                 hash=CID}] -> 
                                      [CID | Acc];
