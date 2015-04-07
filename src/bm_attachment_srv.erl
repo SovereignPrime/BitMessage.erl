@@ -286,7 +286,7 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                    Location = length(lists:takewhile(fun(CH) ->
                                                              CH /= ChunkHash 
                                                      end,
-                                                     ChunkHashes)),
+                                                     ChunkHashes)) * ChunkSize,
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
                    TarPath = Path, %++ ".rz.tar.gz",
                    %erl_tar:create(TarPath,
