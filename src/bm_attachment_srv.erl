@@ -87,7 +87,7 @@ init([Hash, Path, Callback]) ->   % {{{2
          path=Path,
          file=File,
          chunks=Chunks,
-         remaining=Chunks,
+         remaining=[],
          callback=Callback,
          timeout=Timeout
         }, 
@@ -223,8 +223,13 @@ code_change(_OldVsn, State, _Extra) ->   % {{{2
       FHash :: binary(),
       CID :: binary().
 send_chunk_request(FHash, CID) ->
-    bm_db:insert(bm_filechunk, [#bm_filechunk{hash=CID, file=FHash}]),
-    bm_sender:send_broadcast(bm_message_creator:create_getchunk(FHash, CID)).
+    case bm_db:lookup(bm_filechunk, CID) of
+        [#bm_filechunk{data=Data}] when Data /= undefined ->
+            ok;
+        _ ->
+            bm_db:insert(bm_filechunk, [#bm_filechunk{hash=CID, file=FHash}]),
+            bm_sender:send_broadcast(bm_message_creator:create_getchunk(FHash, CID))
+    end.
 
 -spec save_file(#bm_file{}, Path) -> 'ok' | 'incomplete' when  % {{{2
       Path :: string().

@@ -467,8 +467,9 @@ payload(timeout,  % {{{2
         [#bm_filechunk{data=undefined} = FC] ->
             {Size,
              <<FileHash:64/bytes,
-               Chunk/bytes>>} = bm_types:decode_varint(Data),
+               ChunkPadded/bytes>>} = bm_types:decode_varint(Data),
 
+            <<Chunk:Size/bytes, _/bytes>> = ChunkPadded,
             mnesia:dirty_delete(bm_filechunk, ChunkHash),
             bm_db:insert(bm_filechunk,
                          [FC#bm_filechunk{status=decrypted,
