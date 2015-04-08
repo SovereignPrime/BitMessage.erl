@@ -59,8 +59,6 @@ init([]) ->  % {{{1
     TT = application:get_env(bitmessage, table_wait, 16000),
     Timeout = application:get_env(bitmessage, db_clear_interval, 1000),
     Addr = application:get_env(bitmessage, max_age_of_node, 172800),
-    Inv = application:get_env(bitmessage, max_age_of_inventory, 172800),
-    PubKey = application:get_env(bitmessage, max_age_of_public_key, 2592000),
     {ok,
      clear,
      #state{timeout=Timeout,

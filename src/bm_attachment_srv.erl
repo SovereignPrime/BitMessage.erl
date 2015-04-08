@@ -254,11 +254,12 @@ save_file(#bm_file{
                          end,
                          Chunks),
     TarFile = << <<D/bytes>> || D <- BChuncks>>,
-    %file:write_file(Path ++ "/" ++ Name, TarFile),
-    erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
+
+    erl_tar:extract({binary, TarFile}, [compressed, {cwd, Path}]),
     FPath = Path ++ "/" ++ Name,
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
+    error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, size(TarFile)]),
     if RSiaze == Size,
        MercleRoot == Hash ->
             bm_db:insert(bm_file, [File#bm_file{
@@ -318,7 +319,7 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                                                              },
                                                            Callback),
                            file:close(F),
-                           %file:delete(TarPath),
+                           file:delete(TarPath),
                            ok;
                        _ ->
                            ok

@@ -707,8 +707,9 @@ check_ttl(Time, ?FILECHUNK) ->
     TTL = Time - bm_types:timestamp(),
     TTL < FileChunkTTL + 10800 andalso TTL > -3600;
 check_ttl(Time, _Type) ->
+    MessageTTL = application:get_env(bitmessage, message_ttl, 86400),
     TTL = Time - bm_types:timestamp(),
-    TTL < 28 * 24 * 60 * 60 + 10800 andalso TTL > -3600.
+    TTL < MessageTTL + 10800 andalso TTL > -3600.
 
 -spec check_ackdata(binary()) -> boolean().  % {{{2
 check_ackdata(Payload) ->

@@ -73,26 +73,14 @@ create_inv(Hashes) ->
       Stream :: integer(),
       Exclude :: list().
 create_big_inv(Stream, Exclude) ->
-    {ok, PubKeyAge} = application:get_env(bitmessage, 'max_age_of_public_key'),
-    {ok, InvAge} = application:get_env(bitmessage, 'max_age_of_inventory'),
     Time = bm_types:timestamp(),
-    PubOld = Time - PubKeyAge,
-    Old = Time - InvAge,
     InvList =  bm_db:select(inventory,
                             [
                              {#inventory{stream=Stream,
                                          hash='$1',
                                          time='$2',
-                                         type = 1,
                                          _='_'},
-                              [{'>', '$2', PubOld}], ['$1']},
-                             {#inventory{stream=Stream,
-                                         hash='$1',
-                                         time = '$2',
-                                         type='$3',
-                                         _='_'},
-                              [{'>', '$2', Old},
-                               {'/=', '$3', 1}],
+                              [{'>', '$2', Time}],
                               ['$1']}
                             ],
                             5000),
