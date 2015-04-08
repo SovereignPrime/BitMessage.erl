@@ -74,7 +74,8 @@ pubkey(PubKey) ->
     StateName :: atom().
 % For messages and broadcasts {{{2
 init([Message, Callback]) when is_record(Message, message) ->
-    Time = bm_types:timestamp() + 86400 * 2 + crypto:rand_uniform(-300, 300),
+    TTL = application:get_env(bitmessage, message_ttl, 86400 * 2),
+    Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
     #message{status=State} = Message,
     {ok,
      payload,
@@ -85,7 +86,8 @@ init([Message, Callback]) when is_record(Message, message) ->
 
 % For filechunks {{{2
 init([Message, Callback]) when is_record(Message, bm_filechunk) ->
-    Time = bm_types:timestamp() + 3600 + crypto:rand_uniform(-300, 300),
+    TTL = application:get_env(bitmessage, filechunk_ttl, 15 * 60),
+    Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
     #bm_filechunk{status=State} = Message,
     {ok,
      payload,
@@ -680,7 +682,6 @@ process_attachment(Path) ->
     ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
-    %TarPath =Path,
     TarPath = Path ++ ".rz.tar.gz",
     erl_tar:create(TarPath, [Path], [compressed]),
     {ok, F} = file:open(TarPath, [binary, read]),
@@ -710,7 +711,7 @@ process_attachment(Path) ->
                  time=calendar:universal_time()
                 },
     bm_db:insert(bm_file, [FileRec]),
-    %file:delete(TarPath),  %TODO: will it work?
+    file:delete(TarPath),  %TODO: will it work?
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
