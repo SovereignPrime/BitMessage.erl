@@ -312,7 +312,7 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                        {ok, Data} ->
                            bm_message_encryptor:start_link(#bm_filechunk{
                                                               hash=ChunkHash,
-                                                              size=ChunkSize,
+                                                              size=size(Data),
                                                               data=Data,
                                                               file=FileHash
                                                              },

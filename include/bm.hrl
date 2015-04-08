@@ -106,7 +106,7 @@
          chunks :: list(binary()) | atom(), %% ???
          key :: {binary(), binary()} | atom(),
          time :: calendar:date_time() | non_neg_integer(),
-         status=downloading :: atom()
+         status=received :: atom()
         }).
 
 %% Record for filechunk (draft)
