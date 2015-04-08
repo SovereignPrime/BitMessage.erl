@@ -708,6 +708,7 @@ process_attachment(Path) ->
                  path=Path,
                  chunks=ChunksHash,
                  key=Keys,
+                 status=uploaded,
                  time=calendar:universal_time()
                 },
     bm_db:insert(bm_file, [FileRec]),

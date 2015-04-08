@@ -328,8 +328,9 @@ handle_info(timeout, #state{callback=Callback}=State) ->  % {{{1
                           bm_encryptor_sup:add_encryptor(E, Callback)
                   end,
                   lists:flatten(Messages)),
-    Downloads = bm_db:match(bm_file, #bm_file{status=downloading, _='_'}),
-    error_logger:info_msg("Downloads in progress: ~p~n", [Messages]),
+    Downloads = bm_db:match(bm_file, #bm_file{status=downloading,
+                                              _='_'}),
+    error_logger:info_msg("Downloads in progress: ~p~n", [Downloads]),
     lists:foreach(fun(#bm_file{
                          hash=Hash,
                          path=Path
