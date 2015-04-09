@@ -6,7 +6,7 @@
 
 %% API  {{{1
 -export([start_link/0]).
--export([arrived/3,
+-export([
          register_receiver/1,
          send/1,
          get_attachment/2,
@@ -45,12 +45,6 @@ start_link() ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec arrived(Data, Hash, Address) ->  ok when % {{{1
-      Data :: binary(),
-      Hash :: binary(),
-      Address :: binary().
-arrived(Data, Hash, Address) ->
-    gen_server:cast(?MODULE, {arrived, Hash, Address, Data}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -152,133 +146,6 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({arrived, Hash, Address,  Data},  #state{callback=Callback}=State) ->  % {{{1
-    #address{version=AddrVer,
-             stream=Stream, % TODO: Is this stream ok??
-             ripe=RIPE}=bm_auth:decode_address(Address),
-    [#inventory{type=Type,
-                payload=D}] = bm_db:lookup(inventory, Hash),
-    {AV, R1} = bm_types:decode_varint(Data),
-    {AVer, R2} = case bm_types:decode_varint(R1) of
-              {Stream, R} ->
-                         {AV, R};
-                     {A, R} ->
-                         {Stream, RO} = bm_types:decode_varint(R),
-                         {A, RO}
-          end,
-    <<_BField:32/big-integer, PSK:64/bytes, PEK:64/bytes, R3/bytes>> = R2,
-    {NTpB,
-     PLEB,
-     R4} = case AddrVer of
-               2 ->
-                   {?MIN_NTPB, ?MIN_PLEB, R3};
-               MV when MV >= 3 ->
-                   {NonceTrailsPerBytes, RV} = bm_types:decode_varint(R3),
-                   {ExtraBytes, RV1} = bm_types:decode_varint(RV),
-                   {NonceTrailsPerBytes, ExtraBytes, RV1}
-           end,
-    case Type of
-        ?MSG -> 
-            <<DRIPE:20/bytes, MsgEnc/big-integer, R5/bytes>> = R4,
-            RecOK = 
-            if DRIPE == RIPE ->
-                   true;
-               true ->
-                   false
-            end;
-        ?BROADCAST ->
-            <<MsgEnc/big-integer, R5/bytes>> = R4,
-            RecOK = true
-    end,
-
-    {Message, R6} = bm_types:decode_varbin(R5),
-    {AckData, R7} = if Type == ?MSG ->
-                           bm_types:decode_varbin(R6);
-                       true -> 
-                           {ok, R6}
-    end,
-    error_logger:info_msg("msg received  ver ~p message ~p ackdata ~p~n", ["MsgVer", Message, AckData]),
-    {Sig, R8} = bm_types:decode_varbin(R7),
-    SLen = size(Data) - size(R7),
-    <<DataSig:SLen/bytes, _/bytes>> = Data,
-    PuSK = <<4, PSK/bytes>>,
-    SigOK = case crypto:verify(ecdsa, sha, DataSig, Sig, [PuSK, secp256k1]) of
-                true -> true;
-                false ->
-                    %file:write_file("./test/data/broadcast_encr.bin", D),
-                    %file:write_file("./test/data/broadcast_decr.bin", Data),
-                    <<_:64/integer,
-                      TT:12/bytes,
-                      V/integer,
-                      Stream/integer,
-                      Rest/bytes>> = D,
-
-                    Tag = if Type == ?BROADCAST, 
-                             V == 5 ->
-                                 <<Ta:32/bytes, _/bytes>> = Rest,
-                                 Ta;
-                             true ->
-                                 <<>>
-                          end,
-                    DS = <<TT:12/bytes,
-                           V/integer,
-                           Stream/integer,
-                           Tag/bytes,
-                           DataSig/bytes>>,
-                    crypto:verify(ecdsa,
-                                  sha,
-                                  DS,
-                                  Sig,
-                                  [PuSK,
-                                   secp256k1])
-            end,
-    error_logger:info_msg("Receiver: ~p Signature: ~p AddrVer ~p~n", [RecOK, SigOK, AddrVer]),
-    if RecOK, SigOK, AddrVer > 0, AVer =< 4 ->
-            {Subject, Text, Attachments} = case MsgEnc of
-                1 ->
-                    {"", Message, []};
-                2 ->
-                    {match, [_, S,  T]} = re:run(Message, "Subject:(.+)\nBody:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
-                    {S, T, []};
-                3 ->
-                    {match, [_, S,  T, BAttachments]} = re:run(Message, "Subject:(.+)\nBody:(.+)\nAttachments:(.+)$", [{capture, all, binary},firstline, {newline, any}, dotall, ungreedy]),
-
-                    Att = save_files(BAttachments),
-                    {S, T, Att}
-            end,
-            FRipe = bm_auth:generate_ripe(<<4, PSK/bytes, 4, PEK/bytes>>),
-            From = bm_auth:encode_address(AVer, Stream, FRipe),
-            PubKey = #pubkey{hash=FRipe,
-                             psk=PSK,
-                             pek=PEK,
-                             ntpb=NTpB,
-                             pleb=PLEB,
-                             time=bm_types:timestamp()},
-            error_logger:info_msg("~p~n", [PubKey]),
-            bm_db:insert(pubkey, [PubKey]),
-            MR = #message{hash=Hash, 
-                          enc=MsgEnc, 
-                          from=From, 
-                          to=Address, 
-                          subject=Subject,
-                          folder=incoming,
-                          time=calendar:local_time(),
-                          ackdata=AckData,
-                          status=unread,
-                          type=Type,
-                          attachments=Attachments,
-                          text=Text},
-            bm_db:insert(message, [MR]),
-            if AckData /= ok ->
-                    bm_sender:send_broadcast(bm_message_creator:create_ack(MR));
-                true ->
-                    ok
-            end,
-            Callback:received(Hash),
-            {noreply, State};
-        true ->
-            {noreply, State}
-    end;
 handle_cast({send, Message}, #state{callback=Callback}=State) ->  % {{{1
     error_logger:info_msg("Sending  ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message, Callback),

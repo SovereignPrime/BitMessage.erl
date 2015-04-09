@@ -79,6 +79,16 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                                         {attributes, record_info(fields, message)},
                                         {type, set}
                                         ]),
+    {atomic, ok} = mnesia:create_table(bm_file,
+                                       [
+                                        {attributes, record_info(fields, bm_file)},
+                                        {type, set}
+                                        ]),
+    {atomic, ok} = mnesia:create_table(bm_filechunk,
+                                       [
+                                        {attributes, record_info(fields, bm_filechunk)},
+                                        {type, set}
+                                        ]),
 
     bm_db:start_link(),
     PrivKey={privkey,
