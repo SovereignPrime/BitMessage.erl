@@ -135,6 +135,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                                   end),
     meck:new(bm_sender, [no_link]),
     meck:new(test, [non_strict]),
+    bm_decryptor:callback(test),
     bm_dispatcher:register_receiver(test),
     Config.
 

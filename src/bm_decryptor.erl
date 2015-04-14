@@ -115,8 +115,6 @@ inventory(<<_Nonce:64/big-integer, % {{{2
             Packet/bytes>> = Payload,
           State) ->
     <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(Payload),
-    error_logger:info_msg("Received object: ~p~n",
-                          [bm_types:binary_to_hexstring( Hash )]),
 
     IsPOW = bm_pow:check_pow(Payload),
     IsOld = not check_ttl(Time, Type),
@@ -129,6 +127,8 @@ inventory(<<_Nonce:64/big-integer, % {{{2
                     inventory,
                     State};
                [] ->
+                   error_logger:info_msg("Received object: ~p~n",
+                                         [bm_types:binary_to_hexstring( Hash )]),
                    bm_db:insert(inventory,
                                 [ #inventory{hash=Hash,
                                              payload=Payload,
@@ -707,8 +707,9 @@ check_ttl(Time, ?FILECHUNK) ->
     TTL = Time - bm_types:timestamp(),
     TTL < FileChunkTTL + 10800 andalso TTL > -3600;
 check_ttl(Time, _Type) ->
-    MessageTTL = application:get_env(bitmessage, message_ttl, 86400),
+    MessageTTL = application:get_env(bitmessage, message_ttl, 2419200),
     TTL = Time - bm_types:timestamp(),
+    error_logger:info_msg("TTL: ~p MSg:~p~n", [TTL, MessageTTL]),
     TTL < MessageTTL + 10800 andalso TTL > -3600.
 
 -spec check_ackdata(binary()) -> boolean().  % {{{2
