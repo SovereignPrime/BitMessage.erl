@@ -475,6 +475,7 @@ payload(timeout,  % {{{2
                          [FC#bm_filechunk{status=decrypted,
                                           file=FileHash,
                                           size=Size,
+                                          time=calendar:universal_time(),
                                           data=Chunk
                                          }]),
             error_logger:info_msg("Saving FileChunk ~p ~n", [FC]),
@@ -709,7 +710,6 @@ check_ttl(Time, ?FILECHUNK) ->
 check_ttl(Time, _Type) ->
     MessageTTL = application:get_env(bitmessage, message_ttl, 2419200),
     TTL = Time - bm_types:timestamp(),
-    error_logger:info_msg("TTL: ~p MSg:~p~n", [TTL, MessageTTL]),
     TTL < MessageTTL + 10800 andalso TTL > -3600.
 
 -spec check_ackdata(binary()) -> boolean().  % {{{2
