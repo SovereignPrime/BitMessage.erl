@@ -174,22 +174,11 @@ handle_info(timeout,   % {{{2
                remaining=Chunks
                   } = State) ->
     MaxNChunks = application:get_env(bitmessage, chunk_requests_at_once, 1024),
-    Remaining = if length(Chunks) > MaxNChunks ->
-                       {Send, Rem} = lists:split(MaxNChunks, Chunks),
-                       lists:foreach(fun(C) ->
-                                             send_chunk_request(FHash, C)
-                                     end,
-                                     Send),
-                       Rem;
-                   true ->
-                       lists:foreach(fun(C) ->
-                                             send_chunk_request(FHash, C)
-                                     end,
-                                     Chunks),
-                       []
-                end,
-    error_logger:info_msg("Remaining: ~p~n", [length(Remaining)]),
-    {noreply, State#state{remaining=Remaining}, Timeout};
+    lists:foreach(fun(C) ->
+                          send_chunk_request(FHash, C)
+                  end,
+                  Chunks),
+    {noreply, State#state{remaining=[]}, Timeout};
 handle_info(Info, #state{timeout=Timeout} = State) ->
     error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n",
                              [?MODULE_STRING,

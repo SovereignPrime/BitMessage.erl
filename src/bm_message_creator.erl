@@ -33,7 +33,8 @@ create_message(Command, Payload) ->
       Stream :: non_neg_integer(),
       Payload :: binary().
 create_obj(Type, Version, Stream, Payload) ->
-    Time = bm_types:timestamp() + 28 * 24 * 60 * 60,
+    MessageTTL = application:get_env(bitmessage, message_ttl, 2419200),
+    Time = bm_types:timestamp() + MessageTTL,
     create_obj(Type, Version, Stream, Time, Payload).
 
 -spec create_obj(Type, Version, Stream, Time, Payload) -> binary()    % {{{1 ???
@@ -231,7 +232,9 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
       ChunkHash :: binary().
 create_getchunk(FileHash, ChunkHash) ->
     Payload = <<FileHash:64/bytes, ChunkHash:64/bytes>>,
-    Obj = create_obj(?GETFILECHUNK, 1, 1, Payload),
+    FileChunkTTL = application:get_env(bitmessage, filechunk_ttl, 3600),
+    Time = bm_types:timestamp() + FileChunkTTL,
+    Obj = create_obj(?GETFILECHUNK, 1, 1, Payload, Time),
     save_obj(Obj).
 
 -spec save_obj(binary()) -> message_bin().  % {{{1
