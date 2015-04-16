@@ -6,7 +6,8 @@
 %% API functions  {{{1
 -export([
          start_link/3, 
-         send_chunk/3
+         send_chunk/3,
+         received_chunk/2
         ]).
 
 %% gen_server callbacks  {{{1
@@ -59,6 +60,12 @@ send_chunk(FileHash, ChunkHash, Callback) ->
            encode_filechunk(FileHash, ChunkHash, Callback)
     end.
 
+-spec received_chunk(FileHash, ChunkHash) -> ok when  % {{{2
+      FileHash :: binary(),
+      ChunkHash :: binary().
+received_chunk(FileHash, ChunkHash) -> 
+    gen_server:cast(?MODULE, {received, FileHash, ChunkHash}).
+
 %%%===================================================================
 %%% gen_server callbacks {{{1
 %%%===================================================================
@@ -76,27 +83,24 @@ send_chunk(FileHash, ChunkHash, Callback) ->
 %%--------------------------------------------------------------------
 init([Hash, Path, Callback]) ->   % {{{2
     Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
-    [
-     #bm_file{
-        key={_Pub, Priv},
-        chunks=Chunks
-       } = File] = bm_db:lookup(bm_file, Hash),
-    NFile = File#bm_file{
-              path=Path,
-              status=downloading
-             },
-    bm_db:insert(bm_file, [NFile]),
-    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
-     {ok,
-      #state{
-         path=Path,
-         file=NFile,
-         chunks=Chunks,
-         remaining=[],
-         callback=Callback,
-         timeout=Timeout
-        }, 
-      0}.
+    case bm_db:lookup(bm_file, Hash) of
+        [#bm_file{
+            status=downloaded,
+            name=Name,
+            path=OPath
+           } = File] ->
+            FPath = OPath ++ "/" ++ Name,
+            IsFile = file:is_file(FPath),
+            if IsFile ->
+                   file:copy(FPath, Path ++ "/" ++ Name),
+                   Callback:downloaded(Hash),
+                   {stop, normal};
+               true ->
+                   download(Path, File, Callback, Timeout)
+            end;
+        [File] ->
+            download(Path, File, Callback, Timeout)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -126,8 +130,31 @@ handle_call(_Request, _From, State) ->   % {{{2
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({received, FileHash, ChunkHash},   % {{{2
+            #state{
+               chunks=Chunks,
+               timeout=Timeout
+              }=State) ->
+    case lists:foldl(fun(CID, Acc) ->
+                             case bm_db:lookup(bm_filechunk, CID) of
+                                 [] -> 
+                                     Acc + 1;
+                                 [#bm_filechunk{data=undefined,
+                                                hash=CID}] -> 
+                                     Acc + 1;
+                                 [_] ->
+                                     Acc
+                             end
+                     end,
+                     0,
+                     Chunks) of
+        0 -> 
+            {noreply, State, 0};
+        _ ->
+            {noreply, State, Timeout}
+    end;
 handle_cast(_Msg, State) ->   % {{{2
-    {noreply, State}.
+    {noreply, State, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -317,3 +344,31 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                    ok
             end
     end.
+
+-spec download(Path, File, Callback, Timeout) -> {ok, #state{}, Timeout} when
+      Path :: string(),
+      File :: #bm_file{},
+      Callback :: module(),
+      Timeout :: non_neg_integer().
+download(Path, #bm_file{
+                key={_Pub, Priv},
+                chunks=Chunks
+               } = File,
+         Callback,
+        Timeout) ->
+    NFile = File#bm_file{
+              path=Path,
+              status=downloading
+             },
+    bm_db:insert(bm_file, [NFile]),
+    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
+    {ok,
+     #state{
+        path=Path,
+        file=NFile,
+        chunks=Chunks,
+        remaining=[],
+        callback=Callback,
+        timeout=Timeout
+       }, 
+     0}.
