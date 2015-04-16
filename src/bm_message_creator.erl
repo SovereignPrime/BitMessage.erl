@@ -234,7 +234,7 @@ create_getchunk(FileHash, ChunkHash) ->
     Payload = <<FileHash:64/bytes, ChunkHash:64/bytes>>,
     FileChunkTTL = application:get_env(bitmessage, filechunk_ttl, 3600),
     Time = bm_types:timestamp() + FileChunkTTL,
-    Obj = create_obj(?GETFILECHUNK, 1, 1, Payload, Time),
+    Obj = create_obj(?GETFILECHUNK, 1, 1, Time, Payload),
     save_obj(Obj).
 
 -spec save_obj(binary()) -> message_bin().  % {{{1
