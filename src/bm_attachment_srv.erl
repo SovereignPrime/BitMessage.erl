@@ -354,11 +354,11 @@ download(Path, #bm_file{
       ChunkHash :: binary(),
       Callback :: module().
 create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
-            [ #bm_file{path=Path,
-                       name=Name,
-                       chunks=ChunkHashes} ] = bm_db:lookup(bm_file,
-                                                            FileHash),
-
+    case bm_db:lookup(bm_file,
+                      FileHash) of
+        [ #bm_file{path=Path,
+                   name=Name,
+                   chunks=ChunkHashes} ] ->
             ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
             IsFile = filelib:is_file(Path),
             if IsFile ->
@@ -389,4 +389,6 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                    end;
                true -> 
                    ok
-            end.
+            end;
+        [] -> ok
+    end.
