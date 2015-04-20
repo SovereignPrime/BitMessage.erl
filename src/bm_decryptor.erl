@@ -479,6 +479,7 @@ payload(timeout,  % {{{2
                                           data=Chunk
                                          }]),
             error_logger:info_msg("Saving FileChunk ~p ~n", [FC]),
+            bm_attachment_srv:received_chunk(FileHash, ChunkHash),
             Callback:filechunk_received(FileHash, ChunkHash),
             {next_state,
              inventory,

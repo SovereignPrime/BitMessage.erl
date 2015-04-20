@@ -239,23 +239,16 @@ test_filechunk_query(_Config) -> % {{{2
                         {ok,
                         #message{attachments=[Att]}} = bitmessage:get_message(Hash),
                         mnesia:clear_table(bm_filechunk),
-                        [File] = bm_db:lookup(bm_file, Att),
-                        mnesia:dirty_write(File#bm_file{status=received}),
-                        bitmessage:get_attachment(Att, File#bm_file.path)
+                        bitmessage:get_attachment(Att, "../../test")
                 end),
     meck:expect(test,
                 downloaded,
                 fun(_) ->
                         ok
                 end),
-    meck:expect(timer,
-                sleep,
-                fun(_) ->
-                        ok
-                end),
     meck:expect(test,
                 filechunk_sent,
-                fun(FileHash, ChunkHash) ->
+                fun(_, _) ->
                         ok
                 end),
     meck:expect(bm_sender,
@@ -263,22 +256,23 @@ test_filechunk_query(_Config) -> % {{{2
                 fun(<<_:25/bytes,
                       Inv:32/bytes>>
                       ) ->
-                        case bm_db:lookup(inventory_tmp, Inv) of
-                            [_] ->
-                                ok;
-                            [] ->
-                                case bm_db:lookup(inventory, Inv) of
-                                    [#inventory{
-                                        type=Type,
-                                        payload = Payload
-                                       } = Inventory]  when Type == ?FILECHUNK; Type == ?GETFILECHUNK -> 
-                                        mnesia:dirty_delete(inventory, Inv),
-                                        bm_db:insert(inventory_tmp, [Inventory]),
-                                        bm_decryptor:process_object(Payload);
-                                    _I ->
-                                        ok 
-                                end
-                        end
+                        case bm_db:lookup(inventory, Inv) of
+                            [#inventory{
+                                type=Type,
+                                payload = <<_:22/bytes, 
+                                            FileHash:64/bytes,
+                                            ChunkHash:64/bytes>>
+                               } = Inventory]  when Type == ?GETFILECHUNK -> 
+                                bm_attachment_srv:send_chunk(FileHash,
+                                                             ChunkHash,
+                                                             test),
+                                bm_attachment_srv:received_chunk(FileHash, ChunkHash);
+                            [I] ->
+                                Size = mnesia:table_info(bm_filechunk, size),
+                                ok
+                        end;
+                   (B) ->
+                        error_logger:info_msg("Size: ~p~n", [size(B)])
                 end),
 
 
@@ -291,7 +285,9 @@ test_filechunk_query(_Config) -> % {{{2
     meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 1600000),
     ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
-    ?assertEqual(66, meck:num_calls(bm_sender, send_broadcast, '_')).
+    ?assertEqual(131, meck:num_calls(bm_sender, send_broadcast, '_')),
+    ?assertEqual(65, meck:num_calls(test, filechunk_sent, '_')),
+    ?assert(meck:called(test, downloaded, '_')).
 
 test_filechunk_send() ->  % {{{2
     [].

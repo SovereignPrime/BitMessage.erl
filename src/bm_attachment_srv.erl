@@ -64,6 +64,7 @@ send_chunk(FileHash, ChunkHash, Callback) ->
       FileHash :: binary(),
       ChunkHash :: binary().
 received_chunk(FileHash, ChunkHash) -> 
+    error_logger:info_msg("Tst"),
     gen_server:cast(?MODULE, {received, FileHash, ChunkHash}).
 
 %%%===================================================================
@@ -92,10 +93,12 @@ init([Hash, Path, Callback]) ->   % {{{2
             FPath = OPath ++ "/" ++ Name,
             IsFile = file:is_file(FPath),
             if IsFile ->
+                   error_logger:info_msg("File ~p is here", [FPath]),
                    file:copy(FPath, Path ++ "/" ++ Name),
                    Callback:downloaded(Hash),
                    {stop, normal};
                true ->
+                   error_logger:info_msg("File ~p is not here", [Name]),
                    download(Path, File, Callback, Timeout)
             end;
         [File] ->
@@ -135,6 +138,7 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                chunks=Chunks,
                timeout=Timeout
               }=State) ->
+    error_logger:info_msg("Chunks received"),
     case lists:foldl(fun(CID, Acc) ->
                              case bm_db:lookup(bm_filechunk, CID) of
                                  [] -> 
@@ -149,8 +153,10 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                      0,
                      Chunks) of
         0 -> 
+            error_logger:info_msg("~p chunks remaining", [0]),
             {noreply, State, 0};
-        _ ->
+        Size ->
+            error_logger:info_msg("~p chunks remaining", [Size]),
             {noreply, State, Timeout}
     end;
 handle_cast(_Msg, State) ->   % {{{2
@@ -200,7 +206,6 @@ handle_info(timeout,   % {{{2
                timeout=Timeout,
                remaining=Chunks
                   } = State) ->
-    MaxNChunks = application:get_env(bitmessage, chunk_requests_at_once, 1024),
     lists:foreach(fun(C) ->
                           send_chunk_request(FHash, C)
                   end,
@@ -304,9 +309,51 @@ is_filchunk_in_network(ChunkHash) ->
       Callback :: module().
 encode_filechunk(FileHash, ChunkHash, Callback) ->
     case bm_db:lookup(bm_filechunk, ChunkHash) of
-        [FileChunkObj] ->
-            FileChunkObj;
+        [#bm_filechunk{data=undefined}] ->
+            create_filechunk_from_file(FileHash, ChunkHash, Callback);
         [] ->
+            create_filechunk_from_file(FileHash, ChunkHash, Callback);
+        [#bm_filechunk{data=Data, 
+                       payload=Payload}] when Data /= undefined, 
+                                              Payload /= undefined ->
+            ok
+    end.
+
+-spec download(Path, File, Callback, Timeout) -> {ok, #state{}, Timeout} when  % {{{2
+      Path :: string(),
+      File :: #bm_file{},
+      Callback :: module(),
+      Timeout :: non_neg_integer().
+download(Path, #bm_file{
+                  name=Name,
+                  key={_Pub, Priv},
+                  chunks=Chunks
+               } = File,
+         Callback,
+         Timeout) ->
+    NFile = File#bm_file{
+              path=Path,
+              status=downloading
+             },
+    bm_db:insert(bm_file, [NFile]),
+    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
+    error_logger:info_msg("Starting file ~p download", [Name]),
+    {ok,
+     #state{
+        path=Path,
+        file=NFile,
+        chunks=Chunks,
+        remaining=[],
+        callback=Callback,
+        timeout=Timeout
+       }, 
+     0}.
+
+-spec create_filechunk_from_file(FileHash, ChunkHash, Callback) -> ok when  % {{{2
+      FileHash :: binary(),
+      ChunkHash :: binary(),
+      Callback :: module().
+create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
             [ #bm_file{path=Path,
                        name=Name,
                        chunks=ChunkHashes} ] = bm_db:lookup(bm_file,
@@ -342,33 +389,4 @@ encode_filechunk(FileHash, ChunkHash, Callback) ->
                    end;
                true -> 
                    ok
-            end
-    end.
-
--spec download(Path, File, Callback, Timeout) -> {ok, #state{}, Timeout} when
-      Path :: string(),
-      File :: #bm_file{},
-      Callback :: module(),
-      Timeout :: non_neg_integer().
-download(Path, #bm_file{
-                key={_Pub, Priv},
-                chunks=Chunks
-               } = File,
-         Callback,
-        Timeout) ->
-    NFile = File#bm_file{
-              path=Path,
-              status=downloading
-             },
-    bm_db:insert(bm_file, [NFile]),
-    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
-    {ok,
-     #state{
-        path=Path,
-        file=NFile,
-        chunks=Chunks,
-        remaining=[],
-        callback=Callback,
-        timeout=Timeout
-       }, 
-     0}.
+            end.
