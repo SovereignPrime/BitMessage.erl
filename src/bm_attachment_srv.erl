@@ -91,7 +91,7 @@ init([Hash, Path, Callback]) ->   % {{{2
             path=OPath
            } = File] ->
             FPath = OPath ++ "/" ++ Name,
-            IsFile = file:is_file(FPath),
+            IsFile = filelib:is_file(FPath),
             if IsFile ->
                    error_logger:info_msg("File ~p is here", [FPath]),
                    file:copy(FPath, Path ++ "/" ++ Name),
