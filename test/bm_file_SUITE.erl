@@ -239,7 +239,7 @@ test_filechunk_query(_Config) -> % {{{2
                         {ok,
                         #message{attachments=[Att]}} = bitmessage:get_message(Hash),
                         mnesia:clear_table(bm_filechunk),
-                        bitmessage:get_attachment(Att, "../../test")
+                        bitmessage:get_attachment(Att, "../../test/data")
                 end),
     meck:expect(test,
                 downloaded,
