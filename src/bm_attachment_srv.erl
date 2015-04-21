@@ -64,7 +64,6 @@ send_chunk(FileHash, ChunkHash, Callback) ->
       FileHash :: binary(),
       ChunkHash :: binary().
 received_chunk(FileHash, ChunkHash) -> 
-    error_logger:info_msg("Tst"),
     gen_server:cast(?MODULE, {received, FileHash, ChunkHash}).
 
 %%%===================================================================
@@ -159,7 +158,8 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
             error_logger:info_msg("~p chunks remaining", [Size]),
             {noreply, State, Timeout}
     end;
-handle_cast(_Msg, State) ->   % {{{2
+handle_cast(Msg, State) ->   % {{{2
+    error_logger:warning_msg("Wrong msg ~p  received in ~p", [Msg, ?MODULE_STRING]),
     {noreply, State, 0}.
 
 %%--------------------------------------------------------------------
@@ -278,6 +278,7 @@ save_file(#bm_file{
 
     erl_tar:extract({binary, TarFile}, [compressed, {cwd, Path}]),
     FPath = Path ++ "/" ++ Name,
+    file:write_file(FPath ++ ".tar.gz", TarFile),
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
     error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, size(TarFile)]),
@@ -358,11 +359,10 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                       FileHash) of
         [ #bm_file{path=Path,
                    name=Name,
-                   chunks=ChunkHashes,
-                  status=Status} ] when Status == download; 
-                                        Status == uploaded ->
+                   chunks=ChunkHashes
+                  } ] ->
             ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
-            IsFile = filelib:is_file(Path),
+            IsFile = filelib:is_file(Path ++ "/" ++ Name),
             if IsFile ->
                    Location = length(lists:takewhile(fun(CH) ->
                                                              CH /= ChunkHash 

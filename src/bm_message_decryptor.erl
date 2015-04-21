@@ -125,7 +125,7 @@ handle_call(_Request, _From, State) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(term(), #privkey{}) -> {noreply, #privkey{}}.  % {{{1
-handle_cast(Msg, State) ->  % {{{1
+handle_cast(Msg, State) ->  % {{{2
     error_logger:warning_msg("Decryptor wrong cast ~p~n ~p~n", [Msg, State]),
     {noreply, State}.
 

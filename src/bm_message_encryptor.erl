@@ -705,7 +705,7 @@ process_attachment(Path) ->
                  hash=MercleRoot,
                  name=Name,
                  size=Size,
-                 path=Path,
+                 path=filename:dirname(Path),
                  chunks=ChunksHash,
                  key=Keys,
                  status=uploaded,
