@@ -39,7 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Hash, Path, Callback) ->   % {{{2
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Hash, Path, Callback], []).
+    gen_server:start_link(?MODULE, [Hash, Path, Callback], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,7 +64,9 @@ send_chunk(FileHash, ChunkHash, Callback) ->
       FileHash :: binary(),
       ChunkHash :: binary().
 received_chunk(FileHash, ChunkHash) -> 
-    gen_server:cast(?MODULE, {received, FileHash, ChunkHash}).
+    Pids = supervisor:which_children(bm_attachment_sup),
+    error_logger:info_msg("Chunks received for pids ~p", [Pids]),
+    send_all(Pids, {received, FileHash, ChunkHash}).
 
 %%%===================================================================
 %%% gen_server callbacks {{{1
@@ -138,25 +140,30 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                timeout=Timeout
               }=State) ->
     error_logger:info_msg("Chunks received"),
-    case lists:foldl(fun(CID, Acc) ->
-                             case bm_db:lookup(bm_filechunk, CID) of
-                                 [] -> 
-                                     Acc + 1;
-                                 [#bm_filechunk{data=undefined,
-                                                hash=CID}] -> 
-                                     Acc + 1;
-                                 [_] ->
-                                     Acc
-                             end
-                     end,
-                     0,
-                     Chunks) of
-        0 -> 
-            error_logger:info_msg("~p chunks remaining", [0]),
-            {noreply, State, 0};
-        Size ->
-            error_logger:info_msg("~p chunks remaining", [Size]),
-            {noreply, State, Timeout}
+    IsMy = lists:member(ChunkHash, Chunks),
+    if IsMy ->
+           case lists:foldl(fun(CID, Acc) ->
+                                    case bm_db:lookup(bm_filechunk, CID) of
+                                        [] -> 
+                                            Acc + 1;
+                                        [#bm_filechunk{data=undefined,
+                                                       hash=CID}] -> 
+                                            Acc + 1;
+                                        [_] ->
+                                            Acc
+                                    end
+                            end,
+                            0,
+                            Chunks) of
+               0 -> 
+                   error_logger:info_msg("~p chunks remaining", [0]),
+                   {noreply, State, 0};
+               Size ->
+                   error_logger:info_msg("~p chunks remaining", [Size]),
+                   {noreply, State, Timeout}
+           end;
+       true ->
+           {noreply, State, Timeout}
     end;
 handle_cast(Msg, State) ->   % {{{2
     error_logger:warning_msg("Wrong msg ~p  received in ~p", [Msg, ?MODULE_STRING]),
@@ -394,3 +401,14 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
             end;
         _ -> ok
     end.
+
+-spec send_all(PIDs, Msg) -> ok when % {{{2
+      PIDs :: [pid()],
+      Msg :: term().
+send_all([], _Msg) ->
+    ok;
+send_all([Pid|Rest], Msg) ->
+    {_, P, _, _} = Pid,
+    error_logger:info_msg("Sending to ~p (self ~p)msgh ~p", [P, self(), Msg]),
+    gen_server:cast(P, Msg),
+    send_all(Rest, Msg).

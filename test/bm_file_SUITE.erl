@@ -291,6 +291,7 @@ test_filechunk_send() ->  % {{{2
     [].
 
 test_filechunk_send(_Config) -> % {{{2
+    bm_attachment_sup:start_link(),
     {Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     File = #bm_file{
               hash = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
