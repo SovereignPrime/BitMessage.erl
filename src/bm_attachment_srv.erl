@@ -39,7 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Hash, Path, Callback) ->   % {{{2
-    gen_server:start_link(?MODULE, [Hash, Path, Callback], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Hash, Path, Callback], []).
 
 %%--------------------------------------------------------------------
 %% @doc

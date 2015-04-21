@@ -226,8 +226,6 @@ test_filechunk_query() ->  % {{{2
     [].
 
 test_filechunk_query(_Config) -> % {{{2
-    application:set_env(bitmessage, chunk_requests_at_once, 12),
-    application:set_env(bitmessage, chunk_timeout, 1),
     bm_attachment_sup:start_link(),
     [#privkey{hash=RIPE,
               public=Pub,
@@ -302,7 +300,7 @@ test_filechunk_send(_Config) -> % {{{2
                        37,171,111,21,73,199>>,
               name= "file.txt",
               size=90,
-              path="../../test/data/file.txt",
+              path="../../test/data",
               chunks=[<<24,157,228,172,234,149,216,48,114,205,82,28,220,
                         91,122,175,32,204,135,55,206,74,204,174,13,144,
                         55,80,144,113,94,149,198,114,48,173,79,104,214,
