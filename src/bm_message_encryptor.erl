@@ -477,7 +477,7 @@ encrypt_message(timeout,
 
 %% Default {{{2
 encrypt_message(Event, State) ->
-    error_logger:warning_msg("Encrypting wrong event ~p~n", [Event]),
+    error_logger:warning_msg("Encrypting wrong event ~p state ~p~n", [Event, State]),
     {next_state, encrypt_message, State, 0}.
 
 %%--------------------------------------------------------------------

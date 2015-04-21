@@ -358,7 +358,9 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                       FileHash) of
         [ #bm_file{path=Path,
                    name=Name,
-                   chunks=ChunkHashes} ] ->
+                   chunks=ChunkHashes,
+                  status=Status} ] when Status == download; 
+                                        Status == uploaded ->
             ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
             IsFile = filelib:is_file(Path),
             if IsFile ->
@@ -390,5 +392,5 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                true -> 
                    ok
             end;
-        [] -> ok
+        _ -> ok
     end.
