@@ -285,7 +285,7 @@ save_file(#bm_file{
 
     erl_tar:extract({binary, TarFile}, [compressed, {cwd, Path}]),
     FPath = Path ++ "/" ++ Name,
-    file:write_file(FPath ++ ".tar.gz", TarFile),
+    file:write_file(FPath ++ ".tar.gz", TarFile, [binary]),
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
     error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, size(TarFile)]),
@@ -369,7 +369,8 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                    chunks=ChunkHashes
                   } ] ->
             ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
-            IsFile = filelib:is_file(Path ++ "/" ++ Name),
+            FPath = Path ++ "/" ++ Name,
+            IsFile = filelib:is_file(FPath),
             if IsFile ->
                    Location = length(lists:takewhile(fun(CH) ->
                                                              CH /= ChunkHash 
@@ -378,7 +379,7 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
                    TarPath = Path  ++ ".rz.tar.gz",
                    erl_tar:create(TarPath,
-                                  [Path],
+                                  [FPath],
                                   [compressed]),
                    {ok, F} = file:open(TarPath, [binary, read]),
                    case file:pread(F, Location, ChunkSize) of
@@ -391,7 +392,7 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                                                              },
                                                            Callback),
                            file:close(F),
-                           file:delete(TarPath),
+                           %file:delete(TarPath),
                            ok;
                        _ ->
                            ok
