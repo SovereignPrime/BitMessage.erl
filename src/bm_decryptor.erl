@@ -471,14 +471,15 @@ payload(timeout,  % {{{2
 
             <<Chunk:Size/bytes, _/bytes>> = ChunkPadded,
             mnesia:dirty_delete(bm_filechunk, ChunkHash),
+            NewFC = FC#bm_filechunk{status=decrypted,
+                                    file=FileHash,
+                                    size=Size,
+                                    time=calendar:universal_time(),
+                                    data=Chunk
+                                   },
             bm_db:insert(bm_filechunk,
-                         [FC#bm_filechunk{status=decrypted,
-                                          file=FileHash,
-                                          size=Size,
-                                          time=calendar:universal_time(),
-                                          data=Chunk
-                                         }]),
-            error_logger:info_msg("Saving FileChunk ~p ~n", [FC]),
+                         [NewFC]),
+            error_logger:info_msg("Saving FileChunk ~p ~n", [NewFC]),
             bm_attachment_srv:received_chunk(FileHash, ChunkHash),
             Callback:filechunk_received(FileHash, ChunkHash),
             {next_state,
