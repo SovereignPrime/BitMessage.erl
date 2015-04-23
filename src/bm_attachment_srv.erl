@@ -379,7 +379,7 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
                    TarPath = Path  ++ ".rz.tar.gz",
                    erl_tar:create(TarPath,
-                                  [FPath],
+                                  [{Name, FPath}],
                                   [compressed]),
                    {ok, F} = file:open(TarPath, [binary, read]),
                    case file:pread(F, Location, ChunkSize) of
