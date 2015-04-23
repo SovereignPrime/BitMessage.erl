@@ -686,17 +686,13 @@ process_attachment(Path) ->
     erl_tar:create(TarPath, [Path], [compressed]),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
-    {ok, ChunksData} = file:pread(F,
-                                  lists:map(fun(L) ->
-                                                    {L, ChunkSize}
-                                            end, 
-                                            lists:seq(0,
-                                                      TarSize,
-                                                      ChunkSize))),
-    ChunksHash = lists:map(fun(C) ->
-                                   bm_auth:dual_sha(C)
-                           end,
-                           ChunksData),
+    ChunksHash = lists:map(fun(L) ->
+                                   {ok, Chunk} = file:pread(F, L, ChunkSize),
+                                   bm_auth:dual_sha(Chunk)
+                           end, 
+                           lists:seq(0,
+                                     TarSize,
+                                     ChunkSize)),
     MercleRoot = bm_auth:mercle_root(ChunksHash), %TODO
     {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     error_logger:info_msg("File: ~p, hash ~p~n", [Name, MercleRoot]),
