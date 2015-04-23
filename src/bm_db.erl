@@ -403,27 +403,16 @@ handle_cast({clear, Addr}, State) -> %  {{{1
                                       Invs = mnesia:select(inventory,
                                                            [
                                                             {#inventory{time='$1',
-                                                                        type='$2',
                                                                         _='_'},
                                                              [{'<',
                                                                '$1',
                                                                Time}],
                                                              ['$_']}
                                                            ]),
-                                      lists:foreach(fun(A) ->
-                                                            mnesia:delete_object(A)
-                                                    end, Invs),
-                                      PubKeys = mnesia:select(pubkey,
-                                                              [{#pubkey{time='$1',
-                                                                        _='_'},
-                                                                [{'<',
-                                                                  '$1',
-                                                                  Time}],
-                                                                ['$_']}]),
 
                                       lists:foreach(fun(A) ->
                                                             mnesia:delete_object(A)
-                                                    end, PubKeys);
+                                                    end, Invs);
                                   true ->
                                       ok
                                end

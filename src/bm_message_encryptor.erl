@@ -86,7 +86,7 @@ init([Message, Callback]) when is_record(Message, message) ->
 
 % For filechunks {{{2
 init([Message, Callback]) when is_record(Message, bm_filechunk) ->
-    TTL = application:get_env(bitmessage, filechunk_ttl, 15 * 60),
+    TTL = application:get_env(bitmessage, chunk_ttl, 900),
     Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
     #bm_filechunk{status=State} = Message,
     {ok,
