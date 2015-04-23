@@ -275,20 +275,21 @@ save_file(#bm_file{
              size=Size
             } = File,
           Path) ->
-    BChuncks = lists:map(fun(C) ->
-                                 [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
-                                                                         C),
-                                 BC
-                         end,
-                         Chunks),
-    TarFile = << <<D/bytes>> || D <- BChuncks>>,
-
-    erl_tar:extract({binary, TarFile}, [compressed, {cwd, Path}]),
     FPath = Path ++ "/" ++ Name,
-    file:write_file(FPath ++ ".tar.gz", TarFile, [binary]),
+    TarFile = FPath ++ ".rz.tar.gz",
+    {ok, F} = file:open(TarFile, [binary, append]),
+
+    lists:foreach(fun(C) ->
+                          [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
+                                                                  C),
+                          file:pwrite(F, BC)
+                  end,
+                  Chunks),
+
+    erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
-    error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, size(TarFile)]),
+    error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, filelib:file_size(TarFile)]),
     if RSiaze == Size,
        MercleRoot == Hash ->
             bm_db:insert(bm_file, [File#bm_file{
