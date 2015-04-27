@@ -95,10 +95,9 @@ clear(timeout,
     bm_db:clear(Addr),
     {atomic, Messages} = bm_db:ackselect(),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
-    Callback = bm_dispatcher:get_callback(),
     lists:foreach(fun(#message{hash=MID} = M) ->
                           bm_db:delete(message, MID),
-                          bm_encryptor_sup:add_encryptor(M, Callback)
+                          bm_encryptor_sup:add_encryptor(M)
                   end, Messages),
     {next_state, clear, State, Timeout * 1000};
 clear(_Event, #state{timeout=Timeout} = State) ->  % {{{1

@@ -6,7 +6,7 @@
 
 %% API
 -export([start_link/0]).
--export([add_encryptor/2]).
+-export([add_encryptor/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -34,9 +34,9 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec add_encryptor(#message{}, module()) -> supervisor:startchild_ret().  % {{{1
-add_encryptor(DMessage, Callback) ->
-    supervisor:start_child(?MODULE, [DMessage, Callback]).
+-spec add_encryptor(#message{}) -> supervisor:startchild_ret().  % {{{1
+add_encryptor(DMessage) ->
+    supervisor:start_child(?MODULE, [DMessage]).
 
 %%%===================================================================
 %%% Supervisor callbacks

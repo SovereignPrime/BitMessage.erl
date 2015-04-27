@@ -4,7 +4,7 @@
 
 -include("../include/bm.hrl").
 %% API
--export([start_link/2]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1, % {{{1
@@ -25,8 +25,7 @@
          message :: type_record(),
          pek :: binary(),
          psk :: binary(),
-         hash :: binary(),
-         callback :: module()
+         hash :: binary()
         }).
 
 %%%===================================================================
@@ -42,9 +41,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(DMessage, Callback) ->  % {{{1
+start_link(DMessage) ->  % {{{1
     io:format("~p~n", [DMessage]),
-    gen_fsm:start_link(?MODULE, [DMessage, Callback], []).
+    gen_fsm:start_link(?MODULE, [DMessage], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -73,27 +72,26 @@ pubkey(PubKey) ->
     Timeout :: non_neg_integer(),
     StateName :: atom().
 % For messages and broadcasts {{{2
-init([Message, Callback]) when is_record(Message, message) ->
+init([Message]) when is_record(Message, message) ->
     TTL = application:get_env(bitmessage, message_ttl, 86400 * 2),
     Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
     #message{status=State} = Message,
     {ok,
      payload,
      #state{
-        message=Message#message{time=Time},
-        callback=Callback},
+        message=Message#message{time=Time}
+       },
      0};
 
 % For filechunks {{{2
-init([Message, Callback]) when is_record(Message, bm_filechunk) ->
+init([Message]) when is_record(Message, bm_filechunk) ->
     TTL = application:get_env(bitmessage, chunk_ttl, 900),
     Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
     #bm_filechunk{status=State} = Message,
     {ok,
      payload,
      #state{
-        message=Message#bm_filechunk{time=Time},
-        callback=Callback},
+        message=Message#bm_filechunk{time=Time}},
      0}.
 
 %%--------------------------------------------------------------------
@@ -123,8 +121,7 @@ payload(timeout,
                              text=Text,
                              type=Type,
                              folder=sent,
-                             status=Status}=Message,
-           callback=Callback
+                             status=Status}=Message
      }) when 
       Status == encrypt_message;
       Status == wait_pubkey ->
@@ -133,8 +130,7 @@ payload(timeout,
      wait_pubkey,
      #state{type=Type,
             message=Message,
-            hash=Ripe,
-            callback=Callback},
+            hash=Ripe},
      0};
 
 %% Init for new and resending messages  {{{2
@@ -150,8 +146,7 @@ payload(timeout,
                             status=Status,
                             folder=sent,
                             attachments=Attachments,
-                            type=?MSG} = Message,
-           callback=Callback
+                            type=?MSG} = Message
           } = State) when 
       Status == new;
       Status == ackwait->
@@ -234,8 +229,7 @@ payload(timeout,
      wait_pubkey,
      #state{type=?MSG,
             hash=Ripe,
-            message=NMessage,
-            callback=Callback},
+            message=NMessage},
      0};
 
 % Init for broadcasts  {{{2
@@ -250,8 +244,7 @@ payload(timeout,
                             status=new,
                             folder=sent,
                             attachments=Attachments,
-                            type=?BROADCAST} = Message,
-           callback=Callback
+                            type=?BROADCAST} = Message
           }) ->
 
     error_logger:info_msg("Encrypting broadcast: ~p~n", [Subject]),
@@ -327,8 +320,7 @@ payload(timeout,
      encrypt_message,
      #state{type=?BROADCAST,
             message=NMessage,
-            pek=BroadcastEK,
-            callback=Callback},
+            pek=BroadcastEK},
      0};
 
 % Init for filechunk  {{{2
@@ -339,8 +331,7 @@ payload(timeout,
                       size=Size,
                       data=Data,
                       file=FileHash
-                     } = Message,
-           callback=Callback
+                     } = Message
           }) ->
 
     error_logger:info_msg("Encrypting filechunk: ~p~n", [Hash]),
@@ -367,8 +358,7 @@ payload(timeout,
      encrypt_message,
      #state{type=?FILECHUNK,
             message=NMessage,
-            pek=PEK,
-            callback=Callback},
+            pek=PEK},
      0}.
 %%--------------------------------------------------------------------
 %% @private
@@ -500,7 +490,6 @@ encrypt_message(Event, State) ->
 %% Work cycle for message and broadcast {{{2
 make_inv(timeout,
          #state{type=Type,
-                callback=Callback,
                 message= #message{hash=MID,
                                   payload = Payload,
                                   to=To,
@@ -545,13 +534,12 @@ make_inv(timeout,
                            To
                           ]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    Callback:sent(Hash),
+    bitmessage:sent(Hash),
     {stop, normal, State};
 
 %% Work cycle for filechunk {{{2
 make_inv(timeout,
          #state{type=?FILECHUNK,
-                callback=Callback,
                 message= #bm_filechunk{hash=ChunksHash,
                                        payload=Payload,
                                        file=FileHash,
@@ -580,7 +568,7 @@ make_inv(timeout,
                            bm_types:binary_to_hexstring(Hash)
                           ]),
     bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    Callback:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
+    bitmessage:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
     {stop, normal, State};
 %% Default {{{2
 make_inv(_Event, State) ->
