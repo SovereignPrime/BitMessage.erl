@@ -59,14 +59,10 @@ end_per_group(_GroupName, _Config) ->  % {{{2
 
 init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:new(test,[non_strict]),
-    meck:new(bm_dispatcher,[]),
     meck:expect(test, connected, fun(_) ->
                                          ok
                                  end),
-    meck:expect(bm_dispatcher, get_callback, fun() ->
-                                                     test
-                                             end),
-    bm_sender:start_link(test),
+    bm_sender:start_link(),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2

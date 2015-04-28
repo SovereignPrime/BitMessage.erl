@@ -132,9 +132,8 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                },
     bm_db:insert(pubkey, 
                  [PubKey]),
-    meck:new(bm_dispatcher, [passthrough]),
     bm_decryptor_sup:start_link(),
-    bm_dispatcher:start_link(),
+    bitmessage:start_link(test),
     bm_encryptor_sup:start_link(),
     meck:new(bm_pow),
     meck:expect(bm_pow, make_pow, fun(Payload) ->
@@ -146,8 +145,6 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:new(bm_sender, [no_link]),
     meck:new(test, [non_strict]),
     meck:new(timer, [unstick, passthrough]),
-    bm_dispatcher:register_receiver(test),
-    bm_decryptor:callback(test),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2

@@ -116,7 +116,6 @@ init_per_testcase(TestCase, Config) ->  % {{{2
 
     meck:new(bm_sender),
     meck:new(bm_reciever, [passthrough]),
-    meck:new(bm_dispatcher, [passthrough]),
     meck:new(bm_pow, [passthrough]),
     meck:expect(bm_sender, send_broadcast, fun(_) ->
                                                    ok

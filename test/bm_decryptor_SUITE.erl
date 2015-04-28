@@ -55,7 +55,6 @@ end_per_group(_GroupName, _Config) -> % {{{2
 
 init_per_testcase(_TestCase, Config) -> % {{{2
     application:start(crypto),
-    meck:new(bm_dispatcher),
     meck:new(bm_pow),
     meck:new(test, [non_strict]),
     Config.
@@ -102,13 +101,7 @@ new_decrypt_test(_Config) ->  % {{{2
                        107,196,7,112,117,140,47,232,12,201,156,138>>},
     {ok, PID} = bm_message_decryptor:start_link(PK),
     {ok, MSG} = file:read_file("../../test/data/msg5.bin"),
-    %meck:expect(bm_dispatcher,
-    %            arrived,
-    %            fun(M,
-    %                <<"test">>,
-    %                _) ->
-    %                    io:format("Message: ~p~n", [M]) 
-    %            end),
+
     {decrypted,
      <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>,
      <<4,1,0,0,0,1,27,216,141,78,224,205,94,40,84,186,

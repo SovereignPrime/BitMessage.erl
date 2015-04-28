@@ -31,7 +31,7 @@ init([]) ->
                ?CHILD(bm_pow, worker),
                ?CHILD(bm_decryptor_sup, supervisor),
                ?CHILD(bm_encryptor_sup, supervisor),
-               ?CHILD(bm_dispatcher, worker),
+               ?CHILD(bitmessage, worker),
                ?CHILD(bm_peer_sup, supervisor),
                ?CHILD(bm_attachment_sup, supervisor),
                ?CHILD(bm_sender, worker),

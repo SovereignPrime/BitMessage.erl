@@ -13,7 +13,7 @@
          terminate/2,
          code_change/3]).
 -export([
-    generate_random_address/4
+    generate_random_address/3
     ]).
 
 %%%===================================================================
@@ -36,22 +36,19 @@ start_link() ->  % {{{1
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec generate_random_address(Label, Stream, EighteenthByteRipe, Callback) -> ok when  % {{{1
+-spec generate_random_address(Label, Stream, EighteenthByteRipe) -> ok when  % {{{1
       Label :: reference(),
       Stream :: integer(),
-      EighteenthByteRipe :: boolean(),
-      Callback :: module().
+      EighteenthByteRipe :: boolean().
 generate_random_address(Label,
                         Stream,
-                        EighteenthByteRipe,
-                        Callback) ->
+                        EighteenthByteRipe) ->
     gen_server:cast(?MODULE,
                     {generate,
                      random,
                      Label,
                      Stream,
-                     EighteenthByteRipe,
-                     Callback}).
+                     EighteenthByteRipe}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -100,20 +97,19 @@ handle_call(_Request, _From, State) ->  % {{{1
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({generate,
+handle_cast({generate,  % {{{1
              random,
              Label,
              Stream,
-             EighteenthByteRipe,
-             Callback},
-            State) ->  % {{{1
+             EighteenthByteRipe},
+            State) ->
     PK = generate_keys(Label,
                        Stream,
                        EighteenthByteRipe),
     bm_db:insert(privkey, [PK]),
     bm_decryptor_sup:add_decryptor(PK),
     error_logger:info_msg("Address ~p ready~n",[PK]),
-    Callback:key_ready(PK#privkey.address),
+    bitmessage:key_ready(PK#privkey.address),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

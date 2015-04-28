@@ -5,8 +5,8 @@
 
 %% API functions  {{{1
 -export([
-         start_link/3, 
-         send_chunk/3,
+         start_link/2, 
+         send_chunk/2,
          received_chunk/2
         ]).
 
@@ -38,26 +38,25 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Hash, Path, Callback) ->   % {{{2
-    gen_server:start_link(?MODULE, [Hash, Path, Callback], []).
+start_link(Hash, Path) ->   % {{{2
+    gen_server:start_link(?MODULE, [Hash, Path], []).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends filechunk to network
 %%
 %%--------------------------------------------------------------------
--spec send_chunk(FileHash, ChunkHash, Callback) -> ok when  % {{{2
+-spec send_chunk(FileHash, ChunkHash) -> ok when  % {{{2
       FileHash :: binary(),
-      ChunkHash :: binary(),
-      Callback :: module().
-send_chunk(FileHash, ChunkHash, Callback) ->
+      ChunkHash :: binary().
+send_chunk(FileHash, ChunkHash) ->
     Timeout = crypto:rand_uniform(0, 300),
     timer:sleep(Timeout),
     InNetwork = is_filchunk_in_network(ChunkHash),
     if InNetwork ->
            ok;
        true ->
-           encode_filechunk(FileHash, ChunkHash, Callback)
+           encode_filechunk(FileHash, ChunkHash)
     end.
 
 -spec received_chunk(FileHash, ChunkHash) -> ok when  % {{{2
@@ -83,7 +82,7 @@ received_chunk(FileHash, ChunkHash) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Hash, Path, Callback]) ->   % {{{2
+init([Hash, Path]) ->   % {{{2
     Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
     case bm_db:lookup(bm_file, Hash) of
         [#bm_file{
@@ -96,14 +95,14 @@ init([Hash, Path, Callback]) ->   % {{{2
             if IsFile ->
                    error_logger:info_msg("File ~p is here", [FPath]),
                    file:copy(FPath, Path ++ "/" ++ Name),
-                   Callback:downloaded(Hash),
+                   bitmessage:downloaded(Hash),
                    {stop, normal};
                true ->
                    error_logger:info_msg("File ~p is not here", [Name]),
-                   download(Path, File, Callback, Timeout)
+                   download(Path, File, Timeout)
             end;
         [File] ->
-            download(Path, File, Callback, Timeout)
+            download(Path, File, Timeout)
     end.
 
 %%--------------------------------------------------------------------
@@ -184,7 +183,6 @@ handle_info(timeout,   % {{{2
                file=File,
                path=Path,
                chunks=Chunks,
-               callback=Callback,
                remaining=[]
                   } = State) ->
     case lists:foldl(fun(CID, Acc) ->
@@ -202,7 +200,7 @@ handle_info(timeout,   % {{{2
                      Chunks) of
         [] ->
             save_file(File, Path),
-            Callback:downloaded(File#bm_file.hash),
+            bitmessage:downloaded(File#bm_file.hash),
             {stop, normal, State};
         Remaining ->
             {noreply, State#state{remaining=Remaining}, 0}
@@ -282,7 +280,7 @@ save_file(#bm_file{
     lists:foreach(fun(C) ->
                           [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
                                                                   C),
-                          file:pwrite(F, BC)
+                          file:write(F, BC)
                   end,
                   Chunks),
 
@@ -312,33 +310,30 @@ is_filchunk_in_network(ChunkHash) ->
               end,
               FileChunkObjs).
 
--spec encode_filechunk(FileHash, ChunkHash, Callback) -> ok when  % {{{2
+-spec encode_filechunk(FileHash, ChunkHash) -> ok when  % {{{2
       FileHash :: binary(),
-      ChunkHash :: binary(),
-      Callback :: module().
-encode_filechunk(FileHash, ChunkHash, Callback) ->
+      ChunkHash :: binary().
+encode_filechunk(FileHash, ChunkHash) ->
     case bm_db:lookup(bm_filechunk, ChunkHash) of
         [#bm_filechunk{data=undefined}] ->
-            create_filechunk_from_file(FileHash, ChunkHash, Callback);
+            create_filechunk_from_file(FileHash, ChunkHash);
         [] ->
-            create_filechunk_from_file(FileHash, ChunkHash, Callback);
+            create_filechunk_from_file(FileHash, ChunkHash);
         [#bm_filechunk{data=Data, 
                        payload=Payload}] when Data /= undefined, 
                                               Payload /= undefined ->
             ok
     end.
 
--spec download(Path, File, Callback, Timeout) -> {ok, #state{}, Timeout} when  % {{{2
+-spec download(Path, File, Timeout) -> {ok, #state{}, Timeout} when  % {{{2
       Path :: string(),
       File :: #bm_file{},
-      Callback :: module(),
       Timeout :: non_neg_integer().
 download(Path, #bm_file{
                   name=Name,
                   key={_Pub, Priv},
                   chunks=Chunks
                } = File,
-         Callback,
          Timeout) ->
     NFile = File#bm_file{
               path=Path,
@@ -353,16 +348,14 @@ download(Path, #bm_file{
         file=NFile,
         chunks=Chunks,
         remaining=[],
-        callback=Callback,
         timeout=Timeout
        }, 
      0}.
 
--spec create_filechunk_from_file(FileHash, ChunkHash, Callback) -> ok when  % {{{2
+-spec create_filechunk_from_file(FileHash, ChunkHash) -> ok when  % {{{2
       FileHash :: binary(),
-      ChunkHash :: binary(),
-      Callback :: module().
-create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
+      ChunkHash :: binary().
+create_filechunk_from_file(FileHash, ChunkHash) ->
     case bm_db:lookup(bm_file,
                       FileHash) of
         [ #bm_file{path=Path,
@@ -390,8 +383,7 @@ create_filechunk_from_file(FileHash, ChunkHash, Callback) ->
                                                               size=size(Data),
                                                               data=Data,
                                                               file=FileHash
-                                                             },
-                                                           Callback),
+                                                             }),
                            file:close(F),
                            %file:delete(TarPath),
                            ok;

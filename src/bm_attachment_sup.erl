@@ -8,7 +8,7 @@
 %% Supervisor callbacks
 -export([
          init/1,
-         download_attachment/3
+         download_attachment/2
         ]).
 
 -define(CHILD(Mod, Type, Args), {make_ref(), {Mod, start_link, Args},
@@ -28,11 +28,11 @@
 start_link() ->  % {{{2
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
--spec download_attachment(Hash, Path, module()) -> supervisor:startchild_ret() when  % {{{2
+-spec download_attachment(Hash, Path) -> supervisor:startchild_ret() when  % {{{2
       Hash :: binary(), 
       Path :: string().
-download_attachment(Hash, Path, Callback) ->
-    supervisor:start_child(?MODULE, [Hash, Path, Callback]).
+download_attachment(Hash, Path) ->
+    supervisor:start_child(?MODULE, [Hash, Path]).
 
 %%%===================================================================
 %%% Supervisor callbacks  {{{1

@@ -6,8 +6,7 @@
 %% API functions
 -export([
          start_link/1,
-         process_object/1,
-         callback/1
+         process_object/1
         ]).
 
 %% gen_fsm callbacks
@@ -32,7 +31,6 @@
          encrypted :: binary(),
          decrypted :: binary(),
          object :: object_type(),
-         callback=bitmessage :: module(),
          keys :: term()
         }).
 
@@ -61,16 +59,6 @@ start_link(Keys) ->% {{{2
       Payload :: binary().
 process_object(Payload) ->  % {{{2
     gen_fsm:send_event(?MODULE, Payload).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts object decoding
-%% @end
-%%--------------------------------------------------------------------
--spec callback(module()) -> ok.
-callback(Module) ->  % {{{2
-    error_logger:info_msg("Setting callback to ~p~n", [Module]),
-    gen_fsm:send_all_state_event(?MODULE, {callback, Module}).
 
 %%%===================================================================
 %%% gen_fsm callbacks  {{{1
@@ -301,11 +289,10 @@ preprocess(timeout,
            #state{
               object=?GETFILECHUNK,  % {{{3
               version=1,
-              encrypted=Data,
-              callback=Callback
+              encrypted=Data
              } = State) ->
     <<FileHash:64/bytes, ChunkHash:64/bytes>> = Data,
-    bm_attachment_srv:send_chunk(FileHash, ChunkHash, Callback),
+    bm_attachment_srv:send_chunk(FileHash, ChunkHash),
     {next_state,
      inventory,
      State};
@@ -357,7 +344,6 @@ payload(timeout,  % {{{2
            object=Type,
            payload=Payload,
            decrypted=Data,
-           callback=Callback,
            keys=#privkey{address=Address}
           } = State) when Type == ?MSG; Type == ?BROADCAST ->
     #address{version=AddrVer,
@@ -446,7 +432,7 @@ payload(timeout,  % {{{2
               true ->
                   ok
            end,
-           Callback:received(Hash),
+           bitmessage:received(Hash),
            {next_state,
             inventory,
             State};
@@ -459,8 +445,7 @@ payload(timeout,  % {{{2
         #state{
            object=?FILECHUNK,
            decrypted=Data,
-           keys=ChunkHash,
-           callback=Callback
+           keys=ChunkHash
           } = State) ->
     error_logger:info_msg("Saving FileChunk ~p ~n", [ChunkHash]),
     case bm_db:lookup(bm_filechunk, ChunkHash) of
@@ -481,7 +466,7 @@ payload(timeout,  % {{{2
                          [NewFC]),
             error_logger:info_msg("Saving FileChunk ~p ~n", [NewFC]),
             bm_attachment_srv:received_chunk(FileHash, ChunkHash),
-            Callback:filechunk_received(FileHash, ChunkHash),
+            bitmessage:filechunk_received(FileHash, ChunkHash),
             {next_state,
              inventory,
              State};
@@ -516,8 +501,6 @@ payload(Event, State) ->  % {{{2
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event({callback, Callback}, StateName, State) ->  % {{{2
-    {next_state, StateName, State#state{callback=Callback}, 0};
 handle_event(_Event, StateName, State) ->  % {{{2
     {next_state, StateName, State}.
 

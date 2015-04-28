@@ -40,7 +40,7 @@ $(PLTFILE):
 	- dialyzer --build_plt --apps $(APP_DEPS) $(PLT_INC) --output_plt $(PLTFILE)
 
 dialyzer: get-deps compile $(PLTFILE)
-	dialyzer --fullpath --plt $(PLTFILE) $(DIALYSER_INC) -pa $(CURDIR)/ebin --src src
+	dialyzer --plt $(PLTFILE) $(DIALYSER_INC) -pa $(CURDIR)/ebin --src src
 
 typer:
 	typer --plt $(PLTFILE) $(DIALYSER_INC) -r src
