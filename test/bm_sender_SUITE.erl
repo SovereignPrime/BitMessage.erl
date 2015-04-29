@@ -59,10 +59,19 @@ end_per_group(_GroupName, _Config) ->  % {{{2
 
 init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:new(test,[non_strict]),
-    meck:expect(test, connected, fun(_) ->
+    meck:new(bm_db,[non_strict]),
+    meck:expect(bm_db, wait_db, fun() ->
                                          ok
                                  end),
-    bm_sender:start_link(),
+    
+    meck:expect(bm_db, select, fun(_, _, _) ->
+                                         []
+                                 end),
+    meck:expect(bm_db, match, fun(_, _) ->
+                                         []
+                                 end),
+    bitmessage:start_link(test),
+    bm_sender:start_link(test),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->  % {{{2
@@ -77,6 +86,9 @@ register_peer_test() ->  % {{{2
     [].
 
 register_peer_test(_Config) ->  % {{{2
+    meck:expect(test, connected, fun(_) ->
+                                         ok
+                                 end),
     Socket = gen_tcp:listen(0, []),
     ok=bm_sender:register_peer(Socket),
     timer:sleep(1),

@@ -38,7 +38,7 @@
          code_change/3]).
 % }}}
 
--record(state, {callback=bitmessage}).
+-record(state, {callback}).
 
 %%%-----------------------------------------------------------------------------
 %%% Bitmessage behaviour callbacks {{{1
@@ -251,49 +251,51 @@ get_message(Hash) ->
 
 %%%--------------------------------------------------------------------
 %%%
-%%% Callbacks examples  % {{{1
+%%% Callback proxies  % {{{1
 %%%
 %%%--------------------------------------------------------------------
 -spec received(hash()) -> ok.  % {{{2
 received(Hash) ->
     error_logger:info_msg("Received message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
-    ok.
+    gen_server:cast(?MODULE, {event, received, [ Hash ]}).
 
 -spec sent(hash()) -> ok.  % {{{2
 sent(Hash) ->
     error_logger:info_msg("Sent message: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
-    ok.
+    gen_server:cast(?MODULE, {event, sent, [ Hash ]}).
 
 -spec downloaded(hash()) -> ok.  % {{{2
 downloaded(Hash) ->
     error_logger:info_msg("Attachment download complete: ~p~n",
                           [bm_types:binary_to_hexstring(Hash)]),
-    ok.
+    gen_server:cast(?MODULE, {event, downloaded, [ Hash ]}).
 
 -spec filechunk_sent(hash(), hash()) -> ok.  % {{{2
 filechunk_sent(Hash, ChunkHash) ->
     error_logger:info_msg("Filechunk ~p sent message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
-    ok.
+    gen_server:cast(?MODULE, {event, filechunk_sent, [ Hash, ChunkHash ]}).
 
 -spec filechunk_received(hash(), hash()) -> ok.  % {{{2
 filechunk_received(Hash, ChunkHash) ->
     error_logger:info_msg("Filechunk ~p received message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
-    ok.
+    gen_server:cast(?MODULE, {event, filechunk_received, [ Hash, ChunkHash ]}).
 
 -spec key_ready(binary()) -> ok.  % {{{2
 key_ready(Address) ->
     error_logger:info_msg("New address generated: ~p~n", [Address]),
-    ok.
+    gen_server:cast(?MODULE, {event, key_ready, [ Address ]}).
+
 -spec connected(non_neg_integer()) -> ok.  % {{{2
 connected(N) ->
     error_logger:info_msg("New peer. Number of peers: ~p~n",
                           [N]),
-    ok.
+    gen_server:cast(?MODULE, {event, connected, [ N ]}).
+
 -spec disconnected(non_neg_integer()) -> ok.  % {{{2
 disconnected(N) ->
     error_logger:info_msg("Peer disconnected. Number of peers: ~p~n",
                           [N]),
-    ok.
+    gen_server:cast(?MODULE, {event, disconnected, [ N ]}).
 
 %%%===================================================================
 %%% gen_server callbacks  {{{1
@@ -309,6 +311,7 @@ disconnected(N) ->
 -spec init([module()]) -> {ok, #state{}, non_neg_integer()}.  % {{{2
 init([Callback]) ->
     bm_db:wait_db(),
+    %%%%%{ok, #state{callback=Callback}}.
     {ok, #state{callback=Callback}, 0}.
 
 %%--------------------------------------------------------------------
@@ -325,8 +328,6 @@ init([Callback]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(callback, _From, #state{callback=Callback}=State) ->  % {{{2
-    {reply, Callback, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -353,6 +354,18 @@ handle_cast({register, Module}, State) ->  % {{{2
 handle_cast(generate_address, State) ->  % {{{2
     bm_address_generator:generate_random_address(make_ref(), 1, false),
     {noreply, State};
+handle_cast({event, Fun, Args}, #state{callback=undefined}=State) ->  % {{{2
+    error_logger:info_msg("Callback ~p:~p(~p) called", [undefined, Fun, Args]),
+    {noreply, State};
+handle_cast({event, Fun, Args}, #state{callback=Callback}=State) ->  % {{{2
+    error_logger:info_msg("Callback ~p:~p(~p) called", [Callback, Fun, Args]),
+    try
+        apply(Callback, Fun, Args),
+        {noreply, State}
+    catch
+        error:_ ->
+            {noreply, State}
+    end;
 handle_cast(Msg, State) ->  % {{{2
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
     {noreply, State}.

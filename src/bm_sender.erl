@@ -42,7 +42,7 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [gen_tcp], []).
 
--spec start_link(atom()) -> {ok, pid()} | ignore | {error, string()}.  % {{{1
+-spec start_link(module()) -> {ok, pid()} | ignore | {error, string()}.  % {{{1
 start_link(Transport) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Transport], []).
 
