@@ -259,8 +259,7 @@ test_filechunk_query(_Config) -> % {{{2
                                             ChunkHash:64/bytes>>
                                } = Inventory]  when Type == ?GETFILECHUNK -> 
                                 bm_attachment_srv:send_chunk(FileHash,
-                                                             ChunkHash,
-                                                             test),
+                                                             ChunkHash),
                                 bm_attachment_srv:received_chunk(FileHash, ChunkHash);
                             [I] ->
                                 Size = mnesia:table_info(bm_filechunk, size),
@@ -430,8 +429,7 @@ test_filechunk_send(_Config) -> % {{{2
     bm_db:insert(bm_file, [File]),
     bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
     bm_attachment_srv:send_chunk(File#bm_file.hash,
-                                 FileChunk#bm_filechunk.hash,
-                                test),
+                                 FileChunk#bm_filechunk.hash),
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
     meck:wait(test, filechunk_sent, '_', 1600),
