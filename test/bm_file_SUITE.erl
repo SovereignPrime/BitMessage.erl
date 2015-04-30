@@ -119,9 +119,7 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                199,26,157,195,242,80,118,233,214,48,34,233,216,242,255,66,31,96,
                150,160,96,91,164,135,152,253,29,219,139,66,127,204,133,150,91,37,
                36,239,206,203,192,107,196,7,112,117,140,47,232,12,201,156,138>>},
-    #privkey{hash=RIPE,
-             public=Pub,
-             address=Addr} = PrivKey,
+    #privkey{public=Pub} = PrivKey,
     bm_db:insert(privkey, [PrivKey]),
     <<PSK:64/bytes, PEK:64/bytes>> = Pub,
     Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
@@ -160,9 +158,7 @@ end_per_testcase(_TestCase, _Config) ->  % {{{2
 test_attachment_encode_decode() ->  % {{{2
     [].
 test_attachment_encode_decode(_Config) -> % {{{2
-    [#privkey{hash=RIPE,
-              public=Pub,
-              address=Addr}] =
+    [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
     meck:expect(test,
                 received,
@@ -224,9 +220,7 @@ test_filechunk_query() ->  % {{{2
 
 test_filechunk_query(_Config) -> % {{{2
     bm_attachment_sup:start_link(),
-    [#privkey{hash=RIPE,
-              public=Pub,
-              address=Addr}] =
+    [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
     meck:expect(test,
                 sent,
@@ -257,12 +251,11 @@ test_filechunk_query(_Config) -> % {{{2
                                 payload = <<_:22/bytes, 
                                             FileHash:64/bytes,
                                             ChunkHash:64/bytes>>
-                               } = Inventory]  when Type == ?GETFILECHUNK -> 
+                               }]  when Type == ?GETFILECHUNK -> 
                                 bm_attachment_srv:send_chunk(FileHash,
                                                              ChunkHash),
                                 bm_attachment_srv:received_chunk(FileHash, ChunkHash);
-                            [I] ->
-                                Size = mnesia:table_info(bm_filechunk, size),
+                            [_] ->
                                 ok
                         end;
                    (B) ->
@@ -288,7 +281,7 @@ test_filechunk_send() ->  % {{{2
 
 test_filechunk_send(_Config) -> % {{{2
     bm_attachment_sup:start_link(),
-    {Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
+    {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     File = #bm_file{
               hash = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
                        145,35,159,150,21,169,198,231,167,229,103,36,26,243,
@@ -418,7 +411,7 @@ test_filechunk_send(_Config) -> % {{{2
                 end),
     meck:expect(test,
                 filechunk_received,
-                fun(FileHash, ChunkHash) ->
+                fun(_FileHash, ChunkHash) ->
                         case bm_db:lookup(bm_filechunk, ChunkHash) of
                             [] ->
                                 meck:exception(error, "No chunk in DB");

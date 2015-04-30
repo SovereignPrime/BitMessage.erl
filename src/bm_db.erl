@@ -233,8 +233,9 @@ init([]) -> %  {{{1
             exit(R)
     end,
     {ok, #state{}}. % }}}
+
 update() ->  % {{{1
-    case mnesia:table_info(bm_file, arity) of
+    try mnesia:table_info(bm_file, arity) of
         8 ->
             mnesia:transform_table(bm_file,
                                    fun(In) ->
@@ -244,9 +245,28 @@ update() ->  % {{{1
                                    record_info(fields, bm_file));
         _ ->
             ok
+    catch 
+        error:{aborted, no_exists, bm_file, arity} ->
+            {atomic, ok} = mnesia:create_table(bm_file,
+                                               [
+                                                {disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_file)},
+
+                                                {type, set}
+                                               ]),
+            {atomic, ok} = mnesia:create_table(bm_filechunk,
+                                               [
+                                                {disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             bm_filechunk)},
+                                                {type, set}
+                                               ])
     end,
 
-    case mnesia:table_info(message, arity) of
+    try mnesia:table_info(message, arity) of
         13 ->
             {atomic, ok} = mnesia:create_table(bm_file,
                                                [
@@ -273,6 +293,15 @@ update() ->  % {{{1
                                    record_info(fields, message));
         _ ->
             ok
+    catch 
+        error:{aborted, no_exists, bm_file, arity} ->
+            {atomic, ok} = mnesia:create_table(message,
+                                               [
+                                                {disc_copies, [node()]},
+                                                {attributes,
+                                                 record_info(fields,
+                                                             message)},
+                                                {type, set}])
     end.
 
 
@@ -419,14 +448,14 @@ handle_cast({clear, Addr}, State) -> %  {{{1
                        end),
     {noreply, State};
 handle_cast({insert, Type, Data}, State) -> %  {{{1
-     R = mnesia:transaction(fun() -> 
-                insert_obj(Type, Data)
-        end),
+    mnesia:transaction(fun() -> 
+                               insert_obj(Type, Data)
+                       end),
     {noreply, State};
 handle_cast({del, Type, Data}, State) -> %  {{{1
-     R = mnesia:transaction(fun() -> 
-                mnesia:delete({ Type, Data })
-        end),
+    mnesia:transaction(fun() -> 
+                               mnesia:delete({ Type, Data })
+                       end),
     {noreply, State};
 handle_cast(_Msg, State) -> %  {{{1
     {noreply, State}.
@@ -512,10 +541,7 @@ bootstrap_network() ->  % {{{1
                                              end, 
                                              %[]),
                                              application:get_env(bitmessage, peers, [])),
-                               lists:foreach(fun({Ip1,
-                                                  Ip2,
-                                                  Ip3,
-                                                  Ip4} = Ip) ->
+                               lists:foreach(fun(Ip) ->
                                                      mnesia:write(addr, #network_address{
                                                                            time=bm_types:timestamp(),
                                                                            stream=1,
@@ -524,10 +550,7 @@ bootstrap_network() ->  % {{{1
                                                                   write)
                                              end,
                                              Ips),
-                               lists:foreach(fun({Ip1,
-                                                  Ip2,
-                                                  Ip3,
-                                                  Ip4} = Ip) ->
+                               lists:foreach(fun(Ip) ->
                                                      mnesia:write(addr, #network_address{
                                                                            time=bm_types:timestamp(),
                                                                            stream=1,
