@@ -5,7 +5,7 @@
 
 %% Bitmessage API {{{1
 -export([
-         start_link/1,
+         start_link/0,
          register_receiver/1,
          send_message/1,
          send_message/4,
@@ -119,10 +119,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(module()) ->  {ok, pid()} | % {{{2
+-spec start_link() ->  {ok, pid()} | % {{{2
                        ignore |
                        {error, term()}.
-start_link(Callback) ->
+start_link() ->
+    Callback = application:get_env(bitmessage, receiver, undefined),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Callback], []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
