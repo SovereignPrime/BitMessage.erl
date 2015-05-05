@@ -70,7 +70,8 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     meck:expect(bm_db, match, fun(_, _) ->
                                          []
                                  end),
-    bitmessage:start_link(test),
+    application:set_env(bitmessage, receiver, test),
+    bitmessage:start_link(),
     bm_sender:start_link(test),
     Config.
 

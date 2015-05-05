@@ -131,7 +131,8 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
     bm_db:insert(pubkey, 
                  [PubKey]),
     bm_decryptor_sup:start_link(),
-    bitmessage:start_link(test),
+    application:set_env(bitmessage, receiver, test),
+    bitmessage:start_link(),
     bm_encryptor_sup:start_link(),
     meck:new(bm_pow),
     meck:expect(bm_pow, make_pow, fun(Payload) ->

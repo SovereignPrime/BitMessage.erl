@@ -235,73 +235,59 @@ init([]) -> %  {{{1
     {ok, #state{}}. % }}}
 
 update() ->  % {{{1
-    try mnesia:table_info(bm_file, arity) of
-        8 ->
-            mnesia:transform_table(bm_file,
-                                   fun(In) ->
-                                           InL = tuple_to_list(In),
-                                           list_to_tuple(InL ++ [ok])
-                                   end,
-                                   record_info(fields, bm_file));
-        _ ->
-            ok
-    catch 
-        error:{aborted, no_exists, bm_file, arity} ->
-            {atomic, ok} = mnesia:create_table(bm_file,
-                                               [
-                                                {disc_copies, [node()]},
-                                                {attributes,
-                                                 record_info(fields,
-                                                             bm_file)},
+    case mnesia:create_table(bm_file,
+                             [
+                              {disc_copies, [node()]},
+                              {attributes,
+                               record_info(fields,
+                                           bm_file)},
 
-                                                {type, set}
-                                               ]),
-            {atomic, ok} = mnesia:create_table(bm_filechunk,
-                                               [
-                                                {disc_copies, [node()]},
-                                                {attributes,
-                                                 record_info(fields,
-                                                             bm_filechunk)},
-                                                {type, set}
-                                               ])
+                              {type, set}
+                             ]) of
+        {atomic, ok} -> ok;
+        {aborted, {already_exists, bm_file}} ->
+            case mnesia:table_info(bm_file, arity) of
+                8 ->
+                    mnesia:transform_table(bm_file,
+                                           fun(In) ->
+                                                   InL = tuple_to_list(In),
+                                                   list_to_tuple(InL ++ [ok])
+                                           end,
+                                           record_info(fields, bm_file));
+                _ ->
+                    ok
+            end
     end,
 
-    try mnesia:table_info(message, arity) of
-        13 ->
-            {atomic, ok} = mnesia:create_table(bm_file,
-                                               [
-                                                {disc_copies, [node()]},
-                                                {attributes,
-                                                 record_info(fields,
-                                                             bm_file)},
+    mnesia:create_table(bm_filechunk,
+                        [
+                         {disc_copies, [node()]},
+                         {attributes,
+                          record_info(fields,
+                                      bm_filechunk)},
+                         {type, set}
+                        ]),
 
-                                                {type, set}
-                                               ]),
-            {atomic, ok} = mnesia:create_table(bm_filechunk,
-                                               [
-                                                {disc_copies, [node()]},
-                                                {attributes,
-                                                 record_info(fields,
-                                                             bm_filechunk)},
-                                                {type, set}
-                                               ]),
-            mnesia:transform_table(message,
-                                   fun(In) ->
-                                           InL = tuple_to_list(In),
-                                           list_to_tuple(InL ++ [[]])
-                                   end,
-                                   record_info(fields, message));
-        _ ->
-            ok
-    catch 
-        error:{aborted, no_exists, bm_file, arity} ->
-            {atomic, ok} = mnesia:create_table(message,
-                                               [
-                                                {disc_copies, [node()]},
-                                                {attributes,
-                                                 record_info(fields,
-                                                             message)},
-                                                {type, set}])
+    case mnesia:create_table(message,
+                             [
+                              {disc_copies, [node()]},
+                              {attributes,
+                               record_info(fields,
+                                           message)},
+                              {type, set}]) of 
+        {atomic, ok} -> ok;
+        {aborted, {already_exists, message}} ->
+            case mnesia:table_info(message, arity) of
+                13 ->
+                    mnesia:transform_table(message,
+                                           fun(In) ->
+                                                   InL = tuple_to_list(In),
+                                                   list_to_tuple(InL ++ [[]])
+                                           end,
+                                           record_info(fields, message));
+                _ ->
+                    ok
+            end
     end.
 
 
