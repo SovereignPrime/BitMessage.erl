@@ -275,7 +275,45 @@ update() ->  % {{{1
                                record_info(fields,
                                            message)},
                               {type, set}]) of 
-        {atomic, ok} -> ok;
+        {atomic, ok} ->
+            mnesia:transaction(
+              fun() ->
+                      Incoming = mnesia:select(incoming,
+                                               [{#message{status='$1',
+                                                          enc='$2',
+                                                          subject='$3',
+                                                          _='_'},
+                                                 [{'and',
+                                                   {'/=', '$1', archive},
+                                                   {'/=', '$2', 6}},
+                                                  {'/=', '$3', <<"Update223322">>}],
+                                                 ['$_']}]),
+                      Sent = mnesia:select(sent,
+                                           [{#message{status='$1',
+                                                      enc='$2',
+                                                      subject='$3',
+                                                      _='_'},
+                                             [{'and',
+                                               {'/=', '$1', archive},
+                                               {'/=', '$2', 6}}, 
+                                              {'/=', '$3', <<"Update223322">>}],
+                                             ['$_']}]),
+                      error_logger:info_msg("Messages: ~p sent ~p~n", [Incoming, Sent]),
+                      lists:foreach(fun(Msg) ->
+                                            mnesia:write(message,
+                                                         Msg#message{folder=incoming},
+                                                         write)
+                                    end,
+                                    Incoming),
+                      lists:foreach(fun(Msg) ->
+                                            mnesia:write(message,
+                                                         Msg#message{folder=sent},
+                                                         write)
+                                    end,
+                                    Sent)
+              end),
+            mnesia:delete_table(sent),
+            mnesia:delete_table(incoming);
         {aborted, {already_exists, message}} ->
             case mnesia:table_info(message, arity) of
                 13 ->
