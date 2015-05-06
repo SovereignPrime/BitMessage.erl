@@ -215,7 +215,8 @@ init([]) -> %  {{{1
                                                 {attributes,
                                                  record_info(fields,
                                                              bm_filechunk)},
-                                                {type, set}
+                                                {type, set},
+                                                {indexes, [file]}
                                                ]),
             {atomic, ok} = mnesia:create_table(message,
                                                [
@@ -265,7 +266,8 @@ update() ->  % {{{1
                          {attributes,
                           record_info(fields,
                                       bm_filechunk)},
-                         {type, set}
+                         {type, set},
+                         {indexes, [file]}
                         ]),
 
     case mnesia:create_table(message,
