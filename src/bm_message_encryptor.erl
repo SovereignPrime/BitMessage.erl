@@ -4,7 +4,10 @@
 
 -include("../include/bm.hrl").
 %% API
--export([start_link/1]).
+-export([
+         start_link/1,
+         process_attachment/1
+        ]).
 
 %% gen_fsm callbacks
 -export([init/1, % {{{1
