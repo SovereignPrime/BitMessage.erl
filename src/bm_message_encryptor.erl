@@ -143,7 +143,7 @@ payload(timeout,
                             to=To,
                             from=From,
                             subject=Subject,
-                            enc=Enc,
+                            %enc=Enc,
                             text=Text,
                             time=Time,
                             status=Status,
@@ -175,10 +175,10 @@ payload(timeout,
     AckData = bm_message_creator:create_obj(2, 1, 1, A),
     Ack = bm_message_creator:create_message(<<"object">>,
                                             AckData),
-    {MSG, HAttachments} = case Attachments of
+    {MSG, HAttachments, Enc} = case Attachments of
         [] ->
               {<<"Subject:",
-                 Subject/bytes, 10, "Body:", Text/bytes>>, []};
+                 Subject/bytes, 10, "Body:", Text/bytes>>, [], 2};
         _ ->
               At = lists:map(fun process_attachment/1,
                              Attachments),
@@ -194,7 +194,8 @@ payload(timeout,
                                _/bytes>>) ->
                                  H
                          end,
-                         At)}
+                         At), 
+               3}
           end,
     error_logger:info_msg("MSG ~p ~n", [MSG]),
     UPayload = <<3, %Address version
