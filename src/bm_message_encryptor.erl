@@ -670,7 +670,25 @@ send_all([Pid|Rest], Msg) ->  % {{{1
     gen_fsm:send_event(P, Msg),
     send_all(Rest, Msg).
 
--spec process_attachment(string()) -> binary(). %TODO  {{{1
+-spec process_attachment(binary() | string()) -> binary(). %TODO  {{{1
+process_attachment(Path) when is_binary(Path) ->
+    case bm_db:lookup(bm_file, Path) of
+        [#bm_file{
+                 hash=MercleRoot,
+                 name=Name,
+                 size=Size,
+                 chunks=ChunksHash,
+                 key={_Pub, Priv}
+            }] ->
+            <<MercleRoot:64/bytes,
+              (bm_types:encode_varstr(Name))/bytes,
+              (bm_types:encode_varint(Size))/bytes,
+              (bm_types:encode_list(ChunksHash,
+                                    fun(E) -> E end))/bytes,
+              Priv/bytes>>;
+        [] ->
+            <<>>
+    end;
 process_attachment(Path) ->
     ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
