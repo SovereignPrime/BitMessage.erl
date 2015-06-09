@@ -371,7 +371,7 @@ create_filechunk_from_file(FileHash, ChunkHash) ->
                                                      end,
                                                      ChunkHashes)) * ChunkSize,
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
-                   TarPath = Path  ++ ".rz.tar.gz",
+                   TarPath = FPath  ++ ".rz.tar.gz",
                    erl_tar:create(TarPath,
                                   [{Name, FPath}],
                                   [compressed]),
