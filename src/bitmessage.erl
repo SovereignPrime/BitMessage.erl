@@ -14,7 +14,8 @@
          subscribe_broadcast/1,
          get_attachment/2,
          get_message/1,
-         generate_address/0
+         generate_address/0,
+         online/0
 ]).
 
 %% Bitmessage callbacks {{{1
@@ -249,6 +250,9 @@ get_message(Hash) ->
     [Msg] = bm_db:lookup(message, Hash),
     {ok, Msg}.
 
+-spec online() -> non_neg_integer().  % {{{2
+online() ->
+    gen_server:call(?MODULE, online).
 
 %%%--------------------------------------------------------------------
 %%%
@@ -312,7 +316,6 @@ disconnected(N) ->
 -spec init([module()]) -> {ok, #state{}, non_neg_integer()}.  % {{{2
 init([Callback]) ->
     bm_db:wait_db(),
-    %%%%%{ok, #state{callback=Callback}}.
     {ok, #state{callback=Callback}, 0}.
 
 %%--------------------------------------------------------------------
@@ -329,6 +332,9 @@ init([Callback]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(online, _From, State) ->
+    Reply = ets:info(addrs, size),
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
