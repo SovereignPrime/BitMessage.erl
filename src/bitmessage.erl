@@ -15,7 +15,8 @@
          get_attachment/2,
          get_message/1,
          generate_address/0,
-         online/0
+         online/0,
+         progress/1
 ]).
 
 %% Bitmessage callbacks {{{1
@@ -253,6 +254,11 @@ get_message(Hash) ->
 -spec online() -> non_neg_integer().  % {{{2
 online() ->
     gen_server:call(?MODULE, online).
+
+-spec progress(FileHash) -> float() when % {{{2
+      FileHash :: hash().
+progress(FileHash) ->
+    bm_attachment_srv:progress(FileHash).
 
 %%%--------------------------------------------------------------------
 %%%
