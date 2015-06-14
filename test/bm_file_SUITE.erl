@@ -404,6 +404,7 @@ test_filechunk_send(_Config) -> % {{{2
                             [] ->
                                 meck:exception(error, "No chunk in DB");
                             [FC] ->
+                                ?assertEqual(bm_attachment_srv:progress(FileHash), 1),
                                 mnesia:clear_table(bm_filechunk),
                                 mnesia:dirty_write(bm_filechunk,
                                                    FC#bm_filechunk{data=undefined}),
