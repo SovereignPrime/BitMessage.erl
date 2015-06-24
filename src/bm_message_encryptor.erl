@@ -152,7 +152,7 @@ payload(timeout,
                             type=?MSG} = Message
           } = State) when 
       Status == new;
-      Status == ackwait->
+      Status == ackwait ->
 
     MyRipe = case bm_auth:decode_address(From) of
     #address{ripe = <<0,0,R/bytes>>} when size(R) == 18 -> 
@@ -364,7 +364,42 @@ payload(timeout,
      #state{type=?FILECHUNK,
             message=NMessage,
             pek=PEK},
+     0};
+
+%% Fix old message types  {{{2
+payload(timeout,
+        #state{
+           message=#message{hash=Hash,
+                            type=Type} = Message
+          }) when is_atom(Type) ->
+    NType = case Type of
+                msg ->
+                    ?MSG;
+                broadcast ->
+                    ?BROADCAST;
+                pubkey ->
+                    ?PUBKEY;
+                get_pubkey ->
+                    ?GET_PUBKEY;
+                _ -> 
+                    99
+            end,
+    mnesia:dirty_delete(message, Hash),
+    NMessage = Message#message{type=NType},
+    bm_db:insert(message, [NMessage]),
+    {next_state,
+     encrypt_message,
+     #state{type=NType,
+            message=NMessage,
+            pek=PEK},
+     0};
+%% Default case
+payload(_, State) ->
+    {next_state,
+     payload,
+     State,
      0}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
