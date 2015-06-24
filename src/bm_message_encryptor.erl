@@ -442,7 +442,9 @@ wait_pubkey(timeout, #state{message=#message{to=To}=Message}=State) ->
             NMessage = Message#message{status=wait_pubkey,
                                        folder=sent},
             bm_db:insert(message, [NMessage]),
-            Timeout = application:get_env(bitmessage, max_time_to_wait_pubkey, 12 * 3600 * 1000),
+            Timeout = application:get_env(bitmessage,
+                                          max_time_to_wait_pubkey,
+                                          12 * 3600 * 1000),
             {next_state,
              wait_pubkey,
              State#state{type=?MSG,
@@ -459,12 +461,16 @@ wait_pubkey({pubkey,
                    message=Message}=State) ->
             NMessage = Message#message{status=encrypt_message},
             bm_db:insert(message, [NMessage]),
-    {next_state, encrypt_message, State#state{pek=PEK, psk=PSK}, 0};
+    {next_state,
+     encrypt_message,
+     State#state{pek=PEK,
+                 psk=PSK},
+     0};
 
 %% Default {{{2
 wait_pubkey(Event, State) ->
     error_logger:warning_msg("Wrong event: ~p status ~p in ~p~n", [Event, ?MODULE, State]),
-    {next_state, wait_pubkey, State}.
+    {next_state, wait_pubkey, State, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
