@@ -371,7 +371,7 @@ payload(timeout,
         #state{
            message=#message{hash=Hash,
                             type=Type} = Message
-          }) when is_atom(Type) ->
+          } = State) when is_atom(Type) ->
     NType = case Type of
                 msg ->
                     ?MSG;
@@ -389,9 +389,8 @@ payload(timeout,
     bm_db:insert(message, [NMessage]),
     {next_state,
      encrypt_message,
-     #state{type=NType,
-            message=NMessage,
-            pek=PEK},
+     State#state{type=NType,
+                 message=NMessage},
      0};
 %% Default case
 payload(_, State) ->
