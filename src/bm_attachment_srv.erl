@@ -7,6 +7,7 @@
 -export([
          start_link/2, 
          send_chunk/2,
+         progress/1,
          received_chunk/2
         ]).
 
@@ -57,6 +58,31 @@ send_chunk(FileHash, ChunkHash) ->
            ok;
        true ->
            encode_filechunk(FileHash, ChunkHash)
+    end.
+
+-spec progress(FileHash) -> float() when  % {{{2
+      FileHash :: binary().
+progress(FileHash) ->
+    case bm_db:lookup(bm_file, FileHash) of
+        [#bm_file{hash=FileHash,
+                  chunks=Chunks}] ->
+            All = length(Chunks),
+            Here = lists:foldl(fun(CID, Acc) ->
+                                       case bm_db:lookup(bm_filechunk, CID) of
+                                           [] -> 
+                                               Acc;
+                                           [#bm_filechunk{data=undefined,
+                                                          hash=CID}] -> 
+                                               Acc;
+                                           [_] ->
+                                               Acc + 1
+                                       end
+                               end,
+                               0.0,
+                               Chunks),
+            Here / All;
+        _ ->
+            0.0
     end.
 
 -spec received_chunk(FileHash, ChunkHash) -> ok when  % {{{2
@@ -140,28 +166,13 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
               }=State) ->
     error_logger:info_msg("Chunks received"),
     IsMy = lists:member(ChunkHash, Chunks),
-    if IsMy ->
-           case lists:foldl(fun(CID, Acc) ->
-                                    case bm_db:lookup(bm_filechunk, CID) of
-                                        [] -> 
-                                            Acc + 1;
-                                        [#bm_filechunk{data=undefined,
-                                                       hash=CID}] -> 
-                                            Acc + 1;
-                                        [_] ->
-                                            Acc
-                                    end
-                            end,
-                            0,
-                            Chunks) of
-               0 -> 
-                   error_logger:info_msg("~p chunks remaining", [0]),
-                   {noreply, State, 0};
-               Size ->
-                   error_logger:info_msg("~p chunks remaining", [Size]),
-                   {noreply, State, Timeout}
-           end;
+    All = length(Chunks),
+    Here = progress(FileHash),
+    if IsMy, Here == All ->
+           error_logger:info_msg("~p chunks remaining", [0]),
+           {noreply, State, 0};
        true ->
+           error_logger:info_msg("~p chunks downloaded", [Here]),
            {noreply, State, Timeout}
     end;
 handle_cast(Msg, State) ->   % {{{2
