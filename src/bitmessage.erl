@@ -23,7 +23,7 @@
          received/1,
          sent/1,
          downloaded/1,
-         filechunk_received/2,
+         filechunk_received/3,
          filechunk_sent/2,
          key_ready/1,
          connected/1,
@@ -91,9 +91,10 @@
 %%%
 %%% @doc Called when new FileChunk received
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--callback filechunk_received(Hash, ChunkHash) -> ok when  % {{{2
+-callback filechunk_received(Hash, ChunkHash, Progress) -> ok when  % {{{2
       Hash :: hash(),
-      ChunkHash :: hash().
+      ChunkHash :: hash(),
+      Progress :: float().
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -252,7 +253,12 @@ get_message(Hash) ->
 
 -spec online() -> non_neg_integer().  % {{{2
 online() ->
-    gen_server:call(?MODULE, online).
+    try 
+        gen_server:call(?MODULE, online)
+    catch 
+        _ ->
+            0
+    end.
 
 %%%--------------------------------------------------------------------
 %%%
@@ -280,10 +286,10 @@ filechunk_sent(Hash, ChunkHash) ->
     error_logger:info_msg("Filechunk ~p sent message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
     gen_server:cast(?MODULE, {event, filechunk_sent, [ Hash, ChunkHash ]}).
 
--spec filechunk_received(hash(), hash()) -> ok.  % {{{2
-filechunk_received(Hash, ChunkHash) ->
-    error_logger:info_msg("Filechunk ~p received message: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash)]),
-    gen_server:cast(?MODULE, {event, filechunk_received, [ Hash, ChunkHash ]}).
+-spec filechunk_received(hash(), hash(), float()) -> ok.  % {{{2
+filechunk_received(Hash, ChunkHash, Progress) ->
+    error_logger:info_msg("Filechunk ~p received message: ~p progress: ~p~n", [bm_types:binary_to_hexstring(ChunkHash), bm_types:binary_to_hexstring(Hash), Progress]),
+    gen_server:cast(?MODULE, {event, filechunk_received, [ Hash, ChunkHash, Progress ]}).
 
 -spec key_ready(binary()) -> ok.  % {{{2
 key_ready(Address) ->
