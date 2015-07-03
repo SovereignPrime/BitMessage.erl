@@ -342,6 +342,7 @@ payload(timeout,  % {{{2
         #state{
            hash=Hash,
            object=Type,
+           time=Time,
            payload=Payload,
            decrypted=Data,
            keys=#privkey{address=Address}
@@ -420,7 +421,7 @@ payload(timeout,  % {{{2
                          to=Address, 
                          subject=Subject,
                          folder=incoming,
-                         time=calendar:local_time(),
+                         time=Time,
                          ackdata=AckData,
                          status=unread,
                          type=Type,
@@ -466,7 +467,8 @@ payload(timeout,  % {{{2
                          [NewFC]),
             error_logger:info_msg("Saving FileChunk ~p ~n", [NewFC]),
             bm_attachment_srv:received_chunk(FileHash, ChunkHash),
-            bitmessage:filechunk_received(FileHash, ChunkHash),
+            Progress = bm_attachment_srv:progress(FileHash),
+            bitmessage:filechunk_received(FileHash, ChunkHash, Progress),
             {next_state,
              inventory,
              State};
