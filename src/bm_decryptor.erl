@@ -675,8 +675,9 @@ save_files(Data) ->
                                           size=Size,
                                           chunks=Chunks,
                                           key={bm_auth:pubkey(Key), Key},
-                                          time=calendar:universal_time()
-                                         }, R3}
+                                          time=bm_types:timestamp()
+                                         },
+                                        R3}
                                end), 
     bm_db:insert(bm_file, Attachments),
     lists:map(fun(#bm_file{hash=H}) ->

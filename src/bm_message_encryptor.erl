@@ -756,7 +756,7 @@ process_attachment(Path) ->
                  chunks=ChunksHash,
                  key=Keys,
                  status=uploaded,
-                 time=calendar:universal_time()
+                 time=bm_types:timestamp()
                 },
     bm_db:insert(bm_file, [FileRec]),
     file:delete(TarPath),  %TODO: will it work?
