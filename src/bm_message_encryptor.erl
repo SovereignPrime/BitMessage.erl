@@ -172,7 +172,11 @@ payload(timeout,
     end,
     
     A = crypto:rand_bytes(32),
-    AckData = bm_message_creator:create_obj(2, 1, 1, A),
+    AckData = if From == To ->
+                     A;
+                 true ->
+                     bm_message_creator:create_obj(2, 1, 1, A)
+              end,
     Ack = bm_message_creator:create_message(<<"object">>,
                                             AckData),
     {MSG, HAttachments, Enc} = case Attachments of
@@ -226,16 +230,24 @@ payload(timeout,
                                enc=Enc,
                                ackdata=A,
                                attachments=HAttachments,
-                               status=wait_pubkey},
+                               status= if From == To ->
+                                              ok;
+                                          true ->
+                                              wait_pubkey
+                                       end},
     io:format("Deleting: ~p~n", [Message]),
     mnesia:dirty_delete(message, Id),
     bm_db:insert(message, [NMessage]),
-    {next_state,
-     wait_pubkey,
-     #state{type=?MSG,
-            hash=Ripe,
-            message=NMessage},
-     0};
+    if From == To ->
+           {stop, normal, State};
+       true ->
+           {next_state,
+            wait_pubkey,
+            #state{type=?MSG,
+                   hash=Ripe,
+                   message=NMessage},
+            0}
+    end;
 
 % Init for broadcasts  {{{2
 payload(timeout,
