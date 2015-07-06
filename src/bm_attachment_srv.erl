@@ -63,7 +63,7 @@ send_chunk(FileHash, ChunkHash) ->
 -spec progress(FileHash) -> float() when  % {{{2
       FileHash :: binary().
 progress(FileHash) ->
-    case bm_db:lookup(bm_file, FileHash) of
+    try bm_db:lookup(bm_file, FileHash) of
         [#bm_file{hash=FileHash,
                   chunks=Chunks}] ->
             All = length(Chunks),
@@ -82,6 +82,9 @@ progress(FileHash) ->
                                Chunks),
             Here / All;
         _ ->
+            0.0
+    catch
+        error:_ ->
             0.0
     end.
 
@@ -396,7 +399,7 @@ create_filechunk_from_file(FileHash, ChunkHash) ->
                                                               file=FileHash
                                                              }),
                            file:close(F),
-                           %file:delete(TarPath),
+                           file:delete(TarPath),
                            ok;
                        _ ->
                            ok

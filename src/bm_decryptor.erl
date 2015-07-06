@@ -280,7 +280,8 @@ preprocess(timeout,
              State#state{encrypted=Encrypted,
                          keys=ChunkHash},
             0};
-        _ ->
+        R ->
+            error_logger:warning_msg("Wrong event ~p~n", [R]),
             {next_state,
              inventory,
              State}

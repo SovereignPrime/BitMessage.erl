@@ -624,8 +624,8 @@ make_inv(timeout,
                            bm_types:binary_to_hexstring(ChunksHash),
                            bm_types:binary_to_hexstring(Hash)
                           ]),
-    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     bitmessage:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
+    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
     {stop, normal, State};
 %% Default {{{2
 make_inv(_Event, State) ->

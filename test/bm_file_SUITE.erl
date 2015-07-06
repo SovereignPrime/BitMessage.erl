@@ -33,7 +33,7 @@
 all() ->  % {{{2
     [
      test_attachment_encode_decode,
-     test_filechunk_query,
+     %test_filechunk_query,
      test_filechunk_send
     ].
 
@@ -120,7 +120,25 @@ init_per_testcase(_TestCase, Config) ->  % {{{2
                150,160,96,91,164,135,152,253,29,219,139,66,127,204,133,150,91,37,
                36,239,206,203,192,107,196,7,112,117,140,47,232,12,201,156,138>>},
     #privkey{public=Pub} = PrivKey,
+    ToPrK = {privkey,<<210,194,106,100,108,26,193,16,182,201,15,226,233,229,239,11,107,167,
+                       67>>,
+             true,
+             make_ref(),
+             <<"BM-2DBT7LiWBzkVYyrQBAgarC7k9AKuVVLJKx">>,
+             <<24,185,35,75,216,144,25,197,74,139,212,234,22,68,135,150,95,184,6,
+               139,161,141,88,182,226,116,200,181,24,193,241,55>>,
+             <<12,242,104,59,184,38,44,35,34,121,98,233,248,93,13,99,157,49,40,159,
+               4,42,216,113,82,50,112,91,3,205,206,163>>,
+             1433418078,
+             <<139,38,228,167,85,121,158,224,73,47,254,28,30,147,69,15,92,159,177,
+               52,97,164,177,70,48,122,23,119,115,18,122,145,220,149,125,245,123,
+               175,73,251,108,80,175,14,226,233,92,61,107,104,106,189,136,12,112,
+               143,238,122,209,248,131,137,46,130,157,143,211,245,169,7,26,96,233,
+               81,180,49,165,176,107,184,112,92,113,0,17,47,98,223,190,165,77,96,
+               168,157,97,129,1,192,196,201,61,117,8,150,19,169,151,110,129,224,
+               224,204,141,139,120,61,109,210,44,179,123,232,176,7,156,207,216,251>>},
     bm_db:insert(privkey, [PrivKey]),
+    bm_db:insert(privkey, [ToPrK]),
     <<PSK:64/bytes, PEK:64/bytes>> = Pub,
     Ripe = bm_auth:generate_ripe(binary_to_list(<<4, PSK/bytes, 4, PEK/bits>>)),
     PubKey = #pubkey{
@@ -161,13 +179,14 @@ test_attachment_encode_decode() ->  % {{{2
 test_attachment_encode_decode(_Config) -> % {{{2
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
+    To = <<"BM-2DBT7LiWBzkVYyrQBAgarC7k9AKuVVLJKx">>,
     meck:expect(test,
                 received,
                 fun(Hash) ->
                         {ok,
                          #message{hash = Hash,
                                   to=Addr,
-                                  from=Addr,
+                                  from=To,
                                   subject = <<"Test message with file">>,
                                   enc=3,
                                   text = <<"File in attachment">>,
@@ -205,7 +224,7 @@ test_attachment_encode_decode(_Config) -> % {{{2
                 fun(_) ->
                         ok 
                 end),
-    bitmessage:send_message(Addr,
+    bitmessage:send_message(To,
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
@@ -223,6 +242,7 @@ test_filechunk_query(_Config) -> % {{{2
     bm_attachment_sup:start_link(),
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
+    To = <<"BM-2DBT7LiWBzkVYyrQBAgarC7k9AKuVVLJKx">>,
     meck:expect(test,
                 sent,
                 fun(Hash) ->
@@ -264,7 +284,7 @@ test_filechunk_query(_Config) -> % {{{2
                 end),
 
 
-    bitmessage:send_message(Addr,
+    bitmessage:send_message(To,
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
@@ -393,18 +413,21 @@ test_filechunk_send(_Config) -> % {{{2
                             payload = Payload
                            }] = bm_db:lookup(inventory, Hash),
                         mnesia:clear_table(inventory),
+                        timer:sleep(6000),
                         bm_decryptor:process_object(Payload)
                 end),
     meck:expect(test,
                 filechunk_sent,
                 fun(FileHash, ChunkHash) 
                       when FileHash == File#bm_file.hash,
-                           ChunkHash == FileChunk#bm_filechunk.hash->
+                           ChunkHash == FileChunk#bm_filechunk.hash ->
                         case bm_db:lookup(bm_filechunk, ChunkHash) of
                             [] ->
                                 meck:exception(error, "No chunk in DB");
                             [FC] ->
+                                error_logger:info_msg("FileChunk sent test ~p~n", [FC]),
                                 ?assertEqual(bm_attachment_srv:progress(FileHash), 1),
+                                error_logger:info_msg("FileChunk sent test ~p~n", [FC]),
                                 mnesia:clear_table(bm_filechunk),
                                 mnesia:dirty_write(bm_filechunk,
                                                    FC#bm_filechunk{data=undefined}),
@@ -427,6 +450,7 @@ test_filechunk_send(_Config) -> % {{{2
                                  FileChunk#bm_filechunk.hash),
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(test, filechunk_sent, '_', 1600),
-    meck:wait(test, filechunk_received, '_', 1600),
+    meck:wait(test, filechunk_sent, '_', 16000),
+    meck:validate(test),
+    meck:wait(test, filechunk_received, '_', 600000),
     meck:validate(test).
