@@ -76,9 +76,14 @@ pubkey(PubKey) ->
     StateName :: atom().
 % For messages and broadcasts {{{2
 init([Message]) when is_record(Message, message) ->
+    #message{time=T, status=State} = Message,
     TTL = application:get_env(bitmessage, message_ttl, 86400 * 2),
-    Time = bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300),
-    #message{status=State} = Message,
+    Time = case T of 
+               undefined ->
+                   bm_types:timestamp() + TTL + crypto:rand_uniform(-300, 300);
+               _ ->
+                   T
+           end,
     {ok,
      payload,
      #state{
