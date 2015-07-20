@@ -80,7 +80,7 @@ init([]) ->  % {{{1
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
--spec clear(Event, State) -> Reasult when
+-spec clear(Event, State) -> Reasult when  % {{{1
       Event :: term(),
       State :: #state{},
       Reasult ::   {next_state, NextStateName, State} |
@@ -91,16 +91,21 @@ init([]) ->  % {{{1
       Reason :: term().
 clear(timeout,
       #state{timeout=Timeout,
-             max_addr_age=Addr} = State) ->  % {{{1
+             max_addr_age=Addr} = State) ->
     bm_db:clear(Addr),
     {atomic, Messages} = bm_db:ackselect(),
     error_logger:info_msg("Resending messages: ~p~n", [Messages]),
-    lists:foreach(fun(#message{hash=MID} = M) ->
+    ToResend = lists:map(fun(#message{hash=MID} = M) ->
+                                 MID
+                         end, Messages),
+    RMessages = bitmessage:resending(ToResend),
+    lists:foreach(fun(MID) ->
+                          [M] = bm_db:lookup(message, MID),
                           bm_db:delete(message, MID),
                           bm_encryptor_sup:add_encryptor(M)
-                  end, Messages),
+                  end, RMessages),
     {next_state, clear, State, Timeout * 1000};
-clear(_Event, #state{timeout=Timeout} = State) ->  % {{{1
+clear(_Event, #state{timeout=Timeout} = State) ->
     {next_state, clear, State, Timeout * 1000}.
 
 %%--------------------------------------------------------------------

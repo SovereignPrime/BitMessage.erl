@@ -28,7 +28,8 @@
          filechunk_sent/2,
          key_ready/1,
          connected/1,
-         disconnected/1
+         disconnected/1,
+         resending/1
         ]).
 
 %% gen_server callbacks  {{{1
@@ -108,6 +109,12 @@
 %%% @doc Called when new host is disconnected with number of peers as argument
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -callback disconnected(non_neg_integer()) -> ok.  % {{{2
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% @doc Called when there are messages that is not acknowledged befort TTL expire
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-callback resending([hash()]) -> [hash()].  % {{{2
 
 
 %%%-----------------------------------------------------------------------------
@@ -314,6 +321,12 @@ disconnected(N) ->
                           [N]),
     gen_server:cast(?MODULE, {event, disconnected, [ N ]}).
 
+-spec resending([hash()]) -> [hash()].
+resending(Hashes) ->
+    error_logger:info_msg("Asking for old message resending: ~p~n",
+                          [Hashes]),
+    gen_server:call(?MODULE, {event, resending, [Hashes], []}).
+
 %%%===================================================================
 %%% gen_server callbacks  {{{1
 %%%===================================================================
@@ -344,10 +357,25 @@ init([Callback]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(online, _From, State) ->
+handle_call({event, Fun, Args, Default},  % {{{2
+            _From,
+            #state{callback=Callback}=State) ->
+    error_logger:info_msg("Callback ~p:~p(~p) = ~p called",
+                          [Callback,
+                           Fun,
+                           Args,
+                           Default]),
+    try
+        Reply = apply(Callback, Fun, Args),
+        {reply, Reply, State}
+    catch
+        error:_ ->
+            {reply, Default, State}
+    end;
+handle_call(online, _From, State) ->  % {{{2
     Reply = ets:info(addrs, size),
     {reply, Reply, State};
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State) ->  % {{{2
     Reply = ok,
     {reply, Reply, State}.
 
