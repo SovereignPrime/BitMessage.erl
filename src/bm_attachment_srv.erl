@@ -8,7 +8,8 @@
          start_link/2, 
          send_chunk/2,
          progress/1,
-         received_chunk/2
+         received_chunk/2, 
+         compute_chunk_size/1
         ]).
 
 %% gen_server callbacks  {{{1
@@ -376,19 +377,19 @@ create_filechunk_from_file(FileHash, ChunkHash) ->
                    name=Name,
                    chunks=ChunkHashes
                   } ] ->
-            ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
             FPath = Path ++ "/" ++ Name,
             IsFile = filelib:is_file(FPath),
             if IsFile ->
+                   TarPath = FPath  ++ ".rz.tar.gz",
+                   erl_tar:create(TarPath,
+                                  [{Name, FPath}],
+                                  [compressed]),
+                   ChunkSize = compute_chunk_size(TarPath),
                    Location = length(lists:takewhile(fun(CH) ->
                                                              CH /= ChunkHash 
                                                      end,
                                                      ChunkHashes)) * ChunkSize,
                    error_logger:info_msg("Chunk location: ~p~n", [Location]),
-                   TarPath = FPath  ++ ".rz.tar.gz",
-                   erl_tar:create(TarPath,
-                                  [{Name, FPath}],
-                                  [compressed]),
                    {ok, F} = file:open(TarPath, [binary, read]),
                    case file:pread(F, Location, ChunkSize) of
                        {ok, Data} ->
@@ -420,3 +421,16 @@ send_all([Pid|Rest], Msg) ->
     error_logger:info_msg("Sending to ~p (self ~p)msgh ~p", [P, self(), Msg]),
     gen_server:cast(P, Msg),
     send_all(Rest, Msg).
+
+-spec compute_chunk_size(file:filename_all()) -> non_neg_integer().
+compute_chunk_size(Path) ->
+    MaxChunkSize = application:get_env(bitmessage, chunk_size, 1024),
+    case filelib:file_size(Path) of
+        Size when Size =< MaxChunkSize ->
+            Size;
+        Size when Size div 10 > MaxChunkSize ->
+            MaxChunkSize;
+        Size ->
+            Size div 10
+    end.
+

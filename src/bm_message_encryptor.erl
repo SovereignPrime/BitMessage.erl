@@ -747,11 +747,11 @@ process_attachment(Path) when is_binary(Path) ->
             <<>>
     end;
 process_attachment(Path) ->
-    ChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
     TarPath = Path ++ ".rz.tar.gz",
     erl_tar:create(TarPath, [Path], [compressed]),
+    ChunkSize = bm_attachment_srv:compute_chunk_size(TarPath),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
     ChunksHash = lists:map(fun(L) ->
