@@ -27,7 +27,7 @@ create_message(Command, Payload) ->
 %% Creates object message looking inventory for `Hash`
 %% in database and creating `Message`
 -spec create_obj(Type, Version, Stream, Payload) -> binary()    % {{{1 ???
-                                                    | no_return() when
+                                                    | not_found when
       Type :: object_type(),
       Version :: non_neg_integer(),
       Stream :: non_neg_integer(),
@@ -38,7 +38,7 @@ create_obj(Type, Version, Stream, Payload) ->
     create_obj(Type, Version, Stream, Time, Payload).
 
 -spec create_obj(Type, Version, Stream, Time, Payload) -> binary()    % {{{1 ???
-                                                    | no_return() when
+                                                          | not_found when
       Type :: object_type(),
       Version :: non_neg_integer(),
       Stream :: non_neg_integer(),
@@ -148,7 +148,7 @@ create_pubkey(#privkey{hash=RIPE,
                        psk=PSK,
                        pek=PEK,
                        public=Pub,
-                       address=Addr}) ->
+                       address=Addr}=PubKey) ->
     Time = bm_types:timestamp(),
     ETime = Time + 28 * 24 * 60 * 60,
     #address{stream=Stream, version=AVer} = bm_auth:decode_address(Addr),
@@ -167,16 +167,20 @@ create_pubkey(#privkey{hash=RIPE,
                  (bm_types:encode_varint(size(Sig)))/bytes,
                  Sig/bytes>>,
     error_logger:info_msg("Creating object for PubKey"),
-    PPayload = bm_pow:make_pow(NPayload),
-    error_logger:info_msg("Pow ready for PubKey"),
-    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
-    bm_db:insert(inventory, [#inventory{hash=Hash,
-                                       payload = PPayload,
-                                       type = 1,
-                                       time=Time,
-                                        stream=Stream}]),
-    error_logger:info_msg("Advertising pubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
-    create_inv([ Hash ]).
+    case bm_pow:make_pow(NPayload) of
+        not_found ->
+            create_pubkey(PubKey);
+        PPayload ->
+            error_logger:info_msg("Pow ready for PubKey"),
+            <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
+            bm_db:insert(inventory, [#inventory{hash=Hash,
+                                                payload = PPayload,
+                                                type = 1,
+                                                time=Time,
+                                                stream=Stream}]),
+            error_logger:info_msg("Advertising pubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+            create_inv([ Hash ])
+    end.
                                        
 %% @doc Creates getpubkey object and inv message for it
 %%
@@ -185,10 +189,8 @@ create_pubkey(#privkey{hash=RIPE,
 -spec create_getpubkey(#address{}) -> message_bin().  % {{{1
 create_getpubkey(#address{ripe=RIPE,
                           version=Version,
-                          stream=Stream}) ->
-    <<_:64/bits,
-      Time:64/big-integer,
-      _/bytes>> = Payload = case Version of
+                          stream=Stream}=Addr) ->
+    Payload = case Version of
                                 3 ->
                                     create_obj(0, Version, Stream, RIPE);
                                 4 ->
@@ -201,14 +203,22 @@ create_getpubkey(#address{ripe=RIPE,
 
                                     create_obj(0, Version, Stream, TAG)
                             end,
-    <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
-    bm_db:insert(inventory, [#inventory{hash=Hash,
-                                       payload = Payload,
-                                       type = 0,
-                                       time=Time,
-                                       stream=Stream}]),
-    error_logger:info_msg("Advertising GetPubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
-    create_inv([ Hash ]).
+    case Payload of
+        not_found ->
+            create_getpubkey(Addr);
+        _ ->
+            <<_:64/bits,
+              Time:64/big-integer,
+              _/bytes>> = Payload,
+            <<Hash:32/bytes, _/bytes>> = crypto:hash(sha512, Payload),
+            bm_db:insert(inventory, [#inventory{hash=Hash,
+                                                payload = Payload,
+                                                type = 0,
+                                                time=Time,
+                                                stream=Stream}]),
+            error_logger:info_msg("Advertising GetPubkey inv: ~p~n", [bm_types:binary_to_hexstring(Hash)]),
+            create_inv([ Hash ])
+    end.
 
 %% @doc Creates ack message object and inv message for it
 %%
@@ -234,8 +244,12 @@ create_getchunk(FileHash, ChunkHash) ->
     Payload = <<FileHash:64/bytes, ChunkHash:64/bytes>>,
     FileChunkTTL = application:get_env(bitmessage, filechunk_ttl, 3600),
     Time = bm_types:timestamp() + FileChunkTTL,
-    Obj = create_obj(?GETFILECHUNK, 1, 1, Time, Payload),
-    save_obj(Obj).
+    case create_obj(?GETFILECHUNK, 1, 1, Time, Payload) of
+        not_found ->
+            create_getchunk(FileHash, ChunkHash);
+        Obj ->
+            save_obj(Obj) 
+    end.
 
 -spec save_obj(binary()) -> message_bin().  % {{{1
 save_obj(<<_:64/bits,

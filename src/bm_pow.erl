@@ -44,11 +44,11 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec make_pow(binary()) -> binary().  % {{{1
+-spec make_pow(binary()) -> binary() | not_found.  % {{{1
 make_pow(Payload) ->
     make_pow(Payload, ?MIN_NTPB, ?MIN_PLEB).
 
--spec make_pow(Payload, NTpB, PLEB) -> Payload when % {{{1
+-spec make_pow(Payload, NTpB, PLEB) -> Payload | not_found when % {{{1
       Payload :: binary(),
       NTpB :: non_neg_integer(),
       PLEB :: non_neg_integer().
@@ -106,9 +106,13 @@ init([]) ->  % {{{1
 %%--------------------------------------------------------------------
 handle_call({make, Payload, Target}, _From, State) ->  % {{{1
     InitialHash = crypto:hash(sha512, Payload),
-    {ok, POW, _} = compute_pow(InitialHash, Target),
-    Reply = <<POW:64/big-integer, Payload/bytes>>,
-    {reply, Reply, State};
+    case compute_pow(InitialHash, Target) of
+        {ok, POW, _} ->
+            Reply = <<POW:64/big-integer, Payload/bytes>>,
+            {reply, Reply, State};
+        not_found ->
+            {reply, not_found, State}
+    end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -167,19 +171,21 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec compute_pow(binary(), float()) -> {ok, non_neg_integer(), non_neg_integer()}.  % {{{1
+-spec compute_pow(binary(), float()) -> {ok, non_neg_integer(), non_neg_integer()} | not_found.  % {{{1
 compute_pow(InitialHash, Target) ->
     compute_pow(InitialHash, Target, 99999999999999999999, 0).
 
--spec compute_pow(binary(), Target, TrialValue, Nonce) -> {ok, Nonce, TrialValue}  when % {{{1
+-spec compute_pow(binary(), Target, TrialValue, Nonce) -> {ok, Nonce, TrialValue} | not_found  when % {{{1
       Target :: float(),
       TrialValue :: non_neg_integer(),
       Nonce :: non_neg_integer().
-compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target ->
+compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target, Nonce < 18446744073709551615 ->
     <<ResultHash:8/big-integer-unit:8, _/bytes>> = bm_auth:dual_sha(<<(Nonce + 1):64/big-integer, InitialHash/bytes>>),
     compute_pow(InitialHash, Target, ResultHash, Nonce + 1);
-compute_pow(_InitialHash, _Target, TrialValue, Nonce) ->
-    {ok, Nonce, TrialValue}.
+compute_pow(_InitialHash, _Target, TrialValue, Nonce) when Nonce < 18446744073709551615 ->
+    {ok, Nonce, TrialValue};
+compute_pow(_InitialHash, _Target, _TrialValue, _Nonce) ->
+    not_found.
     
 -spec compute_terget(Payload, NTpB, PLEB) -> integer() when  % {{{1
       Payload :: binary(),

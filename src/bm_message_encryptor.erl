@@ -575,29 +575,34 @@ make_inv(timeout,
                                           <<To:32/bytes,
                                           Payload/bytes>>)
         end,
-    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
-    NMessage = Message#message{status=case Type of 
-                                          ?MSG -> ackwait;
-                                          ?BROADCAST -> ok
-                                      end,
-                               hash=Hash,
-                               payload=PPayload},
-    bm_db:delete(message, MID),
-    bm_db:insert(message, [NMessage]),
-    bm_db:insert(inventory, [#inventory{hash = Hash,
-                                        type = Type,
-                                        stream = Stream,
-                                        payload = PPayload,
-                                        time = Time
-                                       }]),
-    error_logger:info_msg("Msg ~p sent to ~p~n",
-                          [
-                           bm_types:binary_to_hexstring(Hash),
-                           To
-                          ]),
-    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    bitmessage:sent(Hash),
-    {stop, normal, State};
+    case PPayload of
+        not_found ->
+            {next_state, payload, State#state{message=Message#message{status=new}}, 0};
+        _ ->
+            <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
+            NMessage = Message#message{status=case Type of 
+                                                  ?MSG -> ackwait;
+                                                  ?BROADCAST -> ok
+                                              end,
+                                       hash=Hash,
+                                       payload=PPayload},
+            bm_db:delete(message, MID),
+            bm_db:insert(message, [NMessage]),
+            bm_db:insert(inventory, [#inventory{hash = Hash,
+                                                type = Type,
+                                                stream = Stream,
+                                                payload = PPayload,
+                                                time = Time
+                                               }]),
+            error_logger:info_msg("Msg ~p sent to ~p~n",
+                                  [
+                                   bm_types:binary_to_hexstring(Hash),
+                                   To
+                                  ]),
+            bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+            bitmessage:sent(Hash),
+            {stop, normal, State}
+    end;
 
 %% Work cycle for filechunk {{{2
 make_inv(timeout,
@@ -613,25 +618,30 @@ make_inv(timeout,
                                              Time,
                                              <<ChunksHash:64/bytes,
                                                Payload/bytes>>),
-    <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
-    NMessage = Message#bm_filechunk{status=ok,
-                                    payload=PPayload},
-    bm_db:delete(bm_filechunk, ChunksHash),
-    bm_db:insert(bm_filechunk, [NMessage]), % TODO: try to avoid???
-    bm_db:insert(inventory, [#inventory{hash = Hash, % Differ from chunk hash
-                                        type = ?FILECHUNK,
-                                        stream = Stream,
-                                        payload = PPayload,
-                                        time = Time
-                                       }]),
-    error_logger:info_msg("Filechunk ~p sent with inventory ~p~n",
-                          [
-                           bm_types:binary_to_hexstring(ChunksHash),
-                           bm_types:binary_to_hexstring(Hash)
-                          ]),
-    bitmessage:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
-    bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
-    {stop, normal, State};
+    case PPayload of
+        not_found ->
+            {next_state, payload, State#state{message=Message#bm_filechunk{status=new}}, 0};
+        _ ->
+            <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
+            NMessage = Message#bm_filechunk{status=ok,
+                                            payload=PPayload},
+            bm_db:delete(bm_filechunk, ChunksHash),
+            bm_db:insert(bm_filechunk, [NMessage]), % TODO: try to avoid???
+            bm_db:insert(inventory, [#inventory{hash = Hash, % Differ from chunk hash
+                                                type = ?FILECHUNK,
+                                                stream = Stream,
+                                                payload = PPayload,
+                                                time = Time
+                                               }]),
+            error_logger:info_msg("Filechunk ~p sent with inventory ~p~n",
+                                  [
+                                   bm_types:binary_to_hexstring(ChunksHash),
+                                   bm_types:binary_to_hexstring(Hash)
+                                  ]),
+            bitmessage:filechunk_sent(FileHash, ChunksHash), % May be usefull to stat counting
+            bm_sender:send_broadcast(bm_message_creator:create_inv([Hash])),
+            {stop, normal, State}
+    end;
 %% Default {{{2
 make_inv(_Event, State) ->
     {next_state, make_inv, State, 0}.
