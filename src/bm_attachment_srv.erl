@@ -422,8 +422,8 @@ send_all([Pid|Rest], Msg) ->
     gen_server:cast(P, Msg),
     send_all(Rest, Msg).
 
--spec compute_chunk_size(file:filename_all()) -> non_neg_integer().
-compute_chunk_size(Path) ->
+-spec compute_chunk_size(file:filename_all()) -> non_neg_integer().  % {{{2
+compute_chunk_size(Path) ->  
     MaxChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     case filelib:file_size(Path) of
         Size when Size =< MaxChunkSize ->

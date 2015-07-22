@@ -754,6 +754,7 @@ process_attachment(Path) ->
     ChunkSize = bm_attachment_srv:compute_chunk_size(TarPath),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
+    error_logger:info_msg("File: ~p, size ~p~n", [Name, Size, TarSize, ChunkSize]),
     ChunksHash = lists:map(fun(L) ->
                                    {ok, Chunk} = file:pread(F, L, ChunkSize),
                                    bm_auth:dual_sha(Chunk)
@@ -764,7 +765,6 @@ process_attachment(Path) ->
     MercleRoot = bm_auth:mercle_root(ChunksHash), %TODO
     {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
     error_logger:info_msg("File: ~p, hash ~p~n", [Name, MercleRoot]),
-    error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
     FileRec = #bm_file{
                  hash=MercleRoot,
                  name=Name,
