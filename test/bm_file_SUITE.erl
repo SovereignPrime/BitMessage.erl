@@ -409,11 +409,14 @@ test_filechunk_send(_Config) -> % {{{2
                 send_broadcast,
                 fun(<<_:25/bytes,
                       Hash/bytes>>) ->
+                        error_logger:info_msg("FileChunk inventory sent ~p~n", [Hash]),
                         [#inventory{
                             payload = Payload
                            }] = bm_db:lookup(inventory, Hash),
                         mnesia:clear_table(inventory),
-                        timer:sleep(6000),
+                        mnesia:clear_table(bm_filechunk),
+                        mnesia:dirty_write(bm_filechunk,
+                                           FileChunk#bm_filechunk{data=undefined}),
                         bm_decryptor:process_object(Payload)
                 end),
     meck:expect(test,
@@ -426,21 +429,19 @@ test_filechunk_send(_Config) -> % {{{2
                                 meck:exception(error, "No chunk in DB");
                             [FC] ->
                                 error_logger:info_msg("FileChunk sent test ~p~n", [FC]),
-                                ?assertEqual(bm_attachment_srv:progress(FileHash), 1),
-                                error_logger:info_msg("FileChunk sent test ~p~n", [FC]),
-                                mnesia:clear_table(bm_filechunk),
-                                mnesia:dirty_write(bm_filechunk,
-                                                   FC#bm_filechunk{data=undefined}),
                                 ok
                         end
                 end),
     meck:expect(test,
                 filechunk_received,
-                fun(_FileHash, ChunkHash) ->
+                fun(FileHash, ChunkHash, 1.0) ->
                         case bm_db:lookup(bm_filechunk, ChunkHash) of
                             [] ->
                                 meck:exception(error, "No chunk in DB");
                             [FC] ->
+                                Progress = bm_attachment_srv:progress(FileHash),
+                                error_logger:info_msg("FileChunk sent progress ~p~n", [Progress]),
+                                ?assertEqual(Progress, 1.0),
                                 ?assertEqual(FC#bm_filechunk.data, FileChunk#bm_filechunk.data)
                         end
                 end),

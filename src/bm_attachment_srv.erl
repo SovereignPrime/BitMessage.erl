@@ -427,7 +427,7 @@ compute_chunk_size(Path) ->
     MaxChunkSize = application:get_env(bitmessage, chunk_size, 1024),
     case filelib:file_size(Path) of
         Size when Size =< MaxChunkSize ->
-            Size;
+            Size + 1;
         Size when Size div 10 > MaxChunkSize ->
             MaxChunkSize;
         Size ->
