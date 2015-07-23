@@ -104,15 +104,18 @@ init([]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({make, Payload, Target}, _From, State) ->  % {{{1
+handle_call({make, Payload, Target}, From, State) ->  % {{{1
     InitialHash = crypto:hash(sha512, Payload),
-    case compute_pow(InitialHash, Target) of
-        {ok, POW, _} ->
-            Reply = <<POW:64/big-integer, Payload/bytes>>,
-            {reply, Reply, State};
-        not_found ->
-            {reply, not_found, State}
-    end;
+    spawn_link(fun() ->
+                       case compute_pow(InitialHash, Target) of
+                           {ok, POW, _} ->
+                               Reply = <<POW:64/big-integer, Payload/bytes>>,
+                               gen_server:reply(From, Reply);
+                           not_found ->
+                               gen_server:reply(From, not_found)
+                       end
+               end),
+    {noreply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
