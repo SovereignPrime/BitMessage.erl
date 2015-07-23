@@ -424,13 +424,14 @@ send_all([Pid|Rest], Msg) ->
 
 -spec compute_chunk_size(file:filename_all()) -> non_neg_integer().  % {{{2
 compute_chunk_size(Path) ->  
-    MaxChunkSize = application:get_env(bitmessage, chunk_size, 1024),
+    MaxChunkSize = application:get_env(bitmessage, chunk_size, 260000),
+    MaxChunksNumber = application:get_env(bitmessage, chunks_number, 100),
     case filelib:file_size(Path) of
         Size when Size =< MaxChunkSize ->
             Size + 1;
-        Size when Size div 10 > MaxChunkSize ->
+        Size when Size >= MaxChunkSize * MaxChunksNumber ->
             MaxChunkSize;
         Size ->
-            Size div 10
+            Size div MaxChunksNumber
     end.
 
