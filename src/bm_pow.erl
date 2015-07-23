@@ -108,7 +108,8 @@ handle_call({make,  % {{{1
              <<Time:64/big-integer, _/bytes>>=Payload, Target},
             _From,
             State) ->
-    if Time > bm_types:timestamp() - 300 ->
+    Now = bm_types:timestamp(),
+    if Time < Now - 300 ->
            {reply, not_found, State};
        true ->
            Cores = erlang:system_info(schedulers_online),
@@ -133,7 +134,8 @@ handle_call({make,  % {{{1
                     Pool),
            R = collect_results(Cores),
            lists:foreach(fun(P) -> exit(P, kill) end, Pids),
-           {reply, R, State};
+           {reply, R, State}
+    end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
