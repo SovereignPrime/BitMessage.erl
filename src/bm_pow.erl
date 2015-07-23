@@ -104,18 +104,32 @@ init([]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({make, Payload, Target}, From, State) ->  % {{{1
+handle_call({make, Payload, Target}, _From, State) ->  % {{{1
+    Cores = erlang:system_info(schedulers_online),
+    <<Max64:64/integer>> = binary:copy(<<255>>, 8),
+    Len = (Max64 + 1) div Cores,
+    Pool = lists:seq(0, Max64, Len), 
+    error_logger:info_msg("Pool: ~p", [Pool]),
     InitialHash = crypto:hash(sha512, Payload),
-    spawn_link(fun() ->
-                       case compute_pow(InitialHash, Target) of
-                           {ok, POW, _} ->
-                               Reply = <<POW:64/big-integer, Payload/bytes>>,
-                               gen_server:reply(From, Reply);
-                           not_found ->
-                               gen_server:reply(From, not_found)
-                       end
-               end),
-    {noreply, State};
+    Pid = self(),
+    Pids = lists:map(
+             fun(N) ->
+                     spawn(
+                       fun() ->
+                               case compute_pow(InitialHash, Target, N, N + Len) of
+                                   {ok, POW, _} ->
+                                       Reply = <<POW:64/big-integer, Payload/bytes>>,
+                                       Pid ! {ok, Reply};
+                                   not_found ->
+                                       Pid ! not_found
+                               end
+                       end)
+             end,
+             Pool),
+    R = collect_results(Cores),
+    lists:foreach(fun(P) -> exit(P, kill) end, Pids),
+    error_logger:info_msg("Result: ~p", [R]),
+    {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -174,20 +188,22 @@ code_change(_OldVsn, State, _Extra) ->  % {{{1
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec compute_pow(binary(), float()) -> {ok, non_neg_integer(), non_neg_integer()} | not_found.  % {{{1
-compute_pow(InitialHash, Target) ->
-    compute_pow(InitialHash, Target, 99999999999999999999, 0).
+-spec compute_pow(binary(), float(), non_neg_integer(), non_neg_integer()) -> {ok, non_neg_integer(), non_neg_integer()} | not_found.  % {{{1
+compute_pow(InitialHash, Target, Nonce, Max) ->
+    compute_pow(InitialHash, Target, 99999999999999999999, Nonce, Max).
 
--spec compute_pow(binary(), Target, TrialValue, Nonce) -> {ok, Nonce, TrialValue} | not_found  when % {{{1
+-spec compute_pow(binary(), Target, TrialValue, Nonce, Max) -> {ok, Nonce, TrialValue} | not_found  when % {{{1
       Target :: float(),
       TrialValue :: non_neg_integer(),
+      Max :: non_neg_integer(),
       Nonce :: non_neg_integer().
-compute_pow(InitialHash, Target, TrialValue, Nonce) when TrialValue > Target, Nonce < 18446744073709551615 ->
+compute_pow(InitialHash, Target, TrialValue, Nonce, Max) when TrialValue > Target,
+                                                         Nonce =< Max ->
     <<ResultHash:8/big-integer-unit:8, _/bytes>> = bm_auth:dual_sha(<<(Nonce + 1):64/big-integer, InitialHash/bytes>>),
-    compute_pow(InitialHash, Target, ResultHash, Nonce + 1);
-compute_pow(_InitialHash, _Target, TrialValue, Nonce) when Nonce < 18446744073709551615 ->
+    compute_pow(InitialHash, Target, ResultHash, Nonce + 1, Max);
+compute_pow(_InitialHash, _Target, TrialValue, Nonce, Max) when Nonce =< Max ->
     {ok, Nonce, TrialValue};
-compute_pow(_InitialHash, _Target, _TrialValue, _Nonce) ->
+compute_pow(_InitialHash, _Target, _TrialValue, _Nonce, _Max) ->
     not_found.
     
 -spec compute_terget(Payload, NTpB, PLEB) -> integer() when  % {{{1
@@ -199,3 +215,14 @@ compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
     PayloadLength = size(Payload) + 8,
     PLPEB = PayloadLength + PLEB,
     bm_types:pow(2 , 64) div (NTpB * (PLPEB + (TTL * PLPEB) div bm_types:pow(2, 16))).
+
+-spec collect_results(non_neg_integer()) -> binary() | not_found.  % {{{1
+collect_results(N) when N > 0 ->
+    receive 
+        not_found ->
+            collect_results(N - 1);
+        {ok, Nonce} ->
+            Nonce
+    end;
+collect_results(0) ->
+    not_found.
