@@ -104,32 +104,36 @@ init([]) ->  % {{{1
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({make, Payload, Target}, _From, State) ->  % {{{1
-    Cores = erlang:system_info(schedulers_online),
-    <<Max64:64/integer>> = binary:copy(<<255>>, 8),
-    Len = (Max64 + 1) div Cores,
-    Pool = lists:seq(0, Max64, Len), 
-    error_logger:info_msg("Pool: ~p", [Pool]),
-    InitialHash = crypto:hash(sha512, Payload),
-    Pid = self(),
-    Pids = lists:map(
-             fun(N) ->
-                     spawn(
-                       fun() ->
-                               case compute_pow(InitialHash, Target, N, N + Len) of
-                                   {ok, POW, _} ->
-                                       Reply = <<POW:64/big-integer, Payload/bytes>>,
-                                       Pid ! {ok, Reply};
-                                   not_found ->
-                                       Pid ! not_found
-                               end
-                       end)
-             end,
-             Pool),
-    R = collect_results(Cores),
-    lists:foreach(fun(P) -> exit(P, kill) end, Pids),
-    error_logger:info_msg("Result: ~p", [R]),
-    {reply, R, State};
+handle_call({make,  % {{{1
+             <<Time:64/big-integer, _/bytes>>=Payload, Target},
+            _From,
+            State) ->
+    if Time > bm_types:timestamp() - 300 ->
+           {reply, not_found, State};
+       true ->
+           Cores = erlang:system_info(schedulers_online),
+           <<Max64:64/integer>> = binary:copy(<<255>>, 8),
+           Len = (Max64 + 1) div Cores,
+           Pool = lists:seq(0, Max64, Len), 
+           InitialHash = crypto:hash(sha512, Payload),
+           Pid = self(),
+           Pids = lists:map(
+                    fun(N) ->
+                            spawn(
+                              fun() ->
+                                      case compute_pow(InitialHash, Target, N, N + Len) of
+                                          {ok, POW, _} ->
+                                              Reply = <<POW:64/big-integer, Payload/bytes>>,
+                                              Pid ! {ok, Reply};
+                                          not_found ->
+                                              Pid ! not_found
+                                      end
+                              end)
+                    end,
+                    Pool),
+           R = collect_results(Cores),
+           lists:foreach(fun(P) -> exit(P, kill) end, Pids),
+           {reply, R, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
