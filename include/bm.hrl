@@ -15,6 +15,7 @@
 -define(BROADCAST, 3).
 -define(FILECHUNK, 4).
 -define(GETFILECHUNK, 5).
+-define(GETFILE, 6).
 
 -type object_type() :: ?GET_PUBKEY
                      | ?PUBKEY
@@ -22,6 +23,7 @@
                      | ?BROADCAST
                      | ?FILECHUNK
                      | ?GETFILECHUNK
+                     | ?GETFILE
                      | non_neg_integer().
 
 %% @doc Network address storing structure
@@ -113,6 +115,7 @@
 -record(bm_filechunk,
         {
          hash :: binary() | atom(),
+         offset :: non_neg_integer(),
          size :: non_neg_integer() | atom(),
          data :: binary() | atom(),
          file :: binary() | atom(),

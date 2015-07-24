@@ -266,15 +266,20 @@ preprocess(timeout,
               object=?FILECHUNK,  % {{{3
               payload=Payload,
               hash=Hash,
-              encrypted = <<ChunkHash:64/bytes,
+              encrypted = <<FileHash:64/bytes,
+                            ChunkHash:64/bytes,
                             Encrypted/bytes>>
              } = State) ->
     error_logger:info_msg("Filechunk received: ~p~n", [ChunkHash]),
-    case bm_db:lookup(bm_filechunk, ChunkHash) of
-        [#bm_filechunk{data=undefined}=FC] ->
-        
-            bm_db:insert(bm_filechunk, [FC#bm_filechunk{status=received,
-                                                        payload=Payload}]),
+    Chunks = bm_db:lookup(bm_filechunk, ChunkHash),
+    Files = bm_db:lookup(bm_file, FileHash),
+
+    case {Files, Chunks}  of
+        {[#bm_file{status=downloading}, []} ->
+            bm_db:insert(bm_filechunk, [#bm_filechunk{hash=ChunkHash,
+                                                      file=FileHash,
+                                                      status=received,
+                                                      payload=Payload}]),
             {next_state,
              decrypt,
              State#state{encrypted=Encrypted,
@@ -292,12 +297,24 @@ preprocess(timeout,
               version=1,
               encrypted=Data
              } = State) ->
-    <<FileHash:64/bytes, ChunkHash:64/bytes>> = Data,
-    bm_attachment_srv:send_chunk(FileHash, ChunkHash),
+    <<FileHash:64/bytes, R/bytes>> = Data,
+    {Offset, R1} = bm_types:decode_varint(R),
+    {Size, _} = bm_types:decode_varint(R1),
+    bm_attachment_srv:send_chunk(FileHash, Offset, Size),
     {next_state,
      inventory,
      State};
 preprocess(timeout,
+           #state{
+              object=?GETFILE,  % {{{3
+              version=1,
+              encrypted=FileHash
+             } = State) ->
+    bm_attachment_srv:send_file(FileHash),
+    {next_state,
+     inventory,
+     State};
+preprocess(timeout,  % {{{3
            State) ->
     {next_state,
      inventory,
@@ -451,22 +468,22 @@ payload(timeout,  % {{{2
           } = State) ->
     error_logger:info_msg("Saving FileChunk ~p ~n", [ChunkHash]),
     case bm_db:lookup(bm_filechunk, ChunkHash) of
-        [#bm_filechunk{data=undefined} = FC] ->
+        [#bm_filechunk{file=FileHash} = FC] ->
+            {Offset,
+             R} = bm_types:decode_varint(Data),
             {Size,
-             <<FileHash:64/bytes,
-               ChunkPadded/bytes>>} = bm_types:decode_varint(Data),
+             ChunkPadded} = bm_types:decode_varint(R),
 
             <<Chunk:Size/bytes, _/bytes>> = ChunkPadded,
             mnesia:dirty_delete(bm_filechunk, ChunkHash),
             NewFC = FC#bm_filechunk{status=decrypted,
-                                    file=FileHash,
+                                    offset=Offset,
                                     size=Size,
-                                    time=calendar:universal_time(),
                                     data=Chunk
                                    },
             bm_db:insert(bm_filechunk,
                          [NewFC]),
-            error_logger:info_msg("Saving FileChunk ~p ~n", [NewFC]),
+            error_logger:info_msg("Saving FileChunk ~p ~n", [ChunkHash]),
             bm_attachment_srv:received_chunk(FileHash, ChunkHash),
             Progress = bm_attachment_srv:progress(FileHash),
             bitmessage:filechunk_received(FileHash, ChunkHash, Progress),

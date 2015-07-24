@@ -267,8 +267,23 @@ update() ->  % {{{1
                           record_info(fields,
                                       bm_filechunk)},
                          {type, set},
-                         {index, [file]}
+                         {index, [file, offset]}
                         ]),
+    FCTableFields = mnesia:table_info(bm_filechunk, attributes),
+    FCRecordFields = record_info(fields, bm_filechunk),
+    if FCRecordFields /= FCTableFields ->
+           mnesia:delete_table(bm_filechunk),
+           mnesia:create_table(bm_filechunk,
+                               [
+                                {disc_copies, [node()]},
+                                {attributes,
+                                 record_info(fields,
+                                             bm_filechunk)},
+                                {type, set},
+                                {index, [file, offset]}
+                               ]);
+       true -> ok
+    end
 
     case mnesia:create_table(message,
                              [

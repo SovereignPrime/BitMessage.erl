@@ -45,7 +45,6 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(DMessage) ->  % {{{1
-    io:format("~p~n", [DMessage]),
     gen_fsm:start_link(?MODULE, [DMessage], []).
 
 %%--------------------------------------------------------------------
@@ -350,6 +349,7 @@ payload(timeout,
         #state{
            message=#bm_filechunk{
                       hash=Hash,
+                      offset=Offset,
                       size=Size,
                       data=Data,
                       file=FileHash
@@ -368,8 +368,9 @@ payload(timeout,
                end,
 
     VSize = bm_types:encode_varint(Size),
-    Payload = <<VSize/bytes,
-                FileHash:64/bytes,
+    VOffset = bm_types:encode_varint(Offset),
+    Payload = <<VOffset/bytes,
+                VSize/bytes,
                 Data/bytes>>,
     NMessage = Message#bm_filechunk{payload=Payload,
                                     status=encrypt_message},
@@ -616,7 +617,8 @@ make_inv(timeout,
                                              1, % Version
                                              Stream, 
                                              Time,
-                                             <<ChunksHash:64/bytes,
+                                             <<FileHash:/64/bytes,
+                                               ChunksHash:64/bytes,
                                                Payload/bytes>>),
     case PPayload of
         not_found ->
@@ -750,8 +752,6 @@ process_attachment(Path) when is_binary(Path) ->
             <<MercleRoot:64/bytes,
               (bm_types:encode_varstr(Name))/bytes,
               (bm_types:encode_varint(Size))/bytes,
-              (bm_types:encode_list(ChunksHash,
-                                    fun(E) -> E end))/bytes,
               Priv/bytes>>;
         [] ->
             <<>>
@@ -790,8 +790,6 @@ process_attachment(Path) ->
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
-      (bm_types:encode_list(ChunksHash,
-                            fun(E) -> E end))/bytes,
        Priv/bytes>>.
 
 -spec encrypt(PEK, Payload) -> Payload when  % {{{1
