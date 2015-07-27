@@ -209,8 +209,7 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                        size=Size}] ->
             error_logger:info_msg("Remaining: ~p", [Remaining]),
             NRemaining = lists:foldr(fun({O, L}=T,
-                                         [{NO, NL}| R] =  A) when O =< Offset,
-                                                                  O + L < NO ->
+                                         [{NO, NL}| R] =  A) when O =< Offset ->
                                              if O + L == Offset,
                                                 Offset + Size >= NO ->
                                                     [{O, L + Size + NL}|R];
@@ -221,7 +220,7 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                                                 true ->
                                                     [T, {Offset, Size} | A]
                                              end;
-                                        (T, []) -> [T];
+                                        (T, []) when T == {0, 0} -> [{Offset, Size}];
                                         (_, A) -> A
                                      end,
                                      [],
@@ -423,7 +422,7 @@ download(Path, #bm_file{
         path=Path,
         file=NFile,
         chunks=Chunks,
-        remaining=[],
+        remaining=[{0,0}],
         timeout=Timeout
        }, 
      Timeout}.

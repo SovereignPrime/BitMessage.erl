@@ -289,6 +289,7 @@ test_file_query(_Config) -> % {{{2
                 end),
 
 
+    application:set_env(bitmessage, chunk_size, 1024),
     bitmessage:send_message(To,
                             Addr,
                             <<"Test message with file">>,
