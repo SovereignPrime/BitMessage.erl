@@ -614,10 +614,10 @@ make_inv(timeout,
                                        time=Time}=Message}=State) ->
     Stream = 1, % TODO: make dynamic
     PPayload = bm_message_creator:create_obj(?FILECHUNK, 
-                                             1, % Version
+                                             2, % Version
                                              Stream, 
                                              Time,
-                                             <<FileHash:/64/bytes,
+                                             <<FileHash:64/bytes,
                                                ChunksHash:64/bytes,
                                                Payload/bytes>>),
     case PPayload of

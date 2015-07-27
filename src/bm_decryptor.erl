@@ -264,6 +264,7 @@ preprocess(timeout,
 preprocess(timeout,
            #state{
               object=?FILECHUNK,  % {{{3
+              version=2,
               payload=Payload,
               hash=Hash,
               encrypted = <<FileHash:64/bytes,
@@ -275,7 +276,7 @@ preprocess(timeout,
     Files = bm_db:lookup(bm_file, FileHash),
 
     case {Files, Chunks}  of
-        {[#bm_file{status=downloading}, []} ->
+        {[#bm_file{status=downloading}], []} ->
             bm_db:insert(bm_filechunk, [#bm_filechunk{hash=ChunkHash,
                                                       file=FileHash,
                                                       status=received,
@@ -678,24 +679,18 @@ save_files(Data) ->
                                         R1} = bm_types:decode_varstr(A),
                                        error_logger:info_msg("File: ~p, hash ~p~n", [Name, Hash]),
                                        {Size,
-                                        R2} = bm_types:decode_varint(R1),
-                                       error_logger:info_msg("File: ~p, size ~p~n", [Name, Size]),
-                                       {Chunks,
                                         <<Key:32/bytes, 
-                                          R3/bytes>>} = bm_types:decode_list(R2,
-                                                                             fun(<<X:64/bytes,
-                                                                                   Y/bytes>>) ->
-                                                                                     {X, Y}
-                                                                             end),
+                                          R2/bytes>>} = bm_types:decode_varint(R1),
+                                       error_logger:info_msg("File: ~p, size ~p~n",
+                                                             [Name, Size]),
                                        {#bm_file{
                                            hash=Hash,
-                                          name=Name,
-                                          size=Size,
-                                          chunks=Chunks,
-                                          key={bm_auth:pubkey(Key), Key},
-                                          time=bm_types:timestamp()
+                                           name=Name,
+                                           size=Size,
+                                           key={bm_auth:pubkey(Key), Key},
+                                           time=bm_types:timestamp()
                                          },
-                                        R3}
+                                        R2}
                                end), 
     bm_db:insert(bm_file, Attachments),
     lists:map(fun(#bm_file{hash=H}) ->

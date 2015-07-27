@@ -283,8 +283,7 @@ update() ->  % {{{1
                                 {index, [file, offset]}
                                ]);
        true -> ok
-    end
-
+    end,
     case mnesia:create_table(message,
                              [
                               {disc_copies, [node()]},

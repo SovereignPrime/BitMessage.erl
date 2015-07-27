@@ -17,8 +17,8 @@
 -export([
          test_attachment_encode_decode/0,
          test_attachment_encode_decode/1,
-         test_filechunk_query/0,
-         test_filechunk_query/1,
+         test_file_query/0,
+         test_file_query/1,
          test_filechunk_send/0,
          test_filechunk_send/1
         ]).
@@ -33,8 +33,8 @@
 all() ->  % {{{2
     [
      test_attachment_encode_decode,
-     %test_filechunk_query,
-     test_filechunk_send
+     test_file_query
+     %test_filechunk_send
     ].
 
 suite() ->  % {{{2
@@ -235,10 +235,10 @@ test_attachment_encode_decode(_Config) -> % {{{2
     meck:wait(bm_sender, send_broadcast, '_', 1600),
     meck:wait(test, received, '_', 1600).
 
-test_filechunk_query() ->  % {{{2
+test_file_query() ->  % {{{2
     [].
 
-test_filechunk_query(_Config) -> % {{{2
+test_file_query(_Config) -> % {{{2
     bm_attachment_sup:start_link(),
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
@@ -270,11 +270,16 @@ test_filechunk_query(_Config) -> % {{{2
                             [#inventory{
                                 type=Type,
                                 payload = <<_:22/bytes, 
+                                            FileHash:64/bytes>>
+                               }]  when Type == ?GETFILE -> 
+                                bm_attachment_srv:send_file(FileHash);
+                            [#inventory{
+                                type=Type,
+                                payload = <<_:22/bytes, 
                                             FileHash:64/bytes,
-                                            ChunkHash:64/bytes>>
-                               }]  when Type == ?GETFILECHUNK -> 
-                                bm_attachment_srv:send_chunk(FileHash,
-                                                             ChunkHash),
+                                            ChunkHash:64/bytes,
+                                            _/bytes>>
+                               }]  when Type == ?FILECHUNK -> 
                                 bm_attachment_srv:received_chunk(FileHash, ChunkHash);
                             [_] ->
                                 ok
@@ -291,7 +296,7 @@ test_filechunk_query(_Config) -> % {{{2
                             ["../../test/data/rand64k.raw"]),
     meck:wait(bm_pow, make_pow, '_', 16000),
     meck:wait(bm_sender, send_broadcast, '_', 16000),
-    meck:wait(test, downloaded, '_', 1600000),
+    meck:wait(test, downloaded, '_', 16000),
     ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
     ?assertEqual(131, meck:num_calls(bm_sender, send_broadcast, '_')),
     ?assertEqual(65, meck:num_calls(test, filechunk_sent, '_')),

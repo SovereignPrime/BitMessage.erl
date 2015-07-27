@@ -237,6 +237,23 @@ create_ack(#message{ackdata=Payload, from=Addr}) ->
                                        stream=Stream}]),
     create_inv([ Hash ]).
 
+-spec create_getchunk(FileHash, Offset, Length) -> message_bin() when % {{{1
+      FileHash :: binary(),
+      Offset :: non_neg_integer(),
+      Length :: non_neg_integer().
+create_getchunk(FileHash, Offset, Length) ->
+    VOffset = bm_types:encode_varint(Offset),
+    VLength = bm_types:encode_varint(Length),
+    Payload = <<FileHash:64/bytes, VOffset/bytes, VLength/bytes>>,
+    FileChunkTTL = application:get_env(bitmessage, filechunk_ttl, 3600),
+    Time = bm_types:timestamp() + FileChunkTTL,
+    case create_obj(?GETFILECHUNK, 2, 1, Time, Payload) of
+        not_found ->
+            create_getchunk(FileHash, Offset, Length);
+        Obj ->
+            save_obj(Obj) 
+    end.
+
 -spec create_getchunk(FileHash, ChunkHash) -> message_bin() when % {{{1
       FileHash :: binary(),
       ChunkHash :: binary().
@@ -247,6 +264,18 @@ create_getchunk(FileHash, ChunkHash) ->
     case create_obj(?GETFILECHUNK, 1, 1, Time, Payload) of
         not_found ->
             create_getchunk(FileHash, ChunkHash);
+        Obj ->
+            save_obj(Obj) 
+    end.
+
+-spec create_getfile(FileHash) -> message_bin() when % {{{1
+      FileHash :: binary().
+create_getfile(FileHash) ->
+    FileChunkTTL = application:get_env(bitmessage, filechunk_ttl, 3600),
+    Time = bm_types:timestamp() + FileChunkTTL,
+    case create_obj(?GETFILE, 1, 1, Time, FileHash) of
+        not_found ->
+            create_getfile(FileHash);
         Obj ->
             save_obj(Obj) 
     end.

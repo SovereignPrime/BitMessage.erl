@@ -132,6 +132,12 @@ decode_network(<<Time:64/big-integer,
 %% Helpers  % {{{1
 %%%
 
+-spec shuffle([Type]) -> [Type].
+shuffle(List) ->
+    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
+    random:seed({A, B, C}),
+    [X || {_,X} <- lists:sort([ {random:uniform(), N} || N <- List])].
+
 -spec integer_to_bytes(integer()) -> binary().  % {{{2
 integer_to_bytes(0) ->
     <<>>;

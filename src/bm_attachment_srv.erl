@@ -6,7 +6,9 @@
 %% API functions  {{{1
 -export([
          start_link/2, 
+         send_file/1,
          send_chunk/2,
+         send_chunk/3,
          progress/1,
          received_chunk/2, 
          compute_chunk_size/1
@@ -42,6 +44,33 @@
 %%--------------------------------------------------------------------
 start_link(Hash, Path) ->   % {{{2
     gen_server:start_link(?MODULE, [Hash, Path], []).
+%%
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends file to network
+%%
+%%--------------------------------------------------------------------
+-spec send_file(FileHash) -> ok when  % {{{2
+      FileHash :: binary().
+send_file(FileHash) ->
+    case create_tar_from_file(FileHash) of
+        {ok, TarPath, _} ->
+            ChunkSize = compute_chunk_size(TarPath),
+            Chunks = bm_types:shuffle(
+                       lists:seq(0, 
+                                 filelib:file_size(TarPath),
+                                 ChunkSize)),
+            spawn_link(fun() ->
+                               lists:foreach(fun(Offset) ->
+                                                     send_chunk(FileHash, 
+                                                                Offset,
+                                                                ChunkSize)
+                                             end,
+                                             Chunks)
+                       end);
+        no_file ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -53,13 +82,17 @@ start_link(Hash, Path) ->   % {{{2
       ChunkHash :: binary().
 send_chunk(FileHash, ChunkHash) ->
     Timeout = crypto:rand_uniform(0, 300),
-    timer:sleep(Timeout),
-    InNetwork = is_filchunk_in_network(ChunkHash),
-    if InNetwork ->
-           ok;
-       true ->
-           encode_filechunk(FileHash, ChunkHash)
-    end.
+    %timer:sleep(Timeout),
+    encode_filechunk(FileHash, ChunkHash).
+
+-spec send_chunk(FileHash, Offset, Size) -> ok when  % {{{2
+      FileHash :: binary(),
+      Offset :: non_neg_integer(),
+      Size :: non_neg_integer().
+send_chunk(FileHash, Offset, Size) ->
+    Timeout = crypto:rand_uniform(0, 300),
+    %timer:sleep(Timeout),
+    create_filechunk_from_file(FileHash, Offset, Size).
 
 -spec progress(FileHash) -> float() when  % {{{2
       FileHash :: binary().
@@ -165,19 +198,45 @@ handle_call(_Request, _From, State) ->   % {{{2
 %%--------------------------------------------------------------------
 handle_cast({received, FileHash, ChunkHash},   % {{{2
             #state{
-               chunks=Chunks,
+               file=#bm_file{hash=FileHash,
+                             size=FileSize},
+               remaining=Remaining,
                timeout=Timeout
               }=State) ->
     error_logger:info_msg("Chunks received"),
-    IsMy = lists:member(ChunkHash, Chunks),
-    All = length(Chunks),
-    Here = progress(FileHash),
-    if IsMy, Here == All ->
-           error_logger:info_msg("~p chunks remaining", [0]),
-           {noreply, State, 0};
-       true ->
-           error_logger:info_msg("~p chunks downloaded", [Here]),
-           {noreply, State, Timeout}
+    case bm_db:lookup(bm_filechunk, ChunkHash) of
+        [#bm_filechunk{offset=Offset,
+                       size=Size}] ->
+            error_logger:info_msg("Remaining: ~p", [Remaining]),
+            NRemaining = lists:foldr(fun({O, L}=T,
+                                         [{NO, NL}| R] =  A) when O =< Offset,
+                                                                  O + L < NO ->
+                                             if O + L == Offset,
+                                                Offset + Size >= NO ->
+                                                    [{O, L + Size + NL}|R];
+                                                O + L == Offset ->
+                                                    [{O, L + Size} | A];
+                                                Offset + Size >= NO ->
+                                                    [{O, L}, {Offset, Size + NL} | R];
+                                                true ->
+                                                    [T, {Offset, Size} | A]
+                                             end;
+                                        (T, []) -> [T];
+                                        (_, A) -> A
+                                     end,
+                                     [],
+                                     Remaining),
+            error_logger:info_msg("NRemaining: ~p", [NRemaining]),
+            if Remaining == [{0, FileSize}] ->
+                   error_logger:info_msg("~p chunks remaining", [0]),
+                   {noreply, State, 0};
+               true ->
+                   Here = progress(FileHash),
+                   error_logger:info_msg("~p chunks downloaded", [Here]),
+                   {noreply, State#state{remaining=NRemaining}, Timeout}
+            end;
+        _ ->
+            {noreply, State, Timeout}
     end;
 handle_cast(Msg, State) ->   % {{{2
     error_logger:warning_msg("Wrong msg ~p  received in ~p", [Msg, ?MODULE_STRING]),
@@ -345,6 +404,7 @@ encode_filechunk(FileHash, ChunkHash) ->
       File :: #bm_file{},
       Timeout :: non_neg_integer().
 download(Path, #bm_file{
+                  hash=FileHash,
                   name=Name,
                   key={_Pub, Priv},
                   chunks=Chunks
@@ -356,6 +416,7 @@ download(Path, #bm_file{
              },
     bm_db:insert(bm_file, [NFile]),
     bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
+    bm_sender:send_broadcast(bm_message_creator:create_getfile(FileHash)),
     error_logger:info_msg("Starting file ~p download", [Name]),
     {ok,
      #state{
@@ -365,50 +426,38 @@ download(Path, #bm_file{
         remaining=[],
         timeout=Timeout
        }, 
-     0}.
+     Timeout}.
 
 -spec create_filechunk_from_file(FileHash, ChunkHash) -> ok when  % {{{2
       FileHash :: binary(),
       ChunkHash :: binary().
 create_filechunk_from_file(FileHash, ChunkHash) ->
-    case bm_db:lookup(bm_file,
-                      FileHash) of
-        [ #bm_file{path=Path,
-                   name=Name,
-                   chunks=ChunkHashes
-                  } ] ->
-            FPath = Path ++ "/" ++ Name,
-            IsFile = filelib:is_file(FPath),
-            if IsFile ->
-                   TarPath = FPath  ++ ".rz.tar.gz",
-                   erl_tar:create(TarPath,
-                                  [{Name, FPath}],
-                                  [compressed]),
-                   ChunkSize = compute_chunk_size(TarPath),
-                   Location = length(lists:takewhile(fun(CH) ->
-                                                             CH /= ChunkHash 
-                                                     end,
-                                                     ChunkHashes)) * ChunkSize,
-                   error_logger:info_msg("Chunk location: ~p~n", [Location]),
-                   {ok, F} = file:open(TarPath, [binary, read]),
-                   case file:pread(F, Location, ChunkSize) of
-                       {ok, Data} ->
-                           bm_message_encryptor:start_link(#bm_filechunk{
-                                                              hash=ChunkHash,
-                                                              size=size(Data),
-                                                              data=Data,
-                                                              file=FileHash
-                                                             }),
-                           file:close(F),
-                           file:delete(TarPath),
-                           ok;
-                       _ ->
-                           ok
-                   end;
-               true -> 
-                   ok
-            end;
-        _ -> ok
+    case create_tar_from_file(FileHash) of
+        {ok, TarPath, #bm_file{chunks=ChunkHashes}} ->
+            ChunkSize = compute_chunk_size(TarPath),
+            Location = length(lists:takewhile(fun(CH) ->
+                                                      CH /= ChunkHash 
+                                              end,
+                                              ChunkHashes)) * ChunkSize,
+            create_filechunk_from_tar(#bm_filechunk{offset=Location,
+                                                     size=ChunkSize,
+                                                     file=FileHash},
+                                       TarPath);
+        no_file -> ok
+    end.
+
+-spec create_filechunk_from_file(FileHash, Offset, Size) -> ok when  % {{{2
+      FileHash :: binary(),
+      Offset :: non_neg_integer(),
+      Size :: non_neg_integer().
+create_filechunk_from_file(FileHash, Offset, Size) ->
+    case create_tar_from_file(FileHash) of
+        {ok, TarPath, _} ->
+            create_filechunk_from_tar(#bm_filechunk{offset=Offset,
+                                                    size=Size,
+                                                    file=FileHash},
+                                      TarPath);
+        no_file -> ok
     end.
 
 -spec send_all(PIDs, Msg) -> ok when % {{{2
@@ -435,3 +484,64 @@ compute_chunk_size(Path) ->
             Size div MaxChunksNumber
     end.
 
+-spec create_tar_from_file(FileHash) -> {ok, TarPath, #bm_file{}} | no_file when  % {{{2
+      FileHash :: binary(),
+      TarPath :: file:filename_all().
+create_tar_from_file(FileHash) -> 
+    case bm_db:lookup(bm_file,
+                      FileHash) of
+        [#bm_file{path=Path,
+                  name=Name
+                 }=File] ->
+            FPath = Path ++ "/" ++ Name,
+            case create_tar_from_path(FPath) of
+                {ok, TarPath} -> {ok, TarPath, File};
+                _ -> no_file
+            end;
+        _ -> no_file
+    end.
+
+-spec create_tar_from_path(Path) -> ok | no_file when  % {{{2
+      Path :: file:filename_all().
+create_tar_from_path(Path) ->
+    IsFile = filelib:is_file(Path),
+    if IsFile ->
+           TarPath = Path  ++ ".rz.tar.gz",
+           Name = filename:basename(Path),
+           case erl_tar:create(TarPath,
+                               [{Name, Path}],
+                               [compressed]) of 
+               ok -> {ok ,TarPath};
+               _ -> no_file
+           end;
+       true -> no_file
+    end.
+
+-spec create_filechunk_from_tar(#bm_filechunk{},  % {{{2
+                                file:filename_all()) -> ok.
+create_filechunk_from_tar(#bm_filechunk{offset=Offset,
+                                        size=Size}=FC,
+                          TarPath) ->
+    error_logger:info_msg("Chunk location: ~p~n", [Offset]),
+    {ok, F} = file:open(TarPath, [binary, read]),
+    case file:pread(F, Offset, Size) of
+        {ok, Data} ->
+            ChunkHash = bm_auth:dual_sha(Data),
+            maybe_send_chunk(FC#bm_filechunk{
+                                 hash=ChunkHash,
+                                 size=size(Data),
+                                 data=Data
+                                }),
+            file:close(F),
+            file:delete(TarPath);
+        _ -> ok
+    end.
+
+-spec maybe_send_chunk(#bm_filechunk{}) -> ok.  % {{{2
+maybe_send_chunk(#bm_filechunk{hash=ChunkHash}=Filechunk) ->
+    InNetwork = is_filchunk_in_network(ChunkHash),
+    if InNetwork ->
+           ok;
+       true ->
+            bm_message_encryptor:start_link(Filechunk)
+    end.
