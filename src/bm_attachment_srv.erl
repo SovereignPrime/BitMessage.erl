@@ -29,7 +29,7 @@
           path="" :: string(),
           fd :: file:io_device(),
           chunks :: [binary()],
-          remaining :: [binary()],
+          remaining :: [{non_neg_integer(), non_neg_integer()}],
           timeout=100 :: non_neg_integer()
          }).
 
