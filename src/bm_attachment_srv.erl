@@ -208,22 +208,24 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
         [#bm_filechunk{offset=Offset,
                        size=Size}] ->
             error_logger:info_msg("Remaining: ~p", [Remaining]),
-            NRemaining = lists:foldr(fun({O, L}=T,
-                                         [{NO, NL}| R] =  A) when O =< Offset ->
-                                             if O + L == Offset,
-                                                Offset + Size >= NO ->
-                                                    [{O, L + Size + NL}|R];
-                                                O + L == Offset ->
-                                                    [{O, L + Size} | A];
-                                                Offset + Size >= NO ->
-                                                    [{O, L}, {Offset, Size + NL} | R];
-                                                true ->
-                                                    [T, {Offset, Size} | A]
-                                             end;
-                                        (T, []) when T == {0, 0} -> [{Offset, Size}];
+            NRemaining = lists:foldr(fun({0, 0}, A) -> A;
+                                         ({S, E}=T,
+                                         [{NS, NE}|R] = A) when E+1 < NS ->
+                                             [T | A];
+                                        ({S, E}=T,
+                                         [{NS, NE}=C|R] = A) when S > NE+1 ->
+                                              [C, T | R];
+                                        ({S, E}=T,
+                                         [{NS, NE}|R] = A) when S < NS,
+                                                                E >= NS ->
+                                             [{S, NE}|R];
+                                        ({S, E}=T,
+                                         [{NS, NE}=C|R] = A) when S > NS,
+                                                                NE >= S ->
+                                             [{NS, E}|R];
                                         (_, A) -> A
                                      end,
-                                     [],
+                                     [{Offset, Offset + Size}],
                                      Remaining),
             error_logger:info_msg("NRemaining: ~p", [NRemaining]),
             if Remaining == [{0, FileSize}] ->
