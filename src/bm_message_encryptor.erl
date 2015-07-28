@@ -759,8 +759,9 @@ process_attachment(Path) when is_binary(Path) ->
 process_attachment(Path) ->
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
-    TarPath = Path ++ ".rz.tar.gz",
-    erl_tar:create(TarPath, [Path], [compressed]),
+    %TarPath = Path ++ ".rz.tar.gz",
+    %erl_tar:create(TarPath, [Path], [compressed]),
+    {ok, TarPath} = bm_attachment_srv:create_tar_from_path(Path),
     ChunkSize = bm_attachment_srv:compute_chunk_size(TarPath),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
@@ -779,6 +780,7 @@ process_attachment(Path) ->
                  hash=MercleRoot,
                  name=Name,
                  size=Size,
+                 tarsize=TarSize,
                  path=filename:dirname(Path),
                  chunks=ChunksHash,
                  key=Keys,
@@ -790,6 +792,7 @@ process_attachment(Path) ->
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
+      (bm_types:encode_varint(TarSize))/bytes,
        Priv/bytes>>.
 
 -spec encrypt(PEK, Payload) -> Payload when  % {{{1

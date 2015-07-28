@@ -11,6 +11,7 @@
          send_chunk/3,
          progress/1,
          received_chunk/2, 
+         create_tar_from_path/1,
          compute_chunk_size/1
         ]).
 
@@ -26,6 +27,7 @@
           callback=bitmessage :: module(),
           file :: #bm_file{},
           path="" :: string(),
+          fd :: file:io_device(),
           chunks :: [binary()],
           remaining :: [binary()],
           timeout=100 :: non_neg_integer()
@@ -60,6 +62,7 @@ send_file(FileHash) ->
                        lists:seq(0, 
                                  filelib:file_size(TarPath),
                                  ChunkSize)),
+            error_logger:info_msg("Chunks number: ~p", [Chunks]),
             spawn_link(fun() ->
                                lists:foreach(fun(Offset) ->
                                                      send_chunk(FileHash, 
@@ -199,15 +202,19 @@ handle_call(_Request, _From, State) ->   % {{{2
 handle_cast({received, FileHash, ChunkHash},   % {{{2
             #state{
                file=#bm_file{hash=FileHash,
-                             size=FileSize},
+                             size=FileSize,
+                             tarsize=TarSize},
+               fd=F,
                remaining=Remaining,
                timeout=Timeout
               }=State) ->
     error_logger:info_msg("Chunks received"),
     case bm_db:lookup(bm_filechunk, ChunkHash) of
         [#bm_filechunk{offset=Offset,
+                       data=Data,
                        size=Size}] ->
             error_logger:info_msg("Remaining: ~p", [Remaining]),
+            file:pwrite(F, Offset, Data),
             NRemaining = lists:foldr(fun({0, 0}, A) -> A;
                                          ({S, E}=T,
                                          [{NS, NE}|R] = A) when E+1 < NS ->
@@ -228,9 +235,11 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                                      [{Offset, Offset + Size}],
                                      Remaining),
             error_logger:info_msg("NRemaining: ~p", [NRemaining]),
-            if Remaining == [{0, FileSize}] ->
+            error_logger:info_msg("TarSize: ~p", [TarSize]),
+            error_logger:info_msg("FileSize: ~p", [FileSize]),
+            if NRemaining == [{0, TarSize}] ->
                    error_logger:info_msg("~p chunks remaining", [0]),
-                   {noreply, State, 0};
+                   {noreply, State#state{remaining=NRemaining}, 0};
                true ->
                    Here = progress(FileHash),
                    error_logger:info_msg("~p chunks downloaded", [Here]),
@@ -255,42 +264,27 @@ handle_cast(Msg, State) ->   % {{{2
 %%--------------------------------------------------------------------
 handle_info(timeout,   % {{{2
             #state{
-               file=File,
+               file=#bm_file{tarsize=TarSize}=File,
                path=Path,
-               chunks=Chunks,
-               remaining=[]
+               remaining=[{0, TarSize}]
                   } = State) ->
-    case lists:foldl(fun(CID, Acc) ->
-                             case bm_db:lookup(bm_filechunk, CID) of
-                                 [] -> 
-                                     [CID | Acc];
-                                 [#bm_filechunk{data=undefined,
-                                                hash=CID}] -> 
-                                     [CID | Acc];
-                                 [_] ->
-                                     Acc
-                             end
-                     end,
-                     [],
-                     Chunks) of
-        [] ->
-            save_file(File, Path),
-            bitmessage:downloaded(File#bm_file.hash),
-            {stop, normal, State};
-        Remaining ->
-            {noreply, State#state{remaining=Remaining}, 0}
-    end;
+    error_logger:info_msg("Timeout in download: ~p", [TarSize]),
+    save_file(File, Path),
+    bitmessage:downloaded(File#bm_file.hash),
+    {stop, normal, State};
 handle_info(timeout,   % {{{2
             #state{
                file=#bm_file{hash=FHash},
                timeout=Timeout,
                remaining=Chunks
                   } = State) ->
-    lists:foreach(fun(C) ->
-                          send_chunk_request(FHash, C)
+    {[0|Starts], Ends} = lists:unzip(Chunks),
+    Requests = lists:zip(lists:droplast(Ends), Starts),
+    lists:foreach(fun({S,E}) ->
+                          send_chunk_request(FHash, S, E - S)
                   end,
-                  Chunks),
-    {noreply, State#state{remaining=[]}, Timeout};
+                  Requests),
+    {noreply, State, Timeout};
 handle_info(Info, #state{timeout=Timeout} = State) ->
     error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n",
                              [?MODULE_STRING,
@@ -310,7 +304,8 @@ handle_info(Info, #state{timeout=Timeout} = State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->   % {{{2
+terminate(_Reason, #state{fd=F}=State) ->   % {{{2
+    file:close(F),
     ok.
 
 %%--------------------------------------------------------------------
@@ -327,17 +322,12 @@ code_change(_OldVsn, State, _Extra) ->   % {{{2
 %%%===================================================================
 %%% Internal functions   % {{{1
 %%%===================================================================
--spec send_chunk_request(FHash, CID) -> ok when  % {{{2
+-spec send_chunk_request(FHash, Start, Size) -> ok when  % {{{2
       FHash :: binary(),
-      CID :: binary().
-send_chunk_request(FHash, CID) ->
-    case bm_db:lookup(bm_filechunk, CID) of
-        [#bm_filechunk{data=Data}] when Data /= undefined ->
-            ok;
-        _ ->
-            bm_db:insert(bm_filechunk, [#bm_filechunk{hash=CID, file=FHash}]),
-            bm_sender:send_broadcast(bm_message_creator:create_getchunk(FHash, CID))
-    end.
+      Start :: non_neg_integer(),
+      Size :: non_neg_integer().
+send_chunk_request(FHash, Start, Size) ->
+    bm_sender:send_broadcast(bm_message_creator:create_getchunk(FHash, Start, Size)).
 
 -spec save_file(#bm_file{}, Path) -> 'ok' | 'incomplete' when  % {{{2
       Path :: string().
@@ -350,15 +340,6 @@ save_file(#bm_file{
           Path) ->
     FPath = Path ++ "/" ++ Name,
     TarFile = FPath ++ ".rz.tar.gz",
-    {ok, F} = file:open(TarFile, [binary, append]),
-
-    lists:foreach(fun(C) ->
-                          [#bm_filechunk{data=BC}] = bm_db:lookup(bm_filechunk,
-                                                                  C),
-                          file:write(F, BC)
-                  end,
-                  Chunks),
-
     erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
@@ -417,12 +398,16 @@ download(Path, #bm_file{
              },
     bm_db:insert(bm_file, [NFile]),
     bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
+    FPath = Path ++ "/" ++ Name,
+    TarFile = FPath ++ ".rz.tar.gz",
+    {ok, F} = file:open(TarFile, [binary, write]),
     bm_sender:send_broadcast(bm_message_creator:create_getfile(FileHash)),
     error_logger:info_msg("Starting file ~p download", [Name]),
     {ok,
      #state{
         path=Path,
         file=NFile,
+        fd=F,
         chunks=Chunks,
         remaining=[{0,0}],
         timeout=Timeout
@@ -523,7 +508,7 @@ create_tar_from_path(Path) ->
 create_filechunk_from_tar(#bm_filechunk{offset=Offset,
                                         size=Size}=FC,
                           TarPath) ->
-    error_logger:info_msg("Chunk location: ~p~n", [Offset]),
+    error_logger:info_msg("Chunk location: ~p size: ~p~n", [Offset, Size]),
     {ok, F} = file:open(TarPath, [binary, read]),
     case file:pread(F, Offset, Size) of
         {ok, Data} ->
@@ -533,8 +518,8 @@ create_filechunk_from_tar(#bm_filechunk{offset=Offset,
                                  size=size(Data),
                                  data=Data
                                 }),
-            file:close(F),
-            file:delete(TarPath);
+            file:close(F);
+            %file:delete(TarPath);
         _ -> ok
     end.
 

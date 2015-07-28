@@ -105,6 +105,7 @@
          name :: iodata() | atom(),
          path :: string() | atom(),
          size :: non_neg_integer() | atom(),
+         tarsize=undefined :: non_neg_integer() | atom(),
          chunks :: list(binary()) | atom(), %% ???
          key :: {binary(), binary()} | atom(),
          time :: calendar:date_time() | non_neg_integer(),

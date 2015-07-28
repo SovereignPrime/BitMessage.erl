@@ -679,18 +679,21 @@ save_files(Data) ->
                                         R1} = bm_types:decode_varstr(A),
                                        error_logger:info_msg("File: ~p, hash ~p~n", [Name, Hash]),
                                        {Size,
+                                        R2}  = bm_types:decode_varint(R1),
+                                       {TarSize,
                                         <<Key:32/bytes, 
-                                          R2/bytes>>} = bm_types:decode_varint(R1),
+                                          R3/bytes>>} = bm_types:decode_varint(R2),
                                        error_logger:info_msg("File: ~p, size ~p~n",
                                                              [Name, Size]),
                                        {#bm_file{
                                            hash=Hash,
                                            name=Name,
                                            size=Size,
+                                           tarsize=TarSize,
                                            key={bm_auth:pubkey(Key), Key},
                                            time=bm_types:timestamp()
                                          },
-                                        R2}
+                                        R3}
                                end), 
     bm_db:insert(bm_file, Attachments),
     lists:map(fun(#bm_file{hash=H}) ->

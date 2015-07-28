@@ -33,8 +33,8 @@
 all() ->  % {{{2
     [
      test_attachment_encode_decode,
-     test_file_query
-     %test_filechunk_send
+     test_file_query,
+     test_filechunk_send
     ].
 
 suite() ->  % {{{2
@@ -298,9 +298,9 @@ test_file_query(_Config) -> % {{{2
     meck:wait(bm_pow, make_pow, '_', 16000),
     meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 16000),
-    ?assertEqual(65, mnesia:table_info(bm_filechunk, size)),
-    ?assertEqual(131, meck:num_calls(bm_sender, send_broadcast, '_')),
-    ?assertEqual(65, meck:num_calls(test, filechunk_sent, '_')),
+    ?assertEqual(101, mnesia:table_info(bm_filechunk, size)),
+    ?assertEqual(103, meck:num_calls(bm_sender, send_broadcast, '_')),
+    ?assertEqual(101, meck:num_calls(test, filechunk_sent, '_')),
     ?assert(meck:called(test, downloaded, '_')).
 
 test_filechunk_send() ->  % {{{2
