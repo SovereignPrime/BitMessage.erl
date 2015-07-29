@@ -55,25 +55,7 @@ start_link(Hash, Path) ->   % {{{2
 -spec send_file(FileHash) -> ok when  % {{{2
       FileHash :: binary().
 send_file(FileHash) ->
-    case create_tar_from_file(FileHash) of
-        {ok, TarPath, _} ->
-            ChunkSize = compute_chunk_size(TarPath),
-            Chunks = bm_types:shuffle(
-                       lists:seq(0, 
-                                 filelib:file_size(TarPath),
-                                 ChunkSize)),
-            error_logger:info_msg("Chunks number: ~p", [Chunks]),
-            spawn_link(fun() ->
-                               lists:foreach(fun(Offset) ->
-                                                     send_chunk(FileHash, 
-                                                                Offset,
-                                                                ChunkSize)
-                                             end,
-                                             Chunks)
-                       end);
-        no_file ->
-            ok
-    end.
+    send_chunk(FileHash, 0, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,9 +75,37 @@ send_chunk(FileHash, ChunkHash) ->
       Offset :: non_neg_integer(),
       Size :: non_neg_integer().
 send_chunk(FileHash, Offset, Size) ->
-    Timeout = crypto:rand_uniform(0, 300),
+    %Timeout = crypto:rand_uniform(0, 300),
     %timer:sleep(Timeout),
-    create_filechunk_from_file(FileHash, Offset, Size).
+    case create_tar_from_file(FileHash) of
+        {ok, TarPath, _} ->
+            Length = case Size of
+                         0 ->
+                             filelib:file_size(TarPath);
+                         _ ->
+                             Size
+                     end,
+            ChunkSize = compute_chunk_size(Length),
+            Chunks = %bm_types:shuffle(
+                       lists:seq(Offset, 
+                                 Length,
+                                 ChunkSize),
+            error_logger:info_msg("Chunks number: ~p", [Chunks]),
+            spawn_link(
+              fun() ->
+                      lists:foreach(
+                        fun(Location) ->
+                                create_filechunk_from_tar(
+                                  #bm_filechunk{offset=Location,
+                                                size=ChunkSize,
+                                                file=FileHash},
+                                  TarPath)
+                        end,
+                        Chunks)
+                       end);
+        no_file ->
+            ok
+    end.
 
 -spec progress(FileHash) -> float() when  % {{{2
       FileHash :: binary().
@@ -264,6 +274,15 @@ handle_cast(Msg, State) ->   % {{{2
 %%--------------------------------------------------------------------
 handle_info(timeout,   % {{{2
             #state{
+               file=#bm_file{hash=FileHash},
+               timeout=Timeout,
+               remaining=[{0, 0}]
+                  } = State) ->
+    error_logger:info_msg("Timeout file ~p not started yet requesting", [FileHash]),
+    bm_sender:send_broadcast(bm_message_creator:create_getfile(FileHash)),
+    {noreply, State, Timeout};
+handle_info(timeout,   % {{{2
+            #state{
                file=#bm_file{tarsize=TarSize}=File,
                path=Path,
                remaining=[{0, TarSize}]
@@ -280,6 +299,8 @@ handle_info(timeout,   % {{{2
                   } = State) ->
     {[0|Starts], Ends} = lists:unzip(Chunks),
     Requests = lists:zip(lists:droplast(Ends), Starts),
+    error_logger:info_msg("Timeout file ~p not downloaded yet requesting ~p",
+                          [FHash, Requests]),
     lists:foreach(fun({S,E}) ->
                           send_chunk_request(FHash, S, E - S)
                   end,
@@ -432,19 +453,6 @@ create_filechunk_from_file(FileHash, ChunkHash) ->
         no_file -> ok
     end.
 
--spec create_filechunk_from_file(FileHash, Offset, Size) -> ok when  % {{{2
-      FileHash :: binary(),
-      Offset :: non_neg_integer(),
-      Size :: non_neg_integer().
-create_filechunk_from_file(FileHash, Offset, Size) ->
-    case create_tar_from_file(FileHash) of
-        {ok, TarPath, _} ->
-            create_filechunk_from_tar(#bm_filechunk{offset=Offset,
-                                                    size=Size,
-                                                    file=FileHash},
-                                      TarPath);
-        no_file -> ok
-    end.
 
 -spec send_all(PIDs, Msg) -> ok when % {{{2
       PIDs :: [pid()],
@@ -457,18 +465,25 @@ send_all([Pid|Rest], Msg) ->
     gen_server:cast(P, Msg),
     send_all(Rest, Msg).
 
--spec compute_chunk_size(file:filename_all()) -> non_neg_integer().  % {{{2
-compute_chunk_size(Path) ->  
-    MaxChunkSize = application:get_env(bitmessage, chunk_size, 260000),
+-spec compute_chunk_size(Size | Path) -> non_neg_integer() when  % {{{2
+      Size :: non_neg_integer(),
+      Path :: file:filename_all().
+compute_chunk_size(Size) when is_integer(Size) ->  
+    MaxChunkSize = application:get_env(bitmessage, max_chunk_size, 260000),
+    MinChunkSize = application:get_env(bitmessage, min_chunk_size, 2048),
     MaxChunksNumber = application:get_env(bitmessage, chunks_number, 100),
-    case filelib:file_size(Path) of
-        Size when Size =< MaxChunkSize ->
-            Size + 1;
-        Size when Size >= MaxChunkSize * MaxChunksNumber ->
-            MaxChunkSize;
-        Size ->
-            Size div MaxChunksNumber
-    end.
+    if Size =< MinChunkSize ->
+               Size + 1;
+           Size >= MaxChunkSize * MaxChunksNumber ->
+               MaxChunkSize;
+           Size div MaxChunksNumber >= MinChunkSize ->
+               Size div MaxChunksNumber;
+           true ->
+               MinChunkSize
+        end;
+compute_chunk_size(Path) ->  
+    Size = filelib:file_size(Path),
+    compute_chunk_size(Size).
 
 -spec create_tar_from_file(FileHash) -> {ok, TarPath, #bm_file{}} | no_file when  % {{{2
       FileHash :: binary(),

@@ -32,8 +32,8 @@
 
 all() ->  % {{{2
     [
-     test_attachment_encode_decode,
-     test_file_query,
+     %test_attachment_encode_decode,
+     %test_file_query,
      test_filechunk_send
     ].
 
@@ -289,7 +289,9 @@ test_file_query(_Config) -> % {{{2
                 end),
 
 
-    application:set_env(bitmessage, chunk_size, 1024),
+    application:set_env(bitmessage, max_chunk_size, 1024),
+    application:set_env(bitmessage, min_chunk_size, 256),
+    application:set_env(bitmessage, chunks_number, 100),
     bitmessage:send_message(To,
                             Addr,
                             <<"Test message with file">>,
@@ -308,156 +310,105 @@ test_filechunk_send() ->  % {{{2
 
 test_filechunk_send(_Config) -> % {{{2
     bm_attachment_sup:start_link(),
-    {_Pub, Priv} = Keys = crypto:generate_key(ecdh, secp256k1),
-    File = #bm_file{
-              hash = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
-                       145,35,159,150,21,169,198,231,167,229,103,36,26,243,
-                       163,102,54,24,115,165,10,106,202,230,103,120,78,56,35,
-                       102,66,187,183,129,128,131,36,144,181,100,109,251,41,
-                       37,171,111,21,73,199>>,
-              name= "file.txt",
-              size=90,
-              path="../../test/data",
-              chunks=[<<24,157,228,172,234,149,216,48,114,205,82,28,220,
-                        91,122,175,32,204,135,55,206,74,204,174,13,144,
-                        55,80,144,113,94,149,198,114,48,173,79,104,214,
-                        110,99,205,53,69,173,238,184,247,151,138,3,162,
-                        93,168,49,197,126,17,218,51,26,255,211,238>>],
-              key=Keys,
-              time=bm_types:timestamp()
-             },
-    FileChunk = #bm_filechunk{
-                   hash = <<24,157,228,172,234,149,216,48,114,205,82,28,220,
-                            91,122,175,32,204,135,55,206,74,204,174,13,144,
-                            55,80,144,113,94,149,198,114,48,173,79,104,214,
-                            110,99,205,53,69,173,238,184,247,151,138,3,162,
-                            93,168,49,197,126,17,218,51,26,255,211,238>>,
-                   size = 1024,
-                   file = <<236,232,252,93,50,80,86,138,161,48,73,206,49,121,115,
-                            145,35,159,150,21,169,198,231,167,229,103,36,26,243,
-                            163,102,54,24,115,165,10,106,202,230,103,120,78,56,35,
-                            102,66,187,183,129,128,131,36,144,181,100,109,251,41,
-                            37,171,111,21,73,199>>,
-                   data = <<31,139,8,0,0,0,0,0,0,3,236,183,99,172,48,81,214,168,
-                            121,108,219,182,109,219,182,109,219,182,109,219,231,
-                            61,126,143,109,219,182,109,77,247,189,201,252,232,
-                            100,230,254,233,233,111,126,244,147,74,237,93,73,37,
-                            123,165,106,63,107,173,77,71,71,79,71,71,239,98,234,
-                            236,66,111,98,232,98,72,111,235,108,78,103,100,105,7,
-                            240,239,132,129,145,129,129,141,133,5,128,129,129,
-                            129,145,157,149,225,159,35,3,227,255,126,254,95,83,6,
-                            38,118,0,70,38,22,86,22,54,86,22,118,22,166,127,188,
-                            207,200,198,194,6,64,192,240,111,141,226,255,1,87,
-                            103,23,67,167,127,132,242,159,88,235,255,175,72,112,
-                            2,253,115,80,145,171,112,4,36,94,82,106,5,116,223,29,
-                            146,65,185,133,152,104,212,98,7,154,0,32,136,247,252,
-                            251,226,119,139,189,36,143,202,0,57,30,189,134,232,
-                            77,46,38,47,240,135,141,122,199,128,229,203,111,221,
-                            68,21,128,0,80,26,18,221,115,194,252,53,2,246,65,119,
-                            86,189,4,69,5,32,3,181,164,70,221,27,124,150,79,26,
-                            49,155,203,233,102,115,198,35,109,114,185,175,72,219,
-                            192,2,34,177,117,240,192,105,32,175,51,253,150,39,
-                            207,140,248,190,185,169,149,207,75,183,232,130,97,
-                            134,248,73,211,143,19,129,225,235,131,49,137,183,128,
-                            18,192,4,9,96,165,16,73,174,80,145,211,79,163,131,
-                            129,25,110,71,101,128,37,44,72,195,58,179,48,222,208,
-                            82,102,231,88,16,164,115,66,112,105,3,124,202,235,
-                            231,182,144,120,81,54,157,110,145,141,47,19,83,254,
-                            24,186,38,28,43,153,64,13,134,24,2,188,89,93,215,233,
-                            102,230,147,113,11,153,88,41,148,248,51,156,162,198,
-                            60,209,159,4,120,24,123,106,219,3,62,244,204,54,101,
-                            212,221,85,235,96,165,173,207,71,19,235,92,209,36,42,
-                            167,241,122,133,231,28,241,119,34,32,242,19,78,58,
-                            188,119,213,179,183,250,243,74,4,27,17,83,158,100,
-                            142,189,22,251,42,168,35,90,143,131,185,187,38,156,
-                            83,32,29,31,12,72,32,163,220,129,102,217,108,18,10,
-                            52,10,254,150,135,24,39,177,251,154,74,21,110,127,
-                            198,85,162,39,21,137,16,204,99,80,229,235,85,246,240,
-                            175,52,173,99,157,221,158,39,58,0,177,0,233,148,37,
-                            100,17,214,227,69,106,167,10,34,167,87,97,56,8,98,
-                            154,151,203,71,228,199,28,131,188,96,255,123,179,253,
-                            251,139,8,74,94,166,46,128,214,135,242,197,30,173,47,
-                            119,33,242,126,192,219,56,222,234,5,85,176,120,113,
-                            125,6,2,52,102,158,226,79,170,232,31,12,63,239,226,
-                            154,23,154,166,248,18,244,152,204,138,10,86,142,101,
-                            27,35,206,213,157,94,204,3,77,79,234,181,95,127,44,0,
-                            121,205,18,85,223,193,186,243,199,211,164,7,230,140,
-                            27,120,129,250,182,78,236,34,74,238,122,141,87,200,
-                            123,89,68,43,154,9,40,81,221,38,249,153,150,218,217,
-                            190,99,5,253,64,15,198,235,145,28,253,193,30,179,99,
-                            156,255,233,29,249,95,254,67,208,253,75,254,119,112,
-                            53,178,54,245,252,247,150,128,255,67,254,103,96,99,
-                            100,248,151,252,207,196,204,202,242,223,252,255,159,
-                            0,121,237,254,255,158,171,200,175,158,128,0,42,128,
-                            122,242,121,252,53,195,104,10,245,119,163,97,78,171,
-                            193,200,235,35,11,59,66,104,73,46,92,22,213,49,186,
-                            62,183,116,218,56,29,226,66,202,186,112,191,153,75,
-                            209,99,135,253,103,129,208,10,223,174,22,142,20,204,
-                            243,24,152,60,187,201,156,8,233,155,81,28,38,215,159,
-                            24,162,102,94,61,158,56,19,74,5,32,152,39,174,221,
-                            142,80,114,106,214,215,227,240,58,218,116,138,225,32,
-                            152,72,149,41,65,103,153,145,204,105,160,61,103,52,1,
-                            32,217,113,75,40,95,44,217,118,45,63,139,30,68,131,
-                            17,109,253,156,59,180,174,150,110,197,29,103,41,107,
-                            184,117,233,83,41,24,184,237,84,80,53,87,24,18,182,
-                            142,183,224,235,232,228,97,167,35,131,124,208,116,
-                            126,146,218,9,158,86,174,109,249,219,165,163,135,176,
-                            143,240,82,219,79,200,80,167,70,169,48,32,238,137,
-                            162,63,237,57,12,33,147,30,79,253,197,222,114,23,43,
-                            180,108,198,182,187,34,112,177,226,210,130,100,119,
-                            82,171,19,147,34,57,145,181,111,199,125,243,153,24,
-                            234,63,130,92,16,21,246,203,157,236,93,195,220,180,
-                            208,253,251,125,86,46,38,116,206,149,85,185,215,207,
-                            17,255,158,89,93,23,34,55,92,225,75,151>>,
-                   _ = '_'
-                  },
-    meck:expect(bm_sender,
-                send_broadcast,
-                fun(<<_:25/bytes,
-                      Hash/bytes>>) ->
-                        error_logger:info_msg("FileChunk inventory sent ~p~n", [Hash]),
-                        [#inventory{
-                            payload = Payload
-                           }] = bm_db:lookup(inventory, Hash),
-                        mnesia:clear_table(inventory),
+    [#privkey{address=Addr}] =
+    bm_db:lookup(privkey, bm_db:first(privkey)),
+    To = <<"BM-2DBT7LiWBzkVYyrQBAgarC7k9AKuVVLJKx">>,
+    meck:expect(test,
+                sent,
+                fun(Hash) ->
+                        {ok,
+                         #message{attachments=[Att]}} = bitmessage:get_message(Hash),
                         mnesia:clear_table(bm_filechunk),
-                        mnesia:dirty_write(bm_filechunk,
-                                           FileChunk#bm_filechunk{data=undefined}),
-                        bm_decryptor:process_object(Payload)
+                        bitmessage:get_attachment(Att, "../../test/data")
+
+                end),
+    meck:expect(test,
+                downloaded,
+                fun(_) ->
+                        ok
                 end),
     meck:expect(test,
                 filechunk_sent,
-                fun(FileHash, ChunkHash) 
-                      when FileHash == File#bm_file.hash,
-                           ChunkHash == FileChunk#bm_filechunk.hash ->
-                        case bm_db:lookup(bm_filechunk, ChunkHash) of
-                            [] ->
-                                meck:exception(error, "No chunk in DB");
-                            [FC] ->
-                                error_logger:info_msg("FileChunk sent test ~p~n", [FC]),
-                                ok
-                        end
+                fun(_, _) ->
+                        ok
                 end),
     meck:expect(test,
                 filechunk_received,
-                fun(FileHash, ChunkHash, 1.0) ->
-                        case bm_db:lookup(bm_filechunk, ChunkHash) of
-                            [] ->
-                                meck:exception(error, "No chunk in DB");
-                            [FC] ->
-                                Progress = bm_attachment_srv:progress(FileHash),
-                                error_logger:info_msg("FileChunk sent progress ~p~n", [Progress]),
-                                ?assertEqual(Progress, 1.0),
-                                ?assertEqual(FC#bm_filechunk.data, FileChunk#bm_filechunk.data)
-                        end
+                fun(_, _) ->
+                        ok
                 end),
-    bm_db:insert(bm_file, [File]),
-    bm_decryptor_sup:add_decryptor(#privkey{pek=Priv}),
-    bm_attachment_srv:send_chunk(File#bm_file.hash,
-                                 FileChunk#bm_filechunk.hash),
-    meck:wait(bm_pow, make_pow, '_', 1600),
-    meck:wait(bm_sender, send_broadcast, '_', 1600),
-    meck:wait(test, filechunk_sent, '_', 16000),
-    meck:validate(test),
-    meck:wait(test, filechunk_received, '_', 600000),
-    meck:validate(test).
+    meck:expect(bm_sender,
+                send_broadcast,
+                fun(<<_:25/bytes,
+                      Inv:32/bytes>>
+                   ) ->
+                        case bm_db:lookup(inventory, Inv) of
+                            [#inventory{
+                                type=Type,
+                                payload = Payload
+                               }]  when Type == ?GETFILE -> 
+                                bm_decryptor:process_object(Payload);
+                            [#inventory{
+                                type=Type,
+                                payload = <<_:22/bytes, 
+                                            FileHash:64/bytes,
+                                            ChunkHash:64/bytes,
+                                            _/bytes>>
+                               }]  when Type == ?FILECHUNK,
+                                        ChunkHash == <<209,190,201,70,97,105,59,
+                                                       79,71,187,236,144,157,96,
+                                                       164,87,146,25,191,111,242,
+                                                       16,145,20,84,108,145,250,
+                                                       27,243,219,191,18,67,182,
+                                                       207,114,246,123,181,255,176,
+                                                       51,191,110,245,229,254,215,
+                                                       120,254,61,223,233,182,
+                                                       156,4,137,234,227,37,135,
+                                                       64,8>> -> 
+                                mnesia:dirty_delete(inventory, Inv),
+                                ok;
+                            [#inventory{
+                                type=Type,
+                                payload = <<_:22/bytes, 
+                                            FileHash:64/bytes,
+                                            ChunkHash:64/bytes,
+                                            _/bytes>>
+                               }]  when Type == ?FILECHUNK ->
+                                bm_attachment_srv:received_chunk(FileHash, ChunkHash);
+                            [#inventory{
+                                type=Type,
+                                %version=2,
+                                payload = <<_:22/bytes, 
+                                            FileHash:64/bytes,
+                                            Data/bytes>>
+                               }]  when Type == ?GETFILECHUNK ->
+
+                                {Offset, R} = bm_types:decode_varint(Data),
+                                {Size, _} = bm_types:decode_varint(R),
+                                error_logger:info_msg("Offset: ~p,
+                                                      size: ~p", [Offset, Size]),
+                                bm_attachment_srv:send_chunk(FileHash, Offset, Size);
+                            [_] ->
+                                ok
+                        end;
+                   (B) ->
+                        error_logger:info_msg("Size: ~p~n", [size(B)])
+                end),
+
+
+    application:set_env(bitmessage, max_chunk_size, 1024),
+    application:set_env(bitmessage, min_chunk_size, 256),
+    application:set_env(bitmessage, chunks_number, 100),
+    application:set_env(bitmessage, chunk_timeout, 1),
+    bitmessage:send_message(To,
+                            Addr,
+                            <<"Test message with file">>,
+                            <<"File in attachment">>,
+                            ["../../test/data/rand64k.raw"]),
+    meck:wait(bm_pow, make_pow, '_', 16000),
+    meck:wait(bm_sender, send_broadcast, '_', 16000),
+    meck:wait(test, downloaded, '_', 160000),
+    ?assertEqual(101, mnesia:table_info(bm_filechunk, size)),
+    ?assertEqual(103, meck:num_calls(bm_sender, send_broadcast, '_')),
+    ?assertEqual(101, meck:num_calls(test, filechunk_sent, '_')),
+    ?assert(meck:called(test, downloaded, '_')).
