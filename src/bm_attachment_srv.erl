@@ -86,10 +86,10 @@ send_chunk(FileHash, Offset, Size) ->
                              Size
                      end,
             ChunkSize = compute_chunk_size(Length),
-            Chunks = %bm_types:shuffle(
+            Chunks = bm_types:shuffle(
                        lists:seq(Offset, 
-                                 Length,
-                                 ChunkSize),
+                                 Offset + Length,
+                                 ChunkSize)),
             error_logger:info_msg("Chunks number: ~p", [Chunks]),
             spawn_link(
               fun() ->

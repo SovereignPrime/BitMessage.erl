@@ -409,6 +409,6 @@ test_filechunk_send(_Config) -> % {{{2
     meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 160000),
     ?assertEqual(101, mnesia:table_info(bm_filechunk, size)),
-    ?assertEqual(103, meck:num_calls(bm_sender, send_broadcast, '_')),
+    ?assertEqual(104, meck:num_calls(bm_sender, send_broadcast, '_')),
     ?assertEqual(101, meck:num_calls(test, filechunk_sent, '_')),
     ?assert(meck:called(test, downloaded, '_')).
