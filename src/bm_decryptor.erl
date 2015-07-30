@@ -680,11 +680,11 @@ save_files(Data) ->
                                        error_logger:info_msg("File: ~p, hash ~p~n", [Name, Hash]),
                                        {Size,
                                         R2}  = bm_types:decode_varint(R1),
+                                       error_logger:info_msg("File: ~p, size ~p~n",
+                                                             [Name, Size]),
                                        {TarSize,
                                         <<Key:32/bytes, 
                                           R3/bytes>>} = bm_types:decode_varint(R2),
-                                       error_logger:info_msg("File: ~p, size ~p~n",
-                                                             [Name, Size]),
                                        {#bm_file{
                                            hash=Hash,
                                            name=Name,
