@@ -14,6 +14,7 @@
          terminate/2,
          code_change/3]). %}}}
 -export([ % {{{1
+         update/0,
     insert/2,
     first/1,
     next/2,
@@ -253,6 +254,26 @@ update() ->  % {{{1
                                            fun(In) ->
                                                    InL = tuple_to_list(In),
                                                    list_to_tuple(InL ++ [ok])
+                                           end,
+                                           record_info(fields, bm_file));
+                9 ->
+                    mnesia:transform_table(bm_file,
+                                           fun(In) ->
+                                                   Fields = mnesia:table_info(bm_file, attributes),
+                                                   error_logger:info_msg("Fields: ~p", [Fields]),
+                                                   InL= tuple_to_list(In),
+                                                   InP = lists:zip([n | Fields], InL),
+                                                   OutP = lists:foldr(fun({size, V}=T,
+                                                                          A) ->
+                                                                              [T, {tarsize, V}| A];
+                                                                         (T, A) ->
+                                                                              [T|A]
+                                                                      end,
+                                                                      [],
+                                                                      InP),
+                                                   {_, Out} = lists:unzip(OutP),
+
+                                                   list_to_tuple(Out)
                                            end,
                                            record_info(fields, bm_file));
                 _ ->

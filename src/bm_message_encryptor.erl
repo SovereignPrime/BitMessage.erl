@@ -759,13 +759,11 @@ process_attachment(Path) when is_binary(Path) ->
 process_attachment(Path) ->
     Size = filelib:file_size(Path),
     Name = filename:basename(Path),
-    %TarPath = Path ++ ".rz.tar.gz",
-    %erl_tar:create(TarPath, [Path], [compressed]),
     {ok, TarPath} = bm_attachment_srv:create_tar_from_path(Path),
     ChunkSize = bm_attachment_srv:compute_chunk_size(TarPath),
     {ok, F} = file:open(TarPath, [binary, read]),
     TarSize = filelib:file_size(TarPath),
-    error_logger:info_msg("File: ~p, size ~p~n", [Name, Size, TarSize, ChunkSize]),
+    error_logger:info_msg("File: ~p, size ~p~n", [Name, [Size, TarSize, ChunkSize]]),
     ChunksHash = lists:map(fun(L) ->
                                    {ok, Chunk} = file:pread(F, L, ChunkSize),
                                    bm_auth:dual_sha(Chunk)
