@@ -752,6 +752,7 @@ process_attachment(Path) when is_binary(Path) ->
             <<MercleRoot:64/bytes,
               (bm_types:encode_varstr(Name))/bytes,
               (bm_types:encode_varint(Size))/bytes,
+              (bm_types:encode_varint(TarSize))/bytes,
               Priv/bytes>>;
         [] ->
             <<>>
