@@ -746,14 +746,10 @@ process_attachment(Path) when is_binary(Path) ->
                  hash=MercleRoot,
                  name=Name,
                  size=Size,
-                 chunks=ChunksHash,
+                 tarsize=TarSize,
                  key={_Pub, Priv}
             }] ->
-            <<MercleRoot:64/bytes,
-              (bm_types:encode_varstr(Name))/bytes,
-              (bm_types:encode_varint(Size))/bytes,
-              (bm_types:encode_varint(TarSize))/bytes,
-              Priv/bytes>>;
+            create_attachment(MercleRoot, Name, Size, TarSize, Priv);
         [] ->
             <<>>
     end;
@@ -788,6 +784,16 @@ process_attachment(Path) ->
                 },
     bm_db:insert(bm_file, [FileRec]),
     file:delete(TarPath),  %TODO: will it work?
+    create_attachment(MercleRoot, Name, Size, TarSize, Priv).
+
+
+-spec create_attachment(MercleRoot, Name, Size, TarSize, Priv) -> binary() when
+      MercleRoot :: binary(),
+      Name :: file:filename_all(),
+      Size :: non_neg_integer(),
+      TarSize :: non_neg_integer(),
+      Priv :: binary().
+create_attachment(MercleRoot, Name, Size, TarSize, Priv) ->
     <<MercleRoot:64/bytes,
       (bm_types:encode_varstr(Name))/bytes,
       (bm_types:encode_varint(Size))/bytes,
