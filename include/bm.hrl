@@ -116,7 +116,7 @@
 -record(bm_filechunk,
         {
          hash :: binary() | atom(),
-         offset :: non_neg_integer(),
+         offset :: non_neg_integer() | atom(),
          size :: non_neg_integer() | atom(),
          data :: binary() | atom(),
          file :: binary() | atom(),
