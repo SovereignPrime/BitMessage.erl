@@ -690,7 +690,7 @@ save_files(Data) ->
                                            name=Name,
                                            size=Size,
                                            tarsize=TarSize,
-                                           key={bm_auth:pubkey(Key), Key},
+                                           key={<<4, (bm_auth:pubkey(Key))/binary>>, Key},
                                            time=bm_types:timestamp()
                                          },
                                         R3}

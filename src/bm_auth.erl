@@ -135,7 +135,6 @@ pubkey(PrKey) when is_integer(PrKey) ->
      _CoFactor} = crypto:ec_curve(secp256k1),
     G = {GX, GY},
     {X, Y} = point_mult(G, PrKey, Prime, G),
-    io:format("X: ~p Y: ~p~n", [X, Y]),
     <<X:256/integer, Y:256/integer>>.
 
 
