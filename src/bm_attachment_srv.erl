@@ -112,18 +112,10 @@ send_chunk(FileHash, Offset, Size) ->
 progress(FileHash) ->
     try bm_db:lookup(bm_file, FileHash) of
         [#bm_file{hash=FileHash,
-                  chunks=Chunks}] ->
-            All = length(Chunks),
-            Here = lists:foldl(fun(CID, Acc) ->
-                                       case bm_db:lookup(bm_filechunk, CID) of
-                                           [] -> 
-                                               Acc;
-                                           [#bm_filechunk{data=undefined,
-                                                          hash=CID}] -> 
-                                               Acc;
-                                           [_] ->
-                                               Acc + 1
-                                       end
+                  tarsize=All}] ->
+            Chunks = bm_db:match(bm_filechunk, #bm_filechunk{file=FileHash, _='_'}),
+            Here = lists:foldl(fun(#bm_filechunk{size=S}, Acc) ->
+                                       Acc + S
                                end,
                                0.0,
                                Chunks),
