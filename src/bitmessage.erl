@@ -321,7 +321,7 @@ disconnected(N) ->
                           [N]),
     gen_server:cast(?MODULE, {event, disconnected, [ N ]}).
 
--spec resending([hash()]) -> [hash()].
+-spec resending([hash()]) -> [hash()].  % {{{2
 resending(Hashes) ->
     error_logger:info_msg("Asking for old message resending: ~p~n",
                           [Hashes]),
@@ -408,6 +408,7 @@ handle_cast({event, Fun, Args}, #state{callback=Callback}=State) ->  % {{{2
     error_logger:info_msg("Callback ~p:~p(~p) called", [Callback, Fun, Args]),
     try
         apply(Callback, Fun, Args),
+        error_logger:info_msg("Callback ~p:~p(~p) ended", [Callback, Fun, Args]),
         {noreply, State}
     catch
         error:_ ->
