@@ -214,7 +214,7 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
     case bm_db:lookup(bm_filechunk, ChunkHash) of
         [#bm_filechunk{offset=Offset,
                        data=Data,
-                       size=Size}] ->
+                       size=Size}] when size(Data) == Size ->
             error_logger:info_msg("Remaining: ~p", [Remaining]),
             file:pwrite(F, Offset, Data),
             NRemaining = lists:foldr(fun({0, 0}, A) -> A;
@@ -277,9 +277,11 @@ handle_info(timeout,   % {{{2
             #state{
                file=#bm_file{tarsize=TarSize}=File,
                path=Path,
+               fd=F,
                remaining=[{0, TarSize}]
                   } = State) ->
     error_logger:info_msg("Timeout in download: ~p", [TarSize]),
+    file:close(F),
     save_file(File, Path),
     bitmessage:downloaded(File#bm_file.hash),
     {stop, normal, State};
@@ -357,8 +359,7 @@ save_file(#bm_file{
     RSiaze = filelib:file_size(FPath),
     MercleRoot = bm_auth:mercle_root(Chunks),
     error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, filelib:file_size(TarFile)]),
-    if RSiaze == Size,
-       MercleRoot == Hash ->
+    if RSiaze == Size ->
             bm_db:insert(bm_file, [File#bm_file{
                                      status=downloaded
                                     }]),
@@ -525,8 +526,8 @@ create_filechunk_from_tar(#bm_filechunk{offset=Offset,
                                  size=size(Data),
                                  data=Data
                                 }),
-            file:close(F);
-            %file:delete(TarPath);
+            file:close(F),
+            file:delete(TarPath);
         _ -> ok
     end.
 
