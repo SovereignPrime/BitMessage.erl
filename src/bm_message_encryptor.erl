@@ -622,7 +622,7 @@ make_inv(timeout,
                                                Payload/bytes>>),
     case PPayload of
         not_found ->
-            {next_state, payload, State#state{message=Message#bm_filechunk{status=new}}, 0};
+            {stop, normal, State};
         _ ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),
             NMessage = Message#bm_filechunk{status=ok,

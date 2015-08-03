@@ -66,8 +66,6 @@ send_file(FileHash) ->
       FileHash :: binary(),
       ChunkHash :: binary().
 send_chunk(FileHash, ChunkHash) ->
-    Timeout = crypto:rand_uniform(0, 300),
-    %timer:sleep(Timeout),
     encode_filechunk(FileHash, ChunkHash).
 
 -spec send_chunk(FileHash, Offset, Size) -> ok when  % {{{2
@@ -75,8 +73,6 @@ send_chunk(FileHash, ChunkHash) ->
       Offset :: non_neg_integer(),
       Size :: non_neg_integer().
 send_chunk(FileHash, Offset, Size) ->
-    %Timeout = crypto:rand_uniform(0, 300),
-    %timer:sleep(Timeout),
     case create_tar_from_file(FileHash) of
         {ok, TarPath, _} ->
             Length = case Size of
