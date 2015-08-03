@@ -93,15 +93,18 @@ send_chunk(FileHash, Offset, Size) ->
             error_logger:info_msg("Chunks number: ~p", [Chunks]),
             spawn_link(
               fun() ->
+                      {ok, F} = file:open(TarPath, [binary, read]),
                       lists:foreach(
                         fun(Location) ->
                                 create_filechunk_from_tar(
                                   #bm_filechunk{offset=Location,
                                                 size=ChunkSize,
                                                 file=FileHash},
-                                  TarPath)
+                                  F)
                         end,
-                        Chunks)
+                        Chunks),
+                      file:close(F),
+                      file:delete(TarPath)
                        end);
         no_file ->
             ok
@@ -300,7 +303,7 @@ handle_info(timeout,   % {{{2
                   end,
                   Requests),
     {noreply, State, Timeout};
-handle_info(Info, #state{timeout=Timeout} = State) ->
+handle_info(Info, #state{timeout=Timeout} = State) ->  % {{{2
     error_logger:warning_msg("Wrong event in ~p: ~p state ~p~n",
                              [?MODULE_STRING,
                               Info,
@@ -436,10 +439,13 @@ create_filechunk_from_file(FileHash, ChunkHash) ->
                                                       CH /= ChunkHash 
                                               end,
                                               ChunkHashes)) * ChunkSize,
+
+            {ok, F} = file:open(TarPath, [binary, write]),
             create_filechunk_from_tar(#bm_filechunk{offset=Location,
                                                      size=ChunkSize,
                                                      file=FileHash},
-                                       TarPath);
+                                       F),
+            file:close(F);
         no_file -> ok
     end.
 
@@ -509,22 +515,19 @@ create_tar_from_path(Path) ->
     end.
 
 -spec create_filechunk_from_tar(#bm_filechunk{},  % {{{2
-                                file:filename_all()) -> ok.
+                                file:io_device()) -> ok.
 create_filechunk_from_tar(#bm_filechunk{offset=Offset,
                                         size=Size}=FC,
-                          TarPath) ->
+                          FileDescriptor) ->
     error_logger:info_msg("Chunk location: ~p size: ~p~n", [Offset, Size]),
-    {ok, F} = file:open(TarPath, [binary, read]),
-    case file:pread(F, Offset, Size) of
+    case file:pread(FileDescriptor, Offset, Size) of
         {ok, Data} ->
             ChunkHash = bm_auth:dual_sha(Data),
             maybe_send_chunk(FC#bm_filechunk{
                                  hash=ChunkHash,
                                  size=size(Data),
                                  data=Data
-                                }),
-            file:close(F),
-            file:delete(TarPath);
+                                });
         _ -> ok
     end.
 
