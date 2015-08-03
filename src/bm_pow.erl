@@ -22,7 +22,7 @@
     check_pow/3
     ]).
 
--record(state, {}).
+-record(state, {timeout=60000}).
 
 %%%===================================================================
 %%% API
@@ -88,7 +88,8 @@ check_pow(<<Nonce:64/big-integer, Payload/bytes>>, NTpB, ExtraBytes) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->  % {{{1
-    {ok, #state{}}.
+    Timeout = application:get_env(bitmessage, pow_timeout, 60000),
+    {ok, #state{timeout=Timeout}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -107,7 +108,7 @@ init([]) ->  % {{{1
 handle_call({make,  % {{{1
              <<Time:64/big-integer, _/bytes>>=Payload, Target},
             _From,
-            State) ->
+            #state{timeout=Timeout}=State) ->
     Now = bm_types:timestamp(),
     if Time < Now - 300 ->
            {reply, not_found, State};
@@ -132,7 +133,7 @@ handle_call({make,  % {{{1
                               end)
                     end,
                     Pool),
-           R = collect_results(Cores),
+           R = collect_results(Cores, Timeout),
            lists:foreach(fun(P) -> exit(P, kill) end, Pids),
            {reply, R, State}
     end;
@@ -222,13 +223,16 @@ compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
     PLPEB = PayloadLength + PLEB,
     bm_types:pow(2 , 64) div (NTpB * (PLPEB + (TTL * PLPEB) div bm_types:pow(2, 16))).
 
--spec collect_results(non_neg_integer()) -> binary() | not_found.  % {{{1
-collect_results(N) when N > 0 ->
+-spec collect_results(non_neg_integer(), non_neg_integer()) -> binary() | not_found.  % {{{1
+collect_results(N, Timeout) when N > 0 ->
     receive 
         not_found ->
-            collect_results(N - 1);
+            collect_results(N - 1, Timeout);
         {ok, Nonce} ->
             Nonce
+    after
+        Timeout ->
+            not_found
     end;
-collect_results(0) ->
+collect_results(0, _Timeout) ->
     not_found.
