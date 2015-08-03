@@ -7,7 +7,6 @@
 -export([
          start_link/2, 
          send_file/1,
-         send_chunk/2,
          send_chunk/3,
          progress/1,
          received_chunk/2, 
@@ -28,7 +27,6 @@
           file :: #bm_file{},
           path="" :: string(),
           fd :: file:io_device(),
-          chunks :: [binary()],
           remaining :: [{non_neg_integer(), non_neg_integer()}],
           timeout=100 :: non_neg_integer()
          }).
@@ -62,11 +60,6 @@ send_file(FileHash) ->
 %% Sends filechunk to network
 %%
 %%--------------------------------------------------------------------
--spec send_chunk(FileHash, ChunkHash) -> ok when  % {{{2
-      FileHash :: binary(),
-      ChunkHash :: binary().
-send_chunk(FileHash, ChunkHash) ->
-    encode_filechunk(FileHash, ChunkHash).
 
 -spec send_chunk(FileHash, Offset, Size) -> ok when  % {{{2
       FileHash :: binary(),
@@ -217,19 +210,19 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
             error_logger:info_msg("Remaining: ~p", [Remaining]),
             file:pwrite(F, Offset, Data),
             NRemaining = lists:foldr(fun({0, 0}, A) -> A;
-                                         ({S, E}=T,
-                                         [{NS, NE}|R] = A) when E+1 < NS ->
+                                         ({_S, E}=T,
+                                         [{NS, _NE}|_R] = A) when E+1 < NS ->
                                              [T | A];
-                                        ({S, E}=T,
-                                         [{NS, NE}=C|R] = A) when S > NE+1 ->
+                                        ({S, _E}=T,
+                                         [{_NS, NE}=C|R]) when S > NE+1 ->
                                               [C, T | R];
-                                        ({S, E}=T,
-                                         [{NS, NE}|R] = A) when S < NS,
-                                                                E >= NS ->
+                                        ({S, E},
+                                         [{NS, NE}|R]) when S < NS,
+                                                            E >= NS ->
                                              [{S, NE}|R];
-                                        ({S, E}=T,
-                                         [{NS, NE}=C|R] = A) when S > NS,
-                                                                NE >= S ->
+                                        ({S, E},
+                                         [{NS, NE}|R]) when S > NS,
+                                                            NE >= S ->
                                              [{NS, E}|R];
                                         (_, A) -> A
                                      end,
@@ -318,7 +311,7 @@ handle_info(Info, #state{timeout=Timeout} = State) ->  % {{{2
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{fd=F}=State) ->   % {{{2
+terminate(_Reason, #state{fd=F}) ->   % {{{2
     file:close(F),
     ok.
 
@@ -376,21 +369,6 @@ is_filchunk_in_network(ChunkHash) ->
               end,
               FileChunkObjs).
 
--spec encode_filechunk(FileHash, ChunkHash) -> ok when  % {{{2
-      FileHash :: binary(),
-      ChunkHash :: binary().
-encode_filechunk(FileHash, ChunkHash) ->
-    case bm_db:lookup(bm_filechunk, ChunkHash) of
-        [#bm_filechunk{data=undefined}] ->
-            create_filechunk_from_file(FileHash, ChunkHash);
-        [] ->
-            create_filechunk_from_file(FileHash, ChunkHash);
-        [#bm_filechunk{data=Data, 
-                       payload=Payload}] when Data /= undefined, 
-                                              Payload /= undefined ->
-            ok
-    end.
-
 -spec download(Path, File, Timeout) -> {ok, #state{}, Timeout} when  % {{{2
       Path :: string(),
       File :: #bm_file{},
@@ -398,8 +376,7 @@ encode_filechunk(FileHash, ChunkHash) ->
 download(Path, #bm_file{
                   hash=FileHash,
                   name=Name,
-                  key={_Pub, Priv},
-                  chunks=Chunks
+                  key={_Pub, Priv}
                } = File,
          Timeout) ->
     NFile = File#bm_file{
@@ -418,33 +395,10 @@ download(Path, #bm_file{
         path=Path,
         file=NFile,
         fd=F,
-        chunks=Chunks,
         remaining=[{0,0}],
         timeout=Timeout
        }, 
      Timeout}.
-
--spec create_filechunk_from_file(FileHash, ChunkHash) -> ok when  % {{{2
-      FileHash :: binary(),
-      ChunkHash :: binary().
-create_filechunk_from_file(FileHash, ChunkHash) ->
-    case create_tar_from_file(FileHash) of
-        {ok, TarPath, #bm_file{chunks=ChunkHashes}} ->
-            ChunkSize = compute_chunk_size(TarPath),
-            Location = length(lists:takewhile(fun(CH) ->
-                                                      CH /= ChunkHash 
-                                              end,
-                                              ChunkHashes)) * ChunkSize,
-
-            {ok, F} = file:open(TarPath, [binary, write]),
-            create_filechunk_from_tar(#bm_filechunk{offset=Location,
-                                                     size=ChunkSize,
-                                                     file=FileHash},
-                                       F),
-            file:close(F);
-        no_file -> ok
-    end.
-
 
 -spec send_all(PIDs, Msg) -> ok when % {{{2
       PIDs :: [pid()],
