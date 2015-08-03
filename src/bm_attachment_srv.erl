@@ -348,8 +348,6 @@ send_chunk_request(FHash, Start, Size) ->
       Path :: string().
 save_file(#bm_file{
              name=Name,
-             hash=Hash,
-             chunks=Chunks,
              size=Size
             } = File,
           Path) ->
@@ -357,7 +355,6 @@ save_file(#bm_file{
     TarFile = FPath ++ ".rz.tar.gz",
     erl_tar:extract(TarFile, [compressed, {cwd, Path}]),
     RSiaze = filelib:file_size(FPath),
-    MercleRoot = bm_auth:mercle_root(Chunks),
     error_logger:info_msg("Saving ~p size ~p(~p)[~p]~n", [FPath, RSiaze, Size, filelib:file_size(TarFile)]),
     if RSiaze == Size ->
             bm_db:insert(bm_file, [File#bm_file{
