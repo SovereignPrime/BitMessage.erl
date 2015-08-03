@@ -143,7 +143,6 @@ received_chunk(FileHash, ChunkHash) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Hash, Path]) ->   % {{{2
-    Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
     case bm_db:lookup(bm_file, Hash) of
         [#bm_file{
             status=downloaded,
@@ -159,10 +158,10 @@ init([Hash, Path]) ->   % {{{2
                    {stop, normal};
                true ->
                    error_logger:info_msg("File ~p is not here", [Name]),
-                   download(Path, File, Timeout)
+                   download(Path, File)
             end;
         [File] ->
-            download(Path, File, Timeout)
+            download(Path, File)
     end.
 
 %%--------------------------------------------------------------------
@@ -200,7 +199,7 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                              tarsize=TarSize},
                fd=F,
                remaining=Remaining,
-               timeout=Timeout
+               timeout=ETimeout
               }=State) ->
     error_logger:info_msg("Chunks received"),
     case bm_db:lookup(bm_filechunk, ChunkHash) of
@@ -237,10 +236,12 @@ handle_cast({received, FileHash, ChunkHash},   % {{{2
                true ->
                    Here = progress(FileHash),
                    error_logger:info_msg("~p chunks downloaded", [Here]),
-                   {noreply, State#state{remaining=NRemaining}, Timeout}
+                   {Timeout, NETimeout} = calculate_timeout(ETimeout),
+                   {noreply, State#state{timeout=NETimeout, remaining=NRemaining}, Timeout}
             end;
         _ ->
-            {noreply, State, Timeout}
+            {Timeout, NETimeout} = calculate_timeout(ETimeout),
+            {noreply, State#state{timeout=NETimeout}, Timeout}
     end;
 handle_cast(Msg, State) ->   % {{{2
     error_logger:warning_msg("Wrong msg ~p  received in ~p", [Msg, ?MODULE_STRING]),
@@ -369,7 +370,7 @@ is_filchunk_in_network(ChunkHash) ->
               end,
               FileChunkObjs).
 
--spec download(Path, File, Timeout) -> {ok, #state{}, Timeout} when  % {{{2
+-spec download(Path, File) -> {ok, #state{}, Timeout} when  % {{{2
       Path :: string(),
       File :: #bm_file{},
       Timeout :: non_neg_integer().
@@ -377,8 +378,7 @@ download(Path, #bm_file{
                   hash=FileHash,
                   name=Name,
                   key={_Pub, Priv}
-               } = File,
-         Timeout) ->
+               } = File) ->
     NFile = File#bm_file{
               path=Path,
               status=downloading
@@ -390,13 +390,14 @@ download(Path, #bm_file{
     {ok, F} = file:open(TarFile, [binary, write]),
     bm_sender:send_broadcast(bm_message_creator:create_getfile(FileHash)),
     error_logger:info_msg("Starting file ~p download", [Name]),
+    {Timeout, ETimeout} = calculate_timeout(0),
     {ok,
      #state{
         path=Path,
         file=NFile,
         fd=F,
         remaining=[{0,0}],
-        timeout=Timeout
+        timeout=ETimeout
        }, 
      Timeout}.
 
@@ -420,13 +421,13 @@ compute_chunk_size(Size) when is_integer(Size) ->
     MaxChunksNumber = application:get_env(bitmessage, chunks_number, 100),
     if Size =< MinChunkSize ->
                Size + 1;
-           Size >= MaxChunkSize * MaxChunksNumber ->
-               MaxChunkSize;
-           Size div MaxChunksNumber >= MinChunkSize ->
-               Size div MaxChunksNumber;
-           true ->
-               MinChunkSize
-        end;
+       Size >= MaxChunkSize * MaxChunksNumber ->
+           MaxChunkSize;
+       Size div MaxChunksNumber >= MinChunkSize ->
+           Size div MaxChunksNumber;
+       true ->
+           MinChunkSize
+    end;
 compute_chunk_size(Path) ->  
     Size = filelib:file_size(Path),
     compute_chunk_size(Size).
@@ -489,3 +490,17 @@ maybe_send_chunk(#bm_filechunk{hash=ChunkHash}=Filechunk) ->
        true ->
             bm_message_encryptor:start_link(Filechunk)
     end.
+
+-spec calculate_timeout(non_neg_integer()) -> {non_neg_integer(), non_neg_integer()}.  % {{{2
+calculate_timeout(ETimeout) ->
+    Now = bm_types:timestamp(),
+    if ETimeout =< Now ->
+           Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
+           NETimeout = Now + Timeout,
+           {Timeout, NETimeout};
+       true ->
+           Timeout = ETimeout - Now,
+           {Timeout, ETimeout}
+    end.
+           
+            
