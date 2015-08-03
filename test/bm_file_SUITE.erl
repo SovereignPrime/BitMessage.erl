@@ -20,7 +20,9 @@
          test_file_query/0,
          test_file_query/1,
          test_filechunk_send/0,
-         test_filechunk_send/1
+         test_filechunk_send/1,
+         test_filechunk_request/0,
+         test_filechunk_request/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -412,3 +414,9 @@ test_filechunk_send(_Config) -> % {{{2
     ?assertEqual(108, meck:num_calls(bm_sender, send_broadcast, '_')),
     ?assertEqual(104, meck:num_calls(test, filechunk_sent, '_')),
     ?assert(meck:called(test, downloaded, '_')).
+
+test_filechunk_request() ->  % {{{2
+    [].
+
+test_filechunk_request(_Config) -> % {{{2
+    ok.
