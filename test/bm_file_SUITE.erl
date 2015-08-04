@@ -356,19 +356,15 @@ test_filechunk_send(_Config) -> % {{{2
                                             FileHash:64/bytes,
                                             ChunkHash:64/bytes,
                                             _/bytes>>
-                               }]  when Type == ?FILECHUNK,
-                                        ChunkHash == <<209,190,201,70,97,105,59,
-                                                       79,71,187,236,144,157,96,
-                                                       164,87,146,25,191,111,242,
-                                                       16,145,20,84,108,145,250,
-                                                       27,243,219,191,18,67,182,
-                                                       207,114,246,123,181,255,176,
-                                                       51,191,110,245,229,254,215,
-                                                       120,254,61,223,233,182,
-                                                       156,4,137,234,227,37,135,
-                                                       64,8>> -> 
-                                mnesia:dirty_delete(inventory, Inv),
-                                ok;
+                               }]  when Type == ?FILECHUNK ->
+                                <<A:32,B:32,C:32>> = crypto:rand_bytes(12),
+                                random:seed({A,B,C}),
+                                Rnd = 0, %random:uniform(),
+                                if Rnd > 0.5 ->
+                                       mnesia:dirty_delete(inventory, Inv),
+                                       ok;
+                                   true -> ok
+                                end;
                             [#inventory{
                                 type=Type,
                                 payload = <<_:22/bytes, 

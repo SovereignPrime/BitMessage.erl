@@ -167,19 +167,17 @@ payload(timeout,
             R
     end,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    {MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
+    {_MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
         [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
             {EK, SK, Pub};
         [] ->
             error_logger:warning_msg("No addres ~n"),
             {stop, {shudown, "Not my address"}, State}
     end,
-    
-    A = crypto:rand_bytes(32),
-    AckData = if From == To ->
-                     A;
+    <<_:22/bytes, A/bytes>> = AckData = if From == To ->
+                     crypto:rand_bytes(23);
                  true ->
-                     bm_message_creator:create_obj(2, 1, 1, A)
+                     generate_ack()
               end,
     Ack = bm_message_creator:create_message(<<"object">>,
                                             AckData),
@@ -822,3 +820,12 @@ encrypt(PEK, Payload) ->
                 EMessage/bytes>>,
     HMAC = crypto:hmac(sha256, M, HPayload),
     <<HPayload/bytes, HMAC/bytes>>.
+
+-spec generate_ack() -> binary().
+generate_ack() ->
+    A = crypto:rand_bytes(32),
+    case bm_message_creator:create_obj(2, 1, 1, A) of
+        not_found ->
+            generate_ack();
+        O -> O
+    end.
