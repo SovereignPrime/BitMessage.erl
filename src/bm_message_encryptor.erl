@@ -578,6 +578,7 @@ make_inv(timeout,
         end,
     case PPayload of
         not_found ->
+            bm_db:delete(message, MID),
             {next_state, payload, State#state{message=Message#message{status=new}}, 0};
         _ ->
             <<Hash:32/bytes, _/bytes>> = bm_auth:dual_sha(PPayload),

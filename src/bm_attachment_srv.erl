@@ -495,12 +495,12 @@ maybe_send_chunk(#bm_filechunk{hash=ChunkHash}=Filechunk) ->
 calculate_timeout(ETimeout) ->
     Now = bm_types:timestamp(),
     if ETimeout =< Now ->
-           Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60000,
+           Timeout = application:get_env(bitmessage, chunk_timeout, 15) * 60,
            NETimeout = Now + Timeout,
-           {Timeout, NETimeout};
+           {Timeout * 1000, NETimeout};
        true ->
            Timeout = ETimeout - Now,
-           {Timeout, ETimeout}
+           {Timeout * 1000, ETimeout}
     end.
            
             
