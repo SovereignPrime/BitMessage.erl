@@ -1,5 +1,6 @@
 language: erlang
 otp_release:
+   - 17.5
    - 17.1
    - 17.0
-script: "make travis"
+script: "./rebar3 do clean -a, compile, dialyzer, ct"
