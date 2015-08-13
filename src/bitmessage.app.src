@@ -2,7 +2,7 @@
 {application, bitmessage,
  [
   {description, "Bitmessage Protocol Implementation"},
-  {vsn, "git"},
+  {vsn, "semver"},
   {registered, []},
   {applications, [
                   kernel,
