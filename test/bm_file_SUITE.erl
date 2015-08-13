@@ -35,8 +35,8 @@
 all() ->  % {{{2
     [
      test_attachment_encode_decode,
-     test_file_query,
-     test_filechunk_send
+     test_file_query
+     %test_filechunk_send
     ].
 
 suite() ->  % {{{2
@@ -178,7 +178,8 @@ end_per_testcase(_TestCase, _Config) ->  % {{{2
 
 test_attachment_encode_decode() ->  % {{{2
     [].
-test_attachment_encode_decode(_Config) -> % {{{2
+test_attachment_encode_decode(Config) -> % {{{2
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_file_SUITE_data"),
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
     To = <<"BM-2DBT7LiWBzkVYyrQBAgarC7k9AKuVVLJKx">>,
@@ -230,8 +231,8 @@ test_attachment_encode_decode(_Config) -> % {{{2
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
-                            ["../../test/data/file.txt",
-                             "../../test/data/file1.txt"]),
+                            [DataDir ++ "/file.txt",
+                             DataDir ++ "/file1.txt"]),
 
     meck:wait(bm_pow, make_pow, '_', 1600),
     meck:wait(bm_sender, send_broadcast, '_', 1600),
@@ -240,7 +241,8 @@ test_attachment_encode_decode(_Config) -> % {{{2
 test_file_query() ->  % {{{2
     [].
 
-test_file_query(_Config) -> % {{{2
+test_file_query(Config) -> % {{{2
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_receiver_SUITE_data"),
     bm_attachment_sup:start_link(),
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
@@ -251,7 +253,7 @@ test_file_query(_Config) -> % {{{2
                         {ok,
                          #message{attachments=[Att]}} = bitmessage:get_message(Hash),
                         mnesia:clear_table(bm_filechunk),
-                        bitmessage:get_attachment(Att, "../../test/data")
+                        bitmessage:get_attachment(Att, DataDir)
                 end),
     meck:expect(test,
                 downloaded,
@@ -298,7 +300,7 @@ test_file_query(_Config) -> % {{{2
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
-                            ["../../test/data/rand64k.raw"]),
+                            [DataDir ++ "/rand64k.raw"]),
     meck:wait(bm_pow, make_pow, '_', 16000),
     meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 16000),
@@ -310,7 +312,8 @@ test_file_query(_Config) -> % {{{2
 test_filechunk_send() ->  % {{{2
     [].
 
-test_filechunk_send(_Config) -> % {{{2
+test_filechunk_send(Config) -> % {{{2
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_receiver_SUITE_data"),
     bm_attachment_sup:start_link(),
     [#privkey{address=Addr}] =
     bm_db:lookup(privkey, bm_db:first(privkey)),
@@ -321,7 +324,7 @@ test_filechunk_send(_Config) -> % {{{2
                         {ok,
                          #message{attachments=[Att]}} = bitmessage:get_message(Hash),
                         mnesia:clear_table(bm_filechunk),
-                        bitmessage:get_attachment(Att, "../../test/data")
+                        bitmessage:get_attachment(Att, DataDir)
 
                 end),
     meck:expect(test,
@@ -350,21 +353,21 @@ test_filechunk_send(_Config) -> % {{{2
                                 payload = Payload
                                }]  when Type == ?GETFILE -> 
                                 bm_decryptor:process_object(Payload);
-                            [#inventory{
-                                type=Type,
-                                payload = <<_:22/bytes, 
-                                            FileHash:64/bytes,
-                                            ChunkHash:64/bytes,
-                                            _/bytes>>
-                               }]  when Type == ?FILECHUNK ->
-                                <<A:32,B:32,C:32>> = crypto:rand_bytes(12),
-                                random:seed({A,B,C}),
-                                Rnd = 0, %random:uniform(),
-                                if Rnd > 0.5 ->
-                                       mnesia:dirty_delete(inventory, Inv),
-                                       ok;
-                                   true -> ok
-                                end;
+                            %[#inventory{
+                            %    type=Type,
+                            %    payload = <<_:22/bytes, 
+                            %                FileHash:64/bytes,
+                            %                ChunkHash:64/bytes,
+                            %                _/bytes>>
+                            %   }]  when Type == ?FILECHUNK ->
+                            %    <<A:32,B:32,C:32>> = crypto:rand_bytes(12),
+                            %    random:seed({A,B,C}),
+                            %    Rnd = 0, %random:uniform(),
+                            %    if Rnd > 0.5 ->
+                            %           mnesia:dirty_delete(inventory, Inv),
+                            %           ok;
+                            %       true -> ok
+                            %    end;
                             [#inventory{
                                 type=Type,
                                 payload = <<_:22/bytes, 
@@ -402,7 +405,7 @@ test_filechunk_send(_Config) -> % {{{2
                             Addr,
                             <<"Test message with file">>,
                             <<"File in attachment">>,
-                            ["../../test/data/rand64k.raw"]),
+                            [DataDir ++ "/rand64k.raw"]),
     meck:wait(bm_pow, make_pow, '_', 16000),
     meck:wait(bm_sender, send_broadcast, '_', 16000),
     meck:wait(test, downloaded, '_', 160000),

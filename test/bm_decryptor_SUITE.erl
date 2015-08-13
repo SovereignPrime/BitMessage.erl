@@ -79,7 +79,7 @@ meck:wait(bm_dispatcher, message_arrived, '_', 1500).
 new_decrypt_test() ->  % {{{2
     [].
 
-new_decrypt_test(_Config) ->  % {{{2
+new_decrypt_test(Config) ->  % {{{2
     PK = #privkey{
             hash = <<87,80,73,58,203,124,116,75,140,153,145,217,181,199,
                      85,141,249,51,181>>,
@@ -100,7 +100,8 @@ new_decrypt_test(_Config) ->  % {{{2
                        253,29,219,139,66,127,204,133,150,91,37,36,239,206,203,192,
                        107,196,7,112,117,140,47,232,12,201,156,138>>},
     {ok, PID} = bm_message_decryptor:start_link(PK),
-    {ok, MSG} = file:read_file("../../test/data/msg5.bin"),
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_decryptor_SUITE_data"),
+    {ok, MSG} = file:read_file(DataDir ++ "/msg5.bin"),
 
     {decrypted,
      <<"BM-2D8uEB6d5KVrm3TZYMmLBS63RE6CTzZiRu">>,

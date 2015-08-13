@@ -211,8 +211,9 @@ addr_packet(_Config) ->  % {{{2
 inv_packet() ->  % {{{2
     [].
 
-inv_packet(_Config) ->  % {{{2
-    {ok, MSG} = file:read_file("../../test/data/inv.bin"),
+inv_packet(Config) ->  % {{{2
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_receiver_SUITE_data"),
+    {ok, MSG} = file:read_file(DataDir ++ "/inv.bin"),
     SZ = size(MSG),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
                                        io:format("~p~n", [I]),
@@ -225,8 +226,9 @@ inv_packet(_Config) ->  % {{{2
 getdata_packet() ->  % {{{2
     [].
 
-getdata_packet(_Config) ->  % {{{2
-    {ok, MSG} = file:read_file("../../test/data/getdata.bin"),
+getdata_packet(Config) ->  % {{{2
+    DataDir = proplists:get_value(data_dir, Config, "../../bm_receiver_SUITE_data"),
+    {ok, MSG} = file:read_file(DataDir ++ "/getdata.bin"),
     SZ = size(MSG),
     meck:expect(bm_db, lookup, fun(inventory, I) ->
                                        io:format("~p~n", [I]),
