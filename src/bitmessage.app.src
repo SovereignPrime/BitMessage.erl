@@ -1,11 +1,16 @@
+% vim: ft=erlang ts=4 sw=4 et
 {application, bitmessage,
  [
-  {description, ""},
-  {vsn, "1"},
+  {description, "Bitmessage Protocol Implementation"},
+  {vsn, "git"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  sasl,
+                  ranch,
+                  crypto,
+                  mnesia
                  ]},
   {mod, { bitmessage_app, []}},
   {env, []}
