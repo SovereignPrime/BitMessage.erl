@@ -4,4 +4,4 @@ otp_release:
    - 17.1
    - 17.0
 sudo: false
-script: "./rebar3 do clean -a, compile, dialyzer, ct"
+script: "./rebar3 do clean -a, update, compile, dialyzer, ct"
