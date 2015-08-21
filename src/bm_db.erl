@@ -361,6 +361,7 @@ update() ->  % {{{1
                                            end,
                                            record_info(fields, message));
                 _ ->
+                    fix_timestamp(),
                     ok
             end
     end.
@@ -621,3 +622,21 @@ bootstrap_network() ->  % {{{1
                                              end,
                                              Ips1)
                        end).
+
+-spec fix_timestamp() -> {atomic, ok} | {aborted, term()}.
+fix_timestamp() ->
+    mnesia:transaction(
+      fun() ->
+              NoDate = mnesia:select(sent,
+                                     [{#message{
+                                          time=undefined,
+                                          _='_'},
+                                       [],
+                                       ['$_']}]),
+              lists:foreach(fun(Msg) ->
+                                    mnesia:write(message,
+                                                 Msg#message{time=bm_types:timestamp()},
+                                                 write)
+                            end,
+                            NoDate)
+      end).
