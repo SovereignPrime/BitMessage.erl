@@ -41,7 +41,7 @@
          code_change/3]).
 % }}}
 
--record(state, {callback}).
+-record(state, {timeout=0, callback}).
 
 %%%-----------------------------------------------------------------------------
 %%% Bitmessage behaviour callbacks {{{1
@@ -264,7 +264,7 @@ online() ->
     try 
         gen_server:call(?MODULE, online)
     catch 
-        _ ->
+        _:_ ->
             0
     end.
 
@@ -341,7 +341,8 @@ resending(Hashes) ->
 -spec init([module()]) -> {ok, #state{}, non_neg_integer()}.  % {{{2
 init([Callback]) ->
     bm_db:wait_db(),
-    {ok, #state{callback=Callback}, 0}.
+    Now = bm_types:timestamp(),
+    {ok, #state{timeout=Now + 60, callback=Callback}, 60000}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -359,7 +360,7 @@ init([Callback]) ->
 %%--------------------------------------------------------------------
 handle_call({event, Fun, Args, Default},  % {{{2
             _From,
-            #state{callback=Callback}=State) ->
+            #state{timeout=Timeout, callback=Callback}=State) ->
     error_logger:info_msg("Callback ~p:~p(~p) = ~p called",
                           [Callback,
                            Fun,
@@ -367,17 +368,17 @@ handle_call({event, Fun, Args, Default},  % {{{2
                            Default]),
     try
         Reply = apply(Callback, Fun, Args),
-        {reply, Reply, State}
+        maybe_timeout({reply, Reply, State})
     catch
         error:_ ->
-            {reply, Default, State}
+            maybe_timeout({reply, Default, State})
     end;
 handle_call(online, _From, State) ->  % {{{2
     Reply = ets:info(addrs, size),
-    {reply, Reply, State};
+    maybe_timeout({reply, Reply, State});
 handle_call(_Request, _From, State) ->  % {{{2
     Reply = ok,
-    {reply, Reply, State}.
+    maybe_timeout({reply, Reply, State}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -392,31 +393,31 @@ handle_call(_Request, _From, State) ->  % {{{2
 handle_cast({send, Message}, State) ->  % {{{2
     error_logger:info_msg("Sending  ~p~n", [Message]),
     bm_encryptor_sup:add_encryptor(Message),
-    {noreply, State};
+    maybe_timeout({noreply, State});
 handle_cast({attachment, Hash, Path}, State) ->  % {{{2
     bm_attachment_sup:download_attachment(Hash, Path),
-    {noreply, State};
+    maybe_timeout({noreply, State});
 handle_cast({register, Module}, State) ->  % {{{2
-    {noreply, State#state{callback=Module}};
+    maybe_timeout({noreply, State#state{callback=Module}});
 handle_cast(generate_address, State) ->  % {{{2
     bm_address_generator:generate_random_address(make_ref(), 1, false),
-    {noreply, State};
+    maybe_timeout({noreply, State});
 handle_cast({event, Fun, Args}, #state{callback=undefined}=State) ->  % {{{2
     error_logger:info_msg("Callback ~p:~p(~p) called", [undefined, Fun, Args]),
-    {noreply, State};
+    maybe_timeout({noreply, State});
 handle_cast({event, Fun, Args}, #state{callback=Callback}=State) ->  % {{{2
     error_logger:info_msg("Callback ~p:~p(~p) called", [Callback, Fun, Args]),
     try
         apply(Callback, Fun, Args),
         error_logger:info_msg("Callback ~p:~p(~p) ended", [Callback, Fun, Args]),
-        {noreply, State}
+        maybe_timeout({noreply, State})
     catch
         error:_ ->
-            {noreply, State}
+            maybe_timeout({noreply, State})
     end;
 handle_cast(Msg, State) ->  % {{{2
     error_logger:warning_msg("Wrong cast ~p recved in ~p~n", [Msg, ?MODULE]),
-    {noreply, State}.
+    maybe_timeout({noreply, State}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -461,9 +462,9 @@ handle_info(timeout, State) ->  % {{{2
                           bm_attachment_sup:download_attachment(Hash, Path)
                   end,
                   Downloads),
-    {noreply, State};
+    {noreply, State#state{timeout=0}};
 handle_info(_Info, State) ->  % {{{2
-    {noreply, State}.
+    maybe_timeout({noreply, State}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -491,5 +492,18 @@ code_change(_OldVsn, State, _Extra) ->  % {{{2
     {ok, State}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Internal functions% {{{1
 %%%===================================================================
+-spec maybe_timeout(Reply) -> Reply when % {{{2
+      Reply :: tuple().
+maybe_timeout(R={reply, _Reply, State}) when State#state.timeout == 0 ->
+    R;
+maybe_timeout({reply, Reply, State}) ->
+    Timeout = State#state.timeout - bm_types:timestamp(),
+    {reply, Reply, State, Timeout * 1000};
+maybe_timeout(R={noreply, State}) when State#state.timeout == 0 ->
+    R;
+maybe_timeout({noreply, State}) ->
+    Timeout = State#state.timeout - bm_types:timestamp(),
+    {noreply, State, Timeout * 1000}.
+

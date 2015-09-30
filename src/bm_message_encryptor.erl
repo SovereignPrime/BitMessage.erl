@@ -147,7 +147,6 @@ payload(timeout,
                             to=To,
                             from=From,
                             subject=Subject,
-                            %enc=Enc,
                             text=Text,
                             time=Time,
                             status=Status,
@@ -167,88 +166,93 @@ payload(timeout,
             R
     end,
     #address{ripe=Ripe} = bm_auth:decode_address(To),
-    {_MyPek, MyPSK, PubKey} = case bm_db:lookup(privkey, MyRipe) of
-        [#privkey{public=Pub, pek=EK, psk=SK, hash=MyRipe}] ->
-            {EK, SK, Pub};
+    case bm_db:lookup(privkey, MyRipe) of
+        [#privkey{public=PubKey,
+                  pek=EK,
+                  psk=MyPSK,
+                  hash=MyRipe}] ->
+            <<_:22/bytes, A/bytes>> = AckData = if From == To ->
+                                                       crypto:rand_bytes(23);
+                                                   true ->
+                                                       generate_ack()
+                                                end,
+            Ack = bm_message_creator:create_message(<<"object">>,
+                                                    AckData),
+            error_logger:info_msg("Ack: ~p ~n", [Ack]),
+            {MSG, HAttachments, Enc} = case Attachments of
+                                           [] ->
+                                               {<<"Subject:",
+                                                  Subject/bytes, 10, "Body:", Text/bytes>>, [], 2};
+                                           _ ->
+                                               At = lists:map(fun process_attachment/1,
+                                                              Attachments),
+                                               {<<"Subject:",
+                                                  Subject/bytes,
+                                                  10,
+                                                  "Body:",
+                                                  Text/bytes,
+                                                  10,
+                                                  "Attachments:",
+                                                  (bm_types:encode_list(At, fun(E) -> E end))/bytes>>,
+                                                lists:map(fun(<<H:64/bytes,
+                                                                _/bytes>>) ->
+                                                                  H
+                                                          end,
+                                                          At), 
+                                                3}
+                                       end,
+            error_logger:info_msg("MSG ~p ~n", [MSG]),
+            UPayload = <<3, %Address version
+                         1, %Stream number
+                         1:32/big-integer, %Bitfield
+                         PubKey:128/bytes,
+                         (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
+                         (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
+                         Ripe/bytes,
+                         Enc, % Message encoding
+                         (bm_types:encode_varint(byte_size(MSG)))/bytes,
+                         MSG/bytes,
+                         (bm_types:encode_varint(byte_size(Ack)))/bytes,
+                         Ack/bytes>>,
+            SPayload = <<Time:64/big-integer,
+                         ?MSG:32/big-integer,
+                         1, % Version
+                         1, % Stream
+                         UPayload/bytes>>,
+            Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
+            Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
+            error_logger:info_msg("Message ~p ~n", [Payload]),
+            <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
+            NMessage = Message#message{payload=Payload,
+                                       hash=Hash,
+                                       time=Time,
+                                       folder=sent,
+                                       enc=Enc,
+                                       ackdata=A,
+                                       attachments=HAttachments,
+                                       status= if From == To ->
+                                                      ok;
+                                                  true ->
+                                                      wait_pubkey
+                                               end},
+            io:format("Deleting: ~p~n", [Message]),
+            mnesia:dirty_delete(message, Id),
+            bm_db:insert(message, [NMessage]),
+            if From == To ->
+                   {stop, normal, State};
+               true ->
+                   {next_state,
+                    wait_pubkey,
+                    #state{type=?MSG,
+                           hash=Ripe,
+                           message=NMessage},
+                    0}
+            end;
         [] ->
+            mnesia:dirty_delete(message, Id),
+            bm_db:insert(message, [Message#message{status=wrong}]),
             error_logger:warning_msg("No addres ~n"),
             {stop, {shudown, "Not my address"}, State}
-    end,
-    <<_:22/bytes, A/bytes>> = AckData = if From == To ->
-                     crypto:rand_bytes(23);
-                 true ->
-                     generate_ack()
-              end,
-    Ack = bm_message_creator:create_message(<<"object">>,
-                                            AckData),
-    {MSG, HAttachments, Enc} = case Attachments of
-        [] ->
-              {<<"Subject:",
-                 Subject/bytes, 10, "Body:", Text/bytes>>, [], 2};
-        _ ->
-              At = lists:map(fun process_attachment/1,
-                             Attachments),
-              {<<"Subject:",
-                Subject/bytes,
-                10,
-                "Body:",
-                Text/bytes,
-                10,
-                "Attachments:",
-                (bm_types:encode_list(At, fun(E) -> E end))/bytes>>,
-               lists:map(fun(<<H:64/bytes,
-                               _/bytes>>) ->
-                                 H
-                         end,
-                         At), 
-               3}
-          end,
-    error_logger:info_msg("MSG ~p ~n", [MSG]),
-    UPayload = <<3, %Address version
-                 1, %Stream number
-                 1:32/big-integer, %Bitfield
-                 PubKey:128/bytes,
-                 (bm_types:encode_varint(?MIN_NTPB))/bytes, %NonceTrialsPerByte
-                 (bm_types:encode_varint(?MIN_PLEB))/bytes, % ExtraBytes
-                 Ripe/bytes,
-                 Enc, % Message encoding
-                 (bm_types:encode_varint(byte_size(MSG)))/bytes,
-                 MSG/bytes,
-                 (bm_types:encode_varint(byte_size(Ack)))/bytes,
-                 Ack/bytes>>,
-    SPayload = <<Time:64/big-integer,
-                 ?MSG:32/big-integer,
-                 1, % Version
-                 1, % Stream
-                 UPayload/bytes>>,
-    Sig = crypto:sign(ecdsa, sha, SPayload, [MyPSK, secp256k1]),
-    Payload = <<UPayload/bytes, (bm_types:encode_varint(byte_size(Sig)))/bytes, Sig/bytes>>,
-    error_logger:info_msg("Message ~p ~n", [Payload]),
-    <<Hash:32/bytes, _/bytes>>  = bm_auth:dual_sha(Payload),
-    NMessage = Message#message{payload=Payload,
-                               hash=Hash,
-                               time=Time,
-                               folder=sent,
-                               enc=Enc,
-                               ackdata=A,
-                               attachments=HAttachments,
-                               status= if From == To ->
-                                              ok;
-                                          true ->
-                                              wait_pubkey
-                                       end},
-    io:format("Deleting: ~p~n", [Message]),
-    mnesia:dirty_delete(message, Id),
-    bm_db:insert(message, [NMessage]),
-    if From == To ->
-           {stop, normal, State};
-       true ->
-           {next_state,
-            wait_pubkey,
-            #state{type=?MSG,
-                   hash=Ripe,
-                   message=NMessage},
-            0}
     end;
 
 % Init for broadcasts  {{{2
@@ -821,7 +825,7 @@ encrypt(PEK, Payload) ->
     HMAC = crypto:hmac(sha256, M, HPayload),
     <<HPayload/bytes, HMAC/bytes>>.
 
--spec generate_ack() -> binary().
+-spec generate_ack() -> binary().  % {{{1
 generate_ack() ->
     A = crypto:rand_bytes(32),
     case bm_message_creator:create_obj(2, 1, 1, A) of
