@@ -402,7 +402,9 @@ handle_call(net, From, #state{addr=Addr} = State) -> %  {{{1
             {reply, Data, State#state{addr=Ip}};
         {atomic, []} ->
             bootstrap_network(),
-            handle_call(net, From, State)
+            handle_call(net, From, State);
+        {aborted, _} -> 
+            handle_call(net, From, #state{})
     end;
 handle_call({first, Type}, _From, State) -> %  {{{1
     {atomic, Data} = mnesia:transaction(fun() ->
