@@ -42,7 +42,7 @@ start_link() ->
                       Cores,
                       gen_server,
                       start_link,
-                      [{local, ?MODULE}, ?MODULE, [], []]).
+                      [?MODULE, [], []]).
 
 %%--------------------------------------------------------------------
 %% @doc
