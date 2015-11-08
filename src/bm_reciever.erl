@@ -82,7 +82,9 @@ init(Ref, Socket, Transport, _Opts) ->
 init() ->
     ok = proc_lib:init_ack({ok, self()}),
     bm_db:wait_db(),
+    process_flag(trap_exit, true),
     Socket =  connect_peer(),
+    process_flag(trap_exit, false),
     error_logger:info_msg("Connected ~p~n", [Socket]),
     send_version(#state{socket=Socket,
                         remote_addr=#network_address{ip={127,0,0,1},
@@ -114,7 +116,9 @@ loop(#state{socket = Socket,
         {error, closed} ->
             error_logger:info_msg("Socket ~p closed~n", [Socket]),
             bm_sender:unregister_peer(Socket),
+            process_flag(trap_exit, true),
             NSocket =  connect_peer(),
+            process_flag(trap_exit, false),
             error_logger:info_msg("NConnected ~p~n", [Socket]),
             send_version(#state{socket=NSocket,
                                 transport=Transport,
@@ -501,16 +505,18 @@ connect_peer() ->
                      stream=_Stream,
                      time=_Time} = bm_db:get_net(), 
 
-    case gen_tcp:connect(Ip,
-                         Port,
-                         [inet,
-                          binary,
-                          {active,false},
-                          {reuseaddr, true},
-                          {packet, raw}],
-                         10000) of
+    try gen_tcp:connect(Ip,
+                        Port,
+                        [inet,
+                         binary,
+                         {active,false},
+                         {reuseaddr, true},
+                         {packet, raw}],
+                        10000) of
         {ok, Socket} ->
             Socket;
         {error, _Reason} ->
             connect_peer()
+    catch
+        _:_ -> connect_peer()
     end.

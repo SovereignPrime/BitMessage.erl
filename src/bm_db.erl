@@ -625,8 +625,8 @@ bootstrap_network() ->  % {{{1
                                              Ips1)
                        end).
 
--spec fix_timestamp() -> {atomic, ok} | {aborted, term()}.
-fix_timestamp() ->
+-spec fix_timestamp() -> {atomic, ok} | {aborted, term()}.  % {{{1
+fix_timestamp() -> 
     mnesia:transaction(
       fun() ->
               NoDate = mnesia:select(sent,
