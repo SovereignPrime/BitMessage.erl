@@ -42,7 +42,7 @@ start_link() ->
                       Cores,
                       gen_server,
                       start_link,
-                      [{local, ?MODULE}, ?MODULE, [], []]).
+                      [?MODULE, [], []]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -63,7 +63,10 @@ make_pow(Payload, NTpB, PLEB) ->
     <<Max64:64/integer>> = binary:copy(<<255>>, 8),
     %Len = (Max64 + 1) div Cores,
     error_logger:info_msg("Computing POW target = ~p~n", [Target]),
-    hottub:call(?MODULE, {make, Payload, Target, 0, Max64}, infinity).
+    hottub:execute(?MODULE, 
+                   fun(W) ->
+                           gen_server:call(W, {make, Payload, Target, 0, Max64}, infinity)
+                   end).
 
 %%--------------------------------------------------------------------
 %% @doc
