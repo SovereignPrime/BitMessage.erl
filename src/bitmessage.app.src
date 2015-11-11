@@ -9,6 +9,7 @@
                   stdlib,
                   sasl,
                   ranch,
+                  hottub,
                   crypto,
                   mnesia
                  ]},
