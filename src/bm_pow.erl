@@ -219,16 +219,3 @@ compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
     PLPEB = PayloadLength + PLEB,
     bm_types:pow(2 , 64) div (NTpB * (PLPEB + (TTL * PLPEB) div bm_types:pow(2, 16))).
 
--spec collect_results(non_neg_integer(), non_neg_integer()) -> binary() | not_found.  % {{{1
-collect_results(N, Timeout) when N > 0 ->
-    receive 
-        not_found ->
-            collect_results(N - 1, Timeout);
-        {ok, Nonce} ->
-            Nonce
-    after
-        Timeout ->
-            not_found
-    end;
-collect_results(0, _Timeout) ->
-    not_found.
