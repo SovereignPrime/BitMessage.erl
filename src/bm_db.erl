@@ -26,8 +26,7 @@
     clear/1,
     ackselect/0,
     wait_db/0,
-    get_net/0,
-    bootstrap_network/0
+    get_net/0
     ]). %}}}
 
 -record(state, {addr}).
