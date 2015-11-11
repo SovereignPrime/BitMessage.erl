@@ -115,7 +115,7 @@ delete(Type, Id)->
 %%
 -spec get_net() -> #network_address{}. %  {{{1
 get_net()->
-    gen_server:call(?MODULE, net).
+    gen_server:call(?MODULE, net, infinity).
 
 %% @doc 
 %% Clears DB from outdated data
@@ -401,8 +401,8 @@ handle_call(net, From, #state{addr=Addr} = State) -> %  {{{1
          [#network_address{ip=Ip}=Data]} ->
             {reply, Data, State#state{addr=Ip}};
         {atomic, []} ->
-            bootstrap_network(),
-            handle_call(net, From, State);
+            bootstrap_network(From),
+            {noreply, #state{}};
         {aborted, _} -> 
             handle_call(net, From, #state{})
     end;
@@ -581,7 +581,7 @@ iterate(C, Acc) ->
             Acc
     end.
 
-bootstrap_network() ->  % {{{1
+bootstrap_network(From) ->  % {{{1
     {ok,
      Ips} = inet:getaddrs("bootstrap8444.bitmessage.org",
                           inet),
@@ -592,38 +592,42 @@ bootstrap_network() ->  % {{{1
     %Ips= [], %[{192,168,24,112}],
     %Ips1=[],
     error_logger:info_msg("Recieved addrs ~p~n ~p~n", [Ips , Ips1]),
-    mnesia:transaction(fun() ->
-                               lists:foreach(fun({I,
-                                                  P,
-                                                  S}) ->
-                                                     mnesia:write(addr,
-                                                                  #network_address{ip=I,
-                                                                                   port=P,
-                                                                                   stream=S,
-                                                                                   time=bm_types:timestamp()},
-                                                                  write)
-                                             end, 
-                                             %[]),
-                                             application:get_env(bitmessage, peers, [])),
-                               lists:foreach(fun(Ip) ->
-                                                     mnesia:write(addr, #network_address{
-                                                                           time=bm_types:timestamp(),
-                                                                           stream=1,
-                                                                           ip=Ip,
-                                                                           port=8444},
-                                                                  write)
-                                             end,
-                                             Ips),
-                               lists:foreach(fun(Ip) ->
-                                                     mnesia:write(addr, #network_address{
-                                                                           time=bm_types:timestamp(),
-                                                                           stream=1,
-                                                                           ip=Ip,
-                                                                           port=8080},
-                                                                  write)
-                                             end,
-                                             Ips1)
-                       end).
+    {atomic, R} =  mnesia:transaction(
+                     fun() ->
+                             lists:foreach(fun({I,
+                                                P,
+                                                S}) ->
+                                                   mnesia:write(addr,
+                                                                #network_address{ip=I,
+                                                                                 port=P,
+                                                                                 stream=S,
+                                                                                 time=bm_types:timestamp()},
+                                                                write)
+                                           end, 
+                                           %[]),
+                                           application:get_env(bitmessage, peers, [])),
+                             lists:foreach(fun(Ip) ->
+                                                   mnesia:write(addr, #network_address{
+                                                                         time=bm_types:timestamp(),
+                                                                         stream=1,
+                                                                         ip=Ip,
+                                                                         port=8444},
+                                                                write)
+                                           end,
+                                           Ips),
+                             lists:foreach(fun(Ip) ->
+                                                   mnesia:write(addr, #network_address{
+                                                                         time=bm_types:timestamp(),
+                                                                         stream=1,
+                                                                         ip=Ip,
+                                                                         port=8080},
+                                                                write)
+                                           end,
+                                           Ips1),
+                             [Addr] = mnesia:read(addr, mnesia:first(addr)),
+                             Addr
+                     end),
+    gen_server:reply(From, R).
 
 -spec fix_timestamp() -> {atomic, ok} | {aborted, term()}.  % {{{1
 fix_timestamp() -> 
