@@ -36,13 +36,7 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, string()}. % {{{1
 start_link() ->
-    Cores = erlang:system_info(schedulers_online),
-    error_logger:info_msg("Starting PoW pool for ~p cores", [Cores]),
-    hottub:start_link(?MODULE,
-                      Cores,
-                      gen_server,
-                      start_link,
-                      [?MODULE, [], []]).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -60,13 +54,8 @@ make_pow(Payload) ->
       PLEB :: non_neg_integer().
 make_pow(Payload, NTpB, PLEB) ->
     Target = compute_terget(Payload, NTpB, PLEB),
-    <<Max64:64/integer>> = binary:copy(<<255>>, 8),
-    %Len = (Max64 + 1) div Cores,
     error_logger:info_msg("Computing POW target = ~p~n", [Target]),
-    hottub:execute(?MODULE, 
-                   fun(W) ->
-                           gen_server:call(W, {make, Payload, Target, 0, Max64}, infinity)
-                   end).
+    gen_server:call(?MODULE, {make, Payload, Target}, infinity).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,21 +106,36 @@ init([]) ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_call({make,  % {{{1
-             <<Time:64/big-integer, _/bytes>>=Payload, Target, Start, End},
+             <<Time:64/big-integer, _/bytes>>=Payload, Target},
             _From,
             #state{timeout=Timeout}=State) ->
     Now = bm_types:timestamp(),
     if Time < Now - 300 ->
            {reply, not_found, State};
        true ->
+           Cores = erlang:system_info(schedulers_online),
+           <<Max64:64/integer>> = binary:copy(<<255>>, 8),
+           Len = (Max64 + 1) div Cores,
+           Pool = lists:seq(0, Max64, Len), 
            InitialHash = crypto:hash(sha512, Payload),
-           Reply = case compute_pow(InitialHash, Target, Start, End) of
-                       {ok, POW, _} ->
-                           <<POW:64/big-integer, Payload/bytes>>;
-                       not_found ->
-                           not_found
-                   end,
-           {reply, Reply, State}
+           Pid = self(),
+           Pids = lists:map(
+                    fun(N) ->
+                            spawn(
+                              fun() ->
+                                      case compute_pow(InitialHash, Target, N, N + Len) of
+                                          {ok, POW, _} ->
+                                              Reply = <<POW:64/big-integer, Payload/bytes>>,
+                                              Pid ! {ok, Reply};
+                                          not_found ->
+                                              Pid ! not_found
+                                      end
+                              end)
+                    end,
+                    Pool),
+           R = collect_results(Cores, Timeout),
+           lists:foreach(fun(P) -> exit(P, kill) end, Pids),
+           {reply, R, State}
     end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -219,3 +223,16 @@ compute_terget(<<Time:64/big-integer, _/bytes>> = Payload, NTpB, PLEB) ->
     PLPEB = PayloadLength + PLEB,
     bm_types:pow(2 , 64) div (NTpB * (PLPEB + (TTL * PLPEB) div bm_types:pow(2, 16))).
 
+-spec collect_results(non_neg_integer(), non_neg_integer()) -> binary() | not_found.  % {{{1
+collect_results(N, Timeout) when N > 0 ->
+    receive 
+        not_found ->
+            collect_results(N - 1, Timeout);
+        {ok, Nonce} ->
+            Nonce
+    after
+        Timeout ->
+            not_found
+    end;
+collect_results(0, _Timeout) ->
+    not_found.
