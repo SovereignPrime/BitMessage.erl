@@ -439,8 +439,11 @@ create_tar_from_file(FileHash) ->
     case bm_db:lookup(bm_file,
                       FileHash) of
         [#bm_file{path=Path,
+                  status=State,
                   name=Name
-                 }=File] ->
+                 }=File] when Path /= undefined,
+                              State == uploaded orelse 
+                              State == downloaded ->
             FPath = Path ++ "/" ++ Name,
             case create_tar_from_path(FPath) of
                 {ok, TarPath} -> {ok, TarPath, File};
