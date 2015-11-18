@@ -280,12 +280,17 @@ handle_info(timeout,   % {{{2
     {stop, normal, State};
 handle_info(timeout,   % {{{2
             #state{
-               file=#bm_file{hash=FHash},
+               file=#bm_file{hash=FHash,
+                             tarsize=TarSize},
                timeout=Timeout,
                remaining=Chunks
                   } = State) ->
-    {[0|Starts], Ends} = lists:unzip(Chunks),
-    Requests = lists:zip(lists:droplast(Ends), Starts),
+    Requests = case lists:unzip(Chunks) of
+                   {[0|Starts], Ends} ->
+                       lists:zip(lists:droplast(Ends), Starts);
+                   {Starts,  Ends} ->
+                       lists:zip([0|Ends], Starts ++ [TarSize])
+               end,
     error_logger:info_msg("Timeout file ~p not downloaded yet requesting ~p",
                           [FHash, Requests]),
     lists:foreach(fun({S,E}) ->
