@@ -113,7 +113,7 @@ handle_call({make,  % {{{1
     if Time < Now - 300 ->
            {reply, not_found, State};
        true ->
-           Cores = erlang:system_info(schedulers_online),
+           Cores = erlang:system_info(schedulers_online) - 1,
            <<Max64:64/integer>> = binary:copy(<<255>>, 8),
            Len = (Max64 + 1) div Cores,
            Pool = lists:seq(0, Max64, Len), 
