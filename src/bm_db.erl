@@ -65,7 +65,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec insert(table(), [type_record()]) -> {atomic, ok} | {error, atom()}. %  {{{1
 insert(Type, Data) ->
-    gen_server:call(?MODULE, {insert, Type, Data}).
+    gen_server:call(?MODULE, {insert, Type, Data}, infinity).
 
 %% @doc Gets id of first element of `Type` table
 %%
@@ -108,7 +108,7 @@ match(Type, MatchSpec)->
 %%
 -spec delete(table(), term()) -> ok. %  {{{1
 delete(Type, Id)->
-    gen_server:cast(?MODULE, {del, Type, Id}).
+    gen_server:cast(?MODULE, {del, Type, Id, infinity}).
 
 %% @doc Get next peer to connect
 %%
@@ -381,7 +381,7 @@ update() ->  % {{{1
 %% @end
 %%--------------------------------------------------------------------
 handle_call(net, From, #state{addr=Addr} = State) -> %  {{{1
-    case mnesia:transaction(
+    case mnesia:sync_transaction(
       fun() ->
               Id = case Addr of
                        'undefined' ->
@@ -441,7 +441,7 @@ handle_call({match, Type, MatchSpec}, _From, State) -> %  {{{1
             end),
     {reply, Data, State};
 handle_call({insert, Type, Data}, _From, State) -> %  {{{1
-     R = mnesia:transaction(fun() -> 
+     R = mnesia:sync_transaction(fun() -> 
                 insert_obj(Type, Data)
         end),
     {reply, R, State};
@@ -516,7 +516,7 @@ handle_cast({insert, Type, Data}, State) -> %  {{{1
                        end),
     {noreply, State};
 handle_cast({del, Type, Data}, State) -> %  {{{1
-    mnesia:transaction(fun() -> 
+    mnesia:sync_transaction(fun() -> 
                                mnesia:delete({ Type, Data })
                        end),
     {noreply, State};
