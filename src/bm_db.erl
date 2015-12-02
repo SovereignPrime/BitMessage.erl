@@ -108,7 +108,7 @@ match(Type, MatchSpec)->
 %%
 -spec delete(table(), term()) -> ok. %  {{{1
 delete(Type, Id)->
-    gen_server:cast(?MODULE, {del, Type, Id, infinity}).
+    gen_server:cast(?MODULE, {del, Type, Id}).
 
 %% @doc Get next peer to connect
 %%
