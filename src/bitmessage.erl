@@ -458,8 +458,9 @@ handle_info(timeout, State) ->  % {{{2
     lists:foreach(fun(#bm_file{
                          hash=Hash,
                          path=Path
-                        }) ->
-                          bm_attachment_sup:download_attachment(Hash, Path)
+                        }=F) ->
+                          bm_db:insert(bm_file, [F#bm_file{status=freezed}])
+                          %bm_attachment_sup:download_attachment(Hash, Path)
                   end,
                   Downloads),
     {noreply, State#state{timeout=0}};
